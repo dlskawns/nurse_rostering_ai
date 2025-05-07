@@ -100,3 +100,6 @@ if __name__ == "__main__":
     print("Best fitness score:", best_fitness)
     print("\nBest schedule (0: Day, 1: Night, 2: Off):")
     print(best_schedule)
+
+
+    
