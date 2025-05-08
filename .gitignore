@@ -11,3 +11,5 @@ test_folder/
 
 *.log
 
+*.ipynb
+*.xlsx

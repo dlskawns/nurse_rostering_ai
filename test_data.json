@@ -12,7 +12,7 @@
         {
             "id": 1,
             "name": "Head Nurse Kim",
-            "experience_years": 10,
+            "experience_years": 12,
             "is_head_nurse": true,
             "head_nurse_off_pattern": "weekend",
             "remaining_off_days": 8
@@ -20,53 +20,93 @@
         {
             "id": 2,
             "name": "Night Nurse Lee",
-            "experience_years": 5,
+            "experience_years": 8,
             "is_night_nurse": true,
             "remaining_off_days": 8
         },
         {
             "id": 3,
-            "name": "Nurse Park",
-            "experience_years": 3,
-            "remaining_off_days": 8
-        },
-        {
-            "id": 4,
-            "name": "Nurse Choi",
-            "experience_years": 2,
-            "remaining_off_days": 8
-        },
-        {
-            "id": 5,
             "name": "Night Nurse Jung",
-            "experience_years": 4,
+            "experience_years": 7,
             "is_night_nurse": true,
             "remaining_off_days": 8
         },
         {
+            "id": 4,
+            "name": "Night Nurse Cho",
+            "experience_years": 6,
+            "is_night_nurse": true,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 5,
+            "name": "Senior Nurse Park",
+            "experience_years": 5,
+            "remaining_off_days": 8
+        },
+        {
             "id": 6,
-            "name": "Nurse Kang",
-            "experience_years": 1,
-            "remaining_off_days": 8,
-            "resignation_date": "2024-01-15"
+            "name": "Senior Nurse Yoon",
+            "experience_years": 5,
+            "remaining_off_days": 8
         },
         {
             "id": 7,
-            "name": "Nurse Yoon",
-            "experience_years": 6,
+            "name": "Nurse Choi",
+            "experience_years": 4,
             "remaining_off_days": 8
         },
         {
             "id": 8,
+            "name": "Nurse Han",
+            "experience_years": 3,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 9,
             "name": "Nurse Song",
+            "experience_years": 3,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 10,
+            "name": "Junior Nurse Kang",
             "experience_years": 2,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 11,
+            "name": "Junior Nurse Lim",
+            "experience_years": 2,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 12,
+            "name": "Nurse Moon",
+            "experience_years": 3,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 13,
+            "name": "Nurse Oh",
+            "experience_years": 4,
             "remaining_off_days": 8
         }
     ],
     "off_requests": {
         "1": [6, 7],
         "2": [1, 2, 3],
-        "5": [15, 16]
+        "3": [15, 16],
+        "4": [20, 21],
+        "5": [10, 11],
+        "6": [25, 26],
+        "7": [8, 9],
+        "8": [4, 5],
+        "9": [13, 14],
+        "10": [22, 23],
+        "11": [17, 18],
+        "12": [28, 29],
+        "13": [30, 31]
     },
     "target_month": "2024-01-01"
 } 
