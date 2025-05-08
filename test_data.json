@@ -1,0 +1,72 @@
+{
+    "config": {
+        "daily_shift_requirements": {"D": 3, "E": 3, "N": 2},
+        "min_experience_per_shift": 3,
+        "required_experienced_nurses": 1,
+        "enforce_two_offs_per_week": true,
+        "max_night_shifts_per_month": 15,
+        "max_consecutive_nights": 2,
+        "max_consecutive_work_days": 6
+    },
+    "nurses": [
+        {
+            "id": 1,
+            "name": "Head Nurse Kim",
+            "experience_years": 10,
+            "is_head_nurse": true,
+            "head_nurse_off_pattern": "weekend",
+            "remaining_off_days": 8
+        },
+        {
+            "id": 2,
+            "name": "Night Nurse Lee",
+            "experience_years": 5,
+            "is_night_nurse": true,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 3,
+            "name": "Nurse Park",
+            "experience_years": 3,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 4,
+            "name": "Nurse Choi",
+            "experience_years": 2,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 5,
+            "name": "Night Nurse Jung",
+            "experience_years": 4,
+            "is_night_nurse": true,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 6,
+            "name": "Nurse Kang",
+            "experience_years": 1,
+            "remaining_off_days": 8,
+            "resignation_date": "2024-01-15"
+        },
+        {
+            "id": 7,
+            "name": "Nurse Yoon",
+            "experience_years": 6,
+            "remaining_off_days": 8
+        },
+        {
+            "id": 8,
+            "name": "Nurse Song",
+            "experience_years": 2,
+            "remaining_off_days": 8
+        }
+    ],
+    "off_requests": {
+        "1": [6, 7],
+        "2": [1, 2, 3],
+        "5": [15, 16]
+    },
+    "target_month": "2024-01-01"
+} 
