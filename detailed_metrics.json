@@ -1,16 +1,15 @@
 {
   "constraint_violations": {
-    "experience": 1,
     "night": 17
   },
   "workload_distribution": {
     "per_nurse": {
       "Head Nurse Kim": {
-        "total": 19.0,
-        "day": 10.0,
-        "evening": 7.0,
+        "total": 15.0,
+        "day": 7.0,
+        "evening": 6.0,
         "night": 2.0,
-        "off": 12.0
+        "off": 16.0
       },
       "Night Nurse Lee": {
         "total": 22.0,
@@ -34,114 +33,114 @@
         "off": 9.0
       },
       "Senior Nurse Park": {
-        "total": 18.0,
-        "day": 6.0,
-        "evening": 8.0,
-        "night": 4.0,
-        "off": 13.0
+        "total": 19.0,
+        "day": 7.0,
+        "evening": 11.0,
+        "night": 1.0,
+        "off": 12.0
       },
       "Senior Nurse Yoon": {
-        "total": 17.0,
+        "total": 19.0,
         "day": 9.0,
         "evening": 7.0,
-        "night": 1.0,
-        "off": 14.0
+        "night": 3.0,
+        "off": 12.0
       },
       "Nurse Choi": {
-        "total": 16.0,
-        "day": 9.0,
+        "total": 15.0,
+        "day": 8.0,
         "evening": 5.0,
         "night": 2.0,
-        "off": 15.0
+        "off": 16.0
       },
       "Nurse Han": {
-        "total": 17.0,
-        "day": 10.0,
-        "evening": 6.0,
-        "night": 1.0,
-        "off": 14.0
-      },
-      "Nurse Song": {
-        "total": 17.0,
-        "day": 11.0,
-        "evening": 6.0,
-        "night": 0.0,
-        "off": 14.0
-      },
-      "Junior Nurse Kang": {
-        "total": 20.0,
+        "total": 22.0,
         "day": 12.0,
-        "evening": 7.0,
-        "night": 1.0,
-        "off": 11.0
-      },
-      "Junior Nurse Lim": {
-        "total": 21.0,
-        "day": 11.0,
-        "evening": 9.0,
-        "night": 1.0,
-        "off": 10.0
-      },
-      "Nurse Moon": {
-        "total": 17.0,
-        "day": 7.0,
         "evening": 8.0,
         "night": 2.0,
-        "off": 14.0
+        "off": 9.0
       },
-      "Nurse Oh": {
+      "Nurse Song": {
         "total": 20.0,
-        "day": 8.0,
-        "evening": 9.0,
+        "day": 6.0,
+        "evening": 11.0,
         "night": 3.0,
         "off": 11.0
+      },
+      "Junior Nurse Kang": {
+        "total": 14.0,
+        "day": 8.0,
+        "evening": 5.0,
+        "night": 1.0,
+        "off": 17.0
+      },
+      "Junior Nurse Lim": {
+        "total": 15.0,
+        "day": 7.0,
+        "evening": 7.0,
+        "night": 1.0,
+        "off": 16.0
+      },
+      "Nurse Moon": {
+        "total": 21.0,
+        "day": 14.0,
+        "evening": 7.0,
+        "night": 0.0,
+        "off": 10.0
+      },
+      "Nurse Oh": {
+        "total": 22.0,
+        "day": 15.0,
+        "evening": 5.0,
+        "night": 2.0,
+        "off": 9.0
       }
     },
     "statistics": {
       "mean_shifts": 19.076923076923077,
-      "std_shifts": 2.1289773081689307,
-      "min_shifts": 16.0,
+      "std_shifts": 3.074999398662567,
+      "min_shifts": 14.0,
       "max_shifts": 22.0
     }
   },
   "shift_patterns": {
     "consecutive_shifts": {
       "day": {
-        "max": 5,
-        "avg": 1.7692307692307692,
-        "std": 1.3099527973789538
+        "max": 4,
+        "avg": 2.1538461538461537,
+        "std": 1.3499945211372495
       },
       "evening": {
         "max": 3,
         "avg": 1.7692307692307692,
-        "std": 0.5756395979652217
+        "std": 0.5756395979652218
       },
       "night": {
         "max": 2,
-        "avg": 1.1538461538461537,
-        "std": 0.5329387100211931
+        "avg": 1.2307692307692308,
+        "std": 0.5756395979652218
       },
       "off": {
-        "max": 5,
+        "max": 4,
         "avg": 2.6923076923076925,
-        "std": 0.9101661204768642
+        "std": 0.9910845174403945
       }
     },
     "weekend_distribution": {
       "per_nurse": {
         "Head Nurse Kim": 0,
-        "Night Nurse Lee": 5,
-        "Night Nurse Jung": 8,
-        "Night Nurse Cho": 5,
-        "Senior Nurse Park": 7,
-        "Senior Nurse Yoon": 4,
-        "Nurse Choi": 4,
-        "Nurse Han": 7,
+        "Night Nurse Lee": 4,
+        "Night Nurse Jung": 7,
+        "Night Nurse Cho": 8,
+        "Senior Nurse Park": 6,
+        "Senior Nurse Yoon": 5,
+        "Nurse Choi": 5,
+        "Nurse Han": 4,
         "Nurse Song": 4,
-        "Junior Nurse Kang": 5,
-        "Junior Nurse Lim": 5,
-        "Nurse Moon": 6,
-        "Nurse Oh": 4
+        "Junior Nurse Kang": 6,
+        "Junior Nurse Lim": 4,
+        "Nurse Moon": 5,
+        "Nurse Oh": 6
       },
       "overall": {
         "total_weekends": 8,
@@ -158,22 +157,22 @@
       }
     },
     "shift_transitions": {
-      "D->D": 20,
-      "D->E": 24,
-      "D->N": 1,
-      "D->OFF": 45,
-      "E->D": 26,
-      "E->E": 14,
+      "D->D": 33,
+      "D->E": 17,
+      "D->N": 3,
+      "D->OFF": 37,
+      "E->D": 20,
+      "E->E": 16,
       "E->N": 18,
-      "E->OFF": 32,
+      "E->OFF": 36,
       "N->D": 0,
       "N->E": 19,
       "N->N": 14,
       "N->OFF": 27,
-      "OFF->D": 44,
-      "OFF->E": 33,
-      "OFF->N": 27,
-      "OFF->OFF": 46
+      "OFF->D": 37,
+      "OFF->E": 38,
+      "OFF->N": 25,
+      "OFF->OFF": 50
     }
   },
   "nurse_satisfaction": {
@@ -187,8 +186,8 @@
         "preferred_shifts_ratio": 1.6193548387096774
       },
       "Night Nurse Jung": {
-        "score": 1.6193548387096777,
-        "preferred_shifts_ratio": 1.6193548387096777
+        "score": 1.6193548387096774,
+        "preferred_shifts_ratio": 1.6193548387096774
       },
       "Night Nurse Cho": {
         "score": 1.6193548387096774,
@@ -784,16 +783,16 @@
   "fairness_metrics": {
     "shift_distribution": {
       "D": {
-        "gini_coefficient": 0.3143093421738397,
-        "coefficient_of_variation": 0.5901257089897738
+        "gini_coefficient": 0.36393713304339326,
+        "coefficient_of_variation": 0.6621421212189528
       },
       "E": {
-        "gini_coefficient": 0.08271298478258936,
-        "coefficient_of_variation": 0.1535791059901688
+        "gini_coefficient": 0.13399503534779475,
+        "coefficient_of_variation": 0.2620657549882568
       },
       "N": {
-        "gini_coefficient": 0.5682382014848317,
-        "coefficient_of_variation": 1.1922399104887953
+        "gini_coefficient": 0.5558312538541585,
+        "coefficient_of_variation": 1.1865531714677109
       }
     },
     "weekend_fairness": {},

@@ -41,39 +41,247 @@ def create_nurses_from_data(nurses_data):
     return nurses
 
 def export_roster_to_excel(roster_system, filename):
-    """Export roster to Excel with metrics."""
-    # Create shift assignment DataFrame
+    """Export roster to Excel with metrics and summary information."""
+    import openpyxl
+    from openpyxl.utils import get_column_letter
+    from openpyxl.styles import PatternFill, Font, Alignment
+    
+    # Create shift assignment DataFrame (transposed format)
     days = pd.date_range(
         start=roster_system.target_month,
         periods=roster_system.num_days,
         freq='D'
     )
     
-    # Initialize empty DataFrame
-    df = pd.DataFrame(index=days, columns=[n.name for n in roster_system.nurses])
+    # Create transposed DataFrame - nurses as rows, days as columns
+    df = pd.DataFrame(
+        index=[n.name for n in roster_system.nurses],
+        columns=[date.strftime('%Y-%m-%d') for date in days]
+    )
+    
+    # Add day of week information as a second header row later
+    day_of_week = [date.strftime('%a') for date in days]
     
     # Fill in shift assignments
     for day in range(roster_system.num_days):
-        date = days[day]
+        date_str = days[day].strftime('%Y-%m-%d')
         for n_idx, nurse in enumerate(roster_system.nurses):
             shift_idx = np.where(roster_system.roster[n_idx, day] == 1)[0]
             if len(shift_idx) > 0:
-                df.iloc[day, n_idx] = roster_system.config.shift_types[shift_idx[0]]
+                df.loc[nurse.name, date_str] = roster_system.config.shift_types[shift_idx[0]]
             else:
-                df.iloc[day, n_idx] = '-'
-                
-    # Add day of week
-    df.insert(0, 'Day', df.index.strftime('%a'))
+                df.loc[nurse.name, date_str] = '-'
     
-    # Save to Excel
-    df.to_excel(filename, sheet_name='Roster', index=True)
-    print(f"\nRoster exported to {filename}")
+    # Count applied OFF requests for each nurse and track applied/not applied days
+    off_counts = {}
+    off_details = {}  # To store applied and not applied days
+    off_requests = {int(k): v for k, v in load_test_data('test_data.json')['off_requests'].items()}
     
-    # Add metrics sheet
-    with pd.ExcelWriter(filename, mode='a', engine='openpyxl') as writer:
-        metrics = roster_system.calculate_metrics()
-        metrics_df = pd.DataFrame(metrics).T
-        metrics_df.to_excel(writer, sheet_name='Metrics')
+    for nurse_id, requested_days in off_requests.items():
+        nurse_idx = next((i for i, n in enumerate(roster_system.nurses) if n.id == nurse_id), None)
+        if nurse_idx is None:
+            continue
+            
+        nurse_name = roster_system.nurses[nurse_idx].name
+        off_counts[nurse_name] = 0
+        applied_days = []
+        not_applied_days = []
+        
+        for day in requested_days:
+            if 1 <= day <= roster_system.num_days:  # Day is in the month
+                off_idx = roster_system.config.shift_types.index('OFF')
+                # Check if the day was actually set to OFF
+                if roster_system.roster[nurse_idx, day-1, off_idx] == 1:
+                    off_counts[nurse_name] = off_counts.get(nurse_name, 0) + 1
+                    applied_days.append(str(day))
+                else:
+                    not_applied_days.append(str(day))
+        
+        off_details[nurse_name] = {
+            'applied': applied_days,
+            'not_applied': not_applied_days
+        }
+    
+    # Create a new Excel workbook
+    wb = openpyxl.Workbook()
+    
+    # Create Roster sheet
+    ws_roster = wb.active
+    ws_roster.title = "Roster"
+    
+    # Add headers with day of week
+    ws_roster.cell(row=1, column=1, value="Nurse")
+    for col, (date_str, day) in enumerate(zip(df.columns, day_of_week), 2):
+        ws_roster.cell(row=1, column=col, value=f"{date_str} ({day})")
+    
+    # Add nurse data
+    for row, nurse_name in enumerate(df.index, 2):
+        ws_roster.cell(row=row, column=1, value=nurse_name)
+        for col, date_str in enumerate(df.columns, 2):
+            ws_roster.cell(row=row, column=col, value=df.loc[nurse_name, date_str])
+    
+    # Add summary row for each shift type
+    shift_types = roster_system.config.shift_types
+    start_row = len(df.index) + 3  # Start after all nurses
+    
+    for i, shift in enumerate(shift_types):
+        row = start_row + i
+        ws_roster.cell(row=row, column=1, value=f"Total {shift}")
+        
+        for col, date_str in enumerate(df.columns, 2):
+            # Count cells with this shift value in the column
+            count_formula = f'=COUNTIF({get_column_letter(col)}2:{get_column_letter(col)}{len(df.index)+1},"{shift}")'
+            ws_roster.cell(row=row, column=col, value=count_formula)
+    
+    # Add required count row
+    row = start_row + len(shift_types)
+    ws_roster.cell(row=row, column=1, value="Required")
+    
+    for col, date_str in enumerate(df.columns, 2):
+        day_idx = col - 2
+        day_requirements = []
+        for shift in ['D', 'E', 'N']:
+            if shift in roster_system.config.daily_shift_requirements:
+                req = roster_system.config.daily_shift_requirements[shift]
+                day_requirements.append(f"{shift}:{req}")
+        ws_roster.cell(row=row, column=col, value=", ".join(day_requirements))
+    
+    # Add OFF request information with detailed applied/not applied days
+    row = start_row + len(shift_types) + 2
+    ws_roster.cell(row=row, column=1, value="Applied OFF Requests")
+    ws_roster.cell(row=row, column=2, value="Count")
+    ws_roster.cell(row=row, column=3, value="Applied Days")
+    ws_roster.cell(row=row, column=4, value="Not Applied Days")
+    
+    for i, (nurse_name, count) in enumerate(off_counts.items()):
+        nurse_row = row + i + 1
+        ws_roster.cell(row=nurse_row, column=1, value=nurse_name)
+        ws_roster.cell(row=nurse_row, column=2, value=count)
+        
+        # Add applied days
+        if nurse_name in off_details:
+            applied_days = ", ".join(off_details[nurse_name]['applied'])
+            not_applied_days = ", ".join(off_details[nurse_name]['not_applied'])
+            ws_roster.cell(row=nurse_row, column=3, value=applied_days)
+            ws_roster.cell(row=nurse_row, column=4, value=not_applied_days)
+    
+    # Format the worksheet
+    for col in range(1, len(df.columns) + 5):  # Extended to include OFF request details
+        ws_roster.column_dimensions[get_column_letter(col)].width = 15
+    
+    # Create Metrics sheet (restructured as requested)
+    ws_metrics = wb.create_sheet(title='Metrics')
+    
+    # Get metrics
+    metrics = roster_system.calculate_metrics()
+    
+    # Get detailed metrics for individual nurse metrics
+    try:
+        detailed_metrics = roster_system.calculate_detailed_metrics()
+    except Exception:
+        detailed_metrics = None
+    
+    # Set up header row
+    ws_metrics.cell(row=1, column=1, value="Nurse")
+    metric_cols = ["nurse_shift_counts", "unassigned_slots", "staffing_violations", 
+                  "experience_violations", "consecutive_violations", "night_violations", 
+                  "weekend_distribution"]
+    
+    for col, metric in enumerate(metric_cols, 2):
+        ws_metrics.cell(row=1, column=col, value=metric)
+    
+    # Calculate nurse-specific metrics
+    nurse_specific_metrics = {}
+    
+    # First, track the global metrics we'll need to distribute
+    global_metrics = {
+        "unassigned_slots": metrics.get("unassigned_slots", 0),
+        "staffing_violations": metrics.get("staffing_violations", 0),
+        "experience_violations": metrics.get("experience_violations", 0),
+        "consecutive_violations": metrics.get("consecutive_violations", 0),
+        "night_violations": metrics.get("night_violations", 0)
+    }
+    
+    # Count specific violations per nurse
+    for n_idx, nurse in enumerate(roster_system.nurses):
+        is_night_nurse = nurse.is_night_nurse
+        nurse_specific_metrics[nurse.name] = {
+            "nurse_shift_counts": metrics.get("nurse_shift_counts", {}).get(nurse.name, {}),
+            "weekend_distribution": metrics.get("weekend_distribution", {}).get(nurse.name, 0),
+            "unassigned_slots": 0,  # Will count days without assignments
+            "consecutive_violations": 0,
+            "night_violations": 0
+        }
+        
+        # Count unassigned slots
+        unassigned_days = 0
+        for day in range(roster_system.num_days):
+            if not np.any(roster_system.roster[n_idx, day]):
+                unassigned_days += 1
+        nurse_specific_metrics[nurse.name]["unassigned_slots"] = unassigned_days
+        
+        # Count consecutive work days violations
+        for day in range(roster_system.num_days):
+            if not roster_system._check_consecutive_work_days(n_idx, day):
+                nurse_specific_metrics[nurse.name]["consecutive_violations"] += 1
+        
+        # Count night shift violations (only relevant for night nurses)
+        if is_night_nurse:
+            for day in range(roster_system.num_days):
+                if not roster_system._check_night_constraints(n_idx, day):
+                    nurse_specific_metrics[nurse.name]["night_violations"] += 1
+        
+        # For staffing and experience violations, distribute evenly
+        if global_metrics["staffing_violations"] > 0:
+            nurse_specific_metrics[nurse.name]["staffing_violations"] = "-"
+        else:
+            nurse_specific_metrics[nurse.name]["staffing_violations"] = 0
+            
+        if global_metrics["experience_violations"] > 0:
+            nurse_specific_metrics[nurse.name]["experience_violations"] = "-"
+        else:
+            nurse_specific_metrics[nurse.name]["experience_violations"] = 0
+    
+    # Add nurse data rows
+    for row, nurse_name in enumerate(nurse_specific_metrics.keys(), 2):
+        ws_metrics.cell(row=row, column=1, value=nurse_name)
+        
+        # Add nurse_shift_counts
+        shift_counts = nurse_specific_metrics[nurse_name]["nurse_shift_counts"]
+        if shift_counts:
+            shift_counts_str = ", ".join([f"'{s}': {c}" for s, c in shift_counts.items()])
+            shift_counts_str = "{" + shift_counts_str + "}"
+            ws_metrics.cell(row=row, column=2, value=shift_counts_str)
+        
+        # Add other metrics
+        ws_metrics.cell(row=row, column=3, value=nurse_specific_metrics[nurse_name]["unassigned_slots"])
+        ws_metrics.cell(row=row, column=4, value=nurse_specific_metrics[nurse_name]["staffing_violations"])
+        ws_metrics.cell(row=row, column=5, value=nurse_specific_metrics[nurse_name]["experience_violations"])
+        ws_metrics.cell(row=row, column=6, value=nurse_specific_metrics[nurse_name]["consecutive_violations"])
+        ws_metrics.cell(row=row, column=7, value=nurse_specific_metrics[nurse_name]["night_violations"])
+        ws_metrics.cell(row=row, column=8, value=nurse_specific_metrics[nurse_name]["weekend_distribution"])
+    
+    # Add global metrics (in rows beneath nurses)
+    global_metrics_row = len(nurse_specific_metrics) + 3
+    ws_metrics.cell(row=global_metrics_row, column=1, value="Global Metrics")
+    
+    # Add global metrics values
+    ws_metrics.cell(row=global_metrics_row, column=3, value=global_metrics["unassigned_slots"])
+    ws_metrics.cell(row=global_metrics_row, column=4, value=global_metrics["staffing_violations"])
+    ws_metrics.cell(row=global_metrics_row, column=5, value=global_metrics["experience_violations"])
+    ws_metrics.cell(row=global_metrics_row, column=6, value=global_metrics["consecutive_violations"])
+    ws_metrics.cell(row=global_metrics_row, column=7, value=global_metrics["night_violations"])
+    
+    # Format the Metrics worksheet
+    for col in range(1, 9):  # Adjust column widths
+        if col == 2:  # nurse_shift_counts needs more space
+            ws_metrics.column_dimensions[get_column_letter(col)].width = 30
+        else:
+            ws_metrics.column_dimensions[get_column_letter(col)].width = 20
+    
+    # Save the workbook
+    wb.save(filename)
+    print(f"\nTransposed roster exported to {filename} with shift counts and detailed OFF request information")
 
 class RosterGenerator:
     def __init__(self, roster_system):
@@ -553,8 +761,8 @@ def main():
     
     # Export to Excel with metrics
     with Timer("Exporting results"):
-        export_roster_to_excel(roster_system, 'roster_v2.xlsx')
-        print("Results exported to roster_v2.xlsx")
+        export_roster_to_excel(roster_system, 'roster_v4.xlsx')
+        print(f"Results exported to roster_v4.xlsx")
         
         # Export detailed metrics to a separate file if they were calculated
         try:
