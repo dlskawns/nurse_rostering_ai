@@ -5,63 +5,83 @@ import numpy as np
 
 @dataclass
 class Nurse:
-    """Class representing a nurse with their properties and constraints."""
+    """간호사의 속성과 제약 조건을 나타내는 클래스."""
     id: int
     name: str
     experience_years: float
     is_night_nurse: bool = False
     is_head_nurse: bool = False
     remaining_off_days: int = 0
-    carried_off_days: int = 0  # Can be negative or positive
+    personal_off_adjustment: int = 0  # 이전 달에서 이월된 조정치(음수 또는 양수 가능)
     resignation_date: Optional[date] = None
     head_nurse_off_pattern: Optional[str] = None  # 'weekend', 'mixed', 'normal'
     
     def __post_init__(self):
         if self.is_head_nurse and not self.head_nurse_off_pattern:
-            self.head_nurse_off_pattern = 'weekend'  # Default pattern for head nurse
+            self.head_nurse_off_pattern = 'weekend'  # 수간호사의 기본 패턴
             
+    def calculate_available_off_days(self, config):
+        """설정 및 개인 조정치를 기반으로 사용 가능한 총 휴무일을 계산합니다."""
+        return config.calculate_total_off_days(self.personal_off_adjustment)
+    
+    def initialize_off_days(self, config):
+        """설정을 기반으로 남은 휴무일을 초기화합니다."""
+        self.remaining_off_days = self.calculate_available_off_days(config)
+        return self.remaining_off_days
+    
     def can_take_off(self, requested_days: int) -> bool:
-        """Check if nurse can take requested number of off days."""
+        """간호사가 요청된 휴무일 수를 사용할 수 있는지 확인합니다."""
         return self.remaining_off_days >= requested_days
     
     def update_off_days(self, used_days: int):
-        """Update remaining off days after usage."""
+        """사용 후 남은 휴무일을 업데이트합니다."""
         self.remaining_off_days -= used_days
         if self.remaining_off_days < 0:
-            self.carried_off_days = self.remaining_off_days
+            self.personal_off_adjustment = self.remaining_off_days  # 음수 잔액을 다음 달로 이월
             self.remaining_off_days = 0
         
     def get_shift_preferences(self, day_idx: int, month_days: int, config) -> np.ndarray:
-        """Calculate shift preferences for a given day.
+        """주어진 날짜에 대한 교대 근무 선호도를 계산합니다.
         
         Returns:
-            np.ndarray: Preference scores for each shift type [D, E, N, OFF]
+            np.ndarray: 각 교대 유형에 대한 선호도 점수 [D, E, N, OFF]
         """
         preferences = np.ones(len(config.shift_types))
         
-        # Basic preferences based on nurse type
+        # 설정에서 교대 배정 비율 적용
+        d_idx = config.shift_types.index('D')
+        evening_idx = config.shift_types.index('E')
+        night_idx = config.shift_types.index('N')
+        off_idx = config.shift_types.index('OFF')
+        
+        preferences[d_idx] *= config.day_shift_ratio
+        preferences[evening_idx] *= config.evening_shift_ratio
+        preferences[night_idx] *= config.night_shift_ratio
+        preferences[off_idx] *= config.off_shift_ratio
+        
+        # 간호사 유형에 따른 기본 선호도
         if self.is_night_nurse:
-            preferences[config.shift_types.index('N')] *= config.night_nurse_weight
-            preferences[config.shift_types.index('E')] *= config.night_nurse_weight * 0.8
-            preferences[config.shift_types.index('D')] *= 0.2  # Discourage day shifts
+            preferences[night_idx] *= config.night_nurse_weight
+            preferences[evening_idx] *= config.night_nurse_weight * 0.8
+            preferences[d_idx] *= 0.2  # 주간 근무 비선호
             
-        # Head nurse preferences
+        # 수간호사 선호도
         if self.is_head_nurse:
-            is_weekend = day_idx % 7 >= 5  # Saturday or Sunday
+            is_weekend = day_idx % 7 >= 5  # 토요일 또는 일요일
             if self.head_nurse_off_pattern == 'weekend' and is_weekend:
-                preferences[:] = 0.1  # Discourage all shifts
-                preferences[config.shift_types.index('OFF')] = 2.0
+                preferences[:] = 0.1  # 모든 교대 비선호
+                preferences[off_idx] = 2.0
             elif self.head_nurse_off_pattern == 'mixed':
-                if is_weekend and day_idx % 14 >= 7:  # Every other weekend
+                if is_weekend and day_idx % 14 >= 7:  # 격주 주말
                     preferences[:] = 0.1
-                    preferences[config.shift_types.index('OFF')] = 2.0
+                    preferences[off_idx] = 2.0
                     
-        # Handle resignation date
+        # 사직일 처리
         if self.resignation_date:
-            current_date = date(2024, 1, 1) + timedelta(days=day_idx)  # Example base date
+            current_date = date(2024, 1, 1) + timedelta(days=day_idx)  # 예시 기준 날짜
             if current_date >= self.resignation_date:
                 preferences[:] = 0.0
-                preferences[config.shift_types.index('OFF')] = 1.0
+                preferences[off_idx] = 1.0
                 
         return preferences
         

@@ -5,9 +5,11 @@ import calendar
 import time
 from config import NurseRosterConfig, DEFAULT_CONFIG
 from nurse import Nurse
+import pandas as pd
+import logging
 
 class RosterSystem:
-    """Main class for nurse roster generation and management."""
+    """간호사 근무표 생성 및 관리를 위한 주요 클래스."""
     
     def __init__(
         self,
@@ -15,7 +17,7 @@ class RosterSystem:
         target_month: date,
         config: NurseRosterConfig = DEFAULT_CONFIG
     ):
-        print("\nInitializing RosterSystem...")
+        print("\nRosterSystem 초기화 중...")
         start_time = time.time()
         
         self.nurses = nurses
@@ -23,18 +25,22 @@ class RosterSystem:
         self.config = config
         self.num_days = calendar.monthrange(target_month.year, target_month.month)[1]
         
-        # Initialize roster matrix: [nurses × days × shifts]
+        # 근무표 행렬 초기화: [간호사 × 일수 × 교대]
         self.roster = np.zeros((len(nurses), self.num_days, config.num_shifts))
         self.preference_matrix = np.zeros_like(self.roster)
         
-        # Initialize preference matrix
+        # 선호도 행렬 초기화
         self._initialize_preferences()
         
-        print(f"Initialization completed in {time.time() - start_time:.4f} seconds")
+        # 로깅 설정
+        logging.basicConfig(level=logging.INFO)
+        self.logger = logging.getLogger(__name__)
+        
+        print(f"초기화 완료: {time.time() - start_time:.4f}초 소요")
         
     def _initialize_preferences(self):
-        """Initialize the preference matrix for all nurses and days."""
-        print("Calculating preference matrix...")
+        """모든 간호사와 날짜에 대한 선호도 행렬을 초기화합니다."""
+        print("선호도 행렬 계산 중...")
         start_time = time.time()
         
         for n_idx, nurse in enumerate(self.nurses):
@@ -43,17 +49,17 @@ class RosterSystem:
                     day, self.num_days, self.config
                 )
                 
-        print(f"Preference matrix calculation completed in {time.time() - start_time:.4f} seconds")
+        print(f"선호도 행렬 계산 완료: {time.time() - start_time:.4f}초 소요")
         
     def _check_night_constraints(self, nurse_idx: int, day: int) -> bool:
-        """Check night shift related constraints for a nurse."""
-        if day < 2:  # Not enough history to check
+        """간호사에 대한 야간 근무 관련 제약 조건을 확인합니다."""
+        if day < 2:  # 확인할 이력이 충분하지 않음
             return True
             
         night_idx = self.config.shift_types.index('N')
         day_idx = self.config.shift_types.index('D')
         
-        # Check consecutive nights
+        # 연속 야간 근무 확인
         if day >= self.config.max_consecutive_nights:
             consecutive_nights = np.all(
                 self.roster[nurse_idx, day-self.config.max_consecutive_nights:day, night_idx] == 1
@@ -61,12 +67,12 @@ class RosterSystem:
             if consecutive_nights:
                 return False
                 
-        # Check N followed by D
+        # 야간 근무 후 주간 근무 확인
         if day > 0 and self.roster[nurse_idx, day-1, night_idx] == 1:
             if self.roster[nurse_idx, day, day_idx] == 1:
                 return False
                 
-        # Check monthly night shift limit
+        # 월별 야간 근무 제한 확인
         total_nights = np.sum(self.roster[nurse_idx, :day+1, night_idx])
         if total_nights >= self.config.max_night_shifts_per_month:
             return False
@@ -74,7 +80,7 @@ class RosterSystem:
         return True
         
     def _check_consecutive_work_days(self, nurse_idx: int, day: int) -> bool:
-        """Check if adding a shift would violate consecutive work days constraint."""
+        """교대 추가가 연속 근무일 제약 조건을 위반하는지 확인합니다."""
         if day < self.config.max_consecutive_work_days:
             return True
             
@@ -86,7 +92,7 @@ class RosterSystem:
         return not np.all(work_days > 0)
         
     def _check_experience_requirements(self, day: int) -> bool:
-        """Check if experience requirements are met for each shift."""
+        """각 교대에 대한 경력 요구사항이 충족되는지 확인합니다."""
         experienced_nurses = [n for n in self.nurses if n.experience_years >= self.config.min_experience_per_shift]
         
         for shift in ['D', 'E', 'N']:
@@ -100,18 +106,18 @@ class RosterSystem:
         return True
         
     def _apply_softmax_sampling(self, preferences: np.ndarray) -> int:
-        """Apply softmax sampling to get shift assignment."""
+        """소프트맥스 샘플링을 적용하여 교대 배정을 결정합니다."""
         exp_prefs = np.exp(preferences * self.config.sampling_temperature)
         probs = exp_prefs / np.sum(exp_prefs)
         return np.random.choice(len(preferences), p=probs)
         
     def generate_initial_roster(self):
-        """Generate initial roster using softmax sampling of preferences."""
-        print("\nGenerating initial roster...")
-        print(f"Target month: {self.target_month.strftime('%B %Y')}")
-        print(f"Number of nurses: {len(self.nurses)}")
-        print(f"Number of days: {self.num_days}")
-        print(f"Shift requirements: {self.config.daily_shift_requirements}")
+        """선호도의 소프트맥스 샘플링을 사용하여 초기 근무표를 생성합니다."""
+        print("\n초기 근무표 생성 중...")
+        print(f"대상 월: {self.target_month.strftime('%Y년 %m월')}")
+        print(f"간호사 수: {len(self.nurses)}명")
+        print(f"일수: {self.num_days}일")
+        print(f"교대 요구사항: {self.config.daily_shift_requirements}")
         
         start_time = time.time()
         assignments = 0
@@ -121,79 +127,79 @@ class RosterSystem:
                 shift_idx = self.config.shift_types.index(shift)
                 required = self.config.daily_shift_requirements[shift]
                 
-                # Get available nurses for this shift
+                # 이 교대에 가능한 간호사 가져오기
                 available_nurses = [
                     (n_idx, nurse) for n_idx, nurse in enumerate(self.nurses)
-                    if not np.any(self.roster[n_idx, day]) and  # Not already assigned
+                    if not np.any(self.roster[n_idx, day]) and  # 이미 배정되지 않음
                     self._check_night_constraints(n_idx, day) and
                     self._check_consecutive_work_days(n_idx, day)
                 ]
                 
-                # Assign shifts using softmax sampling
+                # 소프트맥스 샘플링을 사용하여 교대 배정
                 for _ in range(required):
                     if not available_nurses:
-                        print(f"Warning: Not enough available nurses for {shift} shift on day {day + 1}")
+                        print(f"경고: {day + 1}일 {shift} 교대에 가능한 간호사가 부족합니다")
                         break
                         
-                    # Calculate assignment probabilities
+                    # 배정 확률 계산
                     probs = np.array([
                         self.preference_matrix[n_idx, day, shift_idx]
                         for n_idx, _ in available_nurses
                     ])
                     
-                    # Sample nurse
+                    # 간호사 샘플링
                     selected_idx = self._apply_softmax_sampling(probs)
                     nurse_idx, _ = available_nurses.pop(selected_idx)
                     
-                    # Assign shift
+                    # 교대 배정
                     self.roster[nurse_idx, day, shift_idx] = 1
                     assignments += 1
                     
-        print(f"Initial roster generation completed in {time.time() - start_time:.4f} seconds")
-        print(f"Total assignments made: {assignments}")
+        print(f"초기 근무표 생성 완료: {time.time() - start_time:.4f}초 소요")
+        print(f"총 배정 수: {assignments}")
         
     def apply_off_requests(self, off_requests: Dict[int, List[int]]):
-        """Apply off day requests from nurses.
+        """간호사의 휴무일 요청을 적용합니다.
         
         Args:
-            off_requests: Dict mapping nurse IDs to lists of requested off days (1-based)
+            off_requests: 간호사 ID를 요청된 휴무일 목록(1부터 시작)에 매핑하는 딕셔너리
         """
         for nurse_id, days in off_requests.items():
             nurse_idx = next(i for i, n in enumerate(self.nurses) if n.id == nurse_id)
             nurse = self.nurses[nurse_idx]
             
-            # Filter days to only include those within the month
-            valid_days = [d - 1 for d in days if 1 <= d <= self.num_days]  # Convert to 0-based indexing
+            # 월 내에 있는 날짜만 필터링
+            valid_days = [d - 1 for d in days if 1 <= d <= self.num_days]  # 0부터 시작하는 인덱싱으로 변환
             
             if not valid_days:
                 continue
             
             if not nurse.can_take_off(len(valid_days)):
-                print(f"Warning: Nurse {nurse.name} doesn't have enough off days "
-                      f"(requested: {len(valid_days)}, available: {nurse.remaining_off_days})")
+                print(f"경고: {nurse.name} 간호사는 충분한 휴무일이 없습니다 "
+                      f"(요청: {len(valid_days)}일, 가능: {nurse.remaining_off_days}일)")
                 continue
             
             off_idx = self.config.shift_types.index('OFF')
             for day in valid_days:
                 if np.any(self.roster[nurse_idx, day]):
-                    # Remove existing assignment
+                    # 기존 배정 제거
                     self.roster[nurse_idx, day] = 0
                 self.roster[nurse_idx, day, off_idx] = 1
                 
             nurse.update_off_days(len(valid_days))
             
     def _get_constraint_weights(self) -> Dict[str, float]:
-        """Get weights for different types of constraints."""
+        """다양한 유형의 제약 조건에 대한 가중치를 가져옵니다."""
         return {
-            'experience': 1.0,  # Experience requirements
-            'night': 0.9,      # Night shift constraints
-            'consecutive': 0.8, # Consecutive work days
-            'shift_requirement': 0.7,  # Daily shift requirements
-            'off_pattern': 0.6  # Off day patterns
+            'experience': 1.0,  # 경력 요구사항
+            'night': 0.9,      # 야간 근무 제약 조건
+            'consecutive': 0.8, # 연속 근무일
+            'shift_requirement': 0.7,  # 일일 교대 요구사항
+            'off_pattern': 0.6  # 휴무일 패턴
         }
 
     def _calculate_violation_score(self, violations: List[dict]) -> float:
-        """Calculate weighted violation score."""
+        """가중치가 적용된 위반 점수를 계산합니다."""
         weights = self._get_constraint_weights()
         score = 0.0
         
@@ -1239,3 +1245,142 @@ class RosterSystem:
             return True
         else:
             return False 
+
+    def generate_roster(self, num_days: int) -> np.ndarray:
+        """근무표를 생성합니다.
+        
+        Args:
+            num_days: 근무표를 생성할 일수
+            
+        Returns:
+            생성된 근무표 (numpy array)
+        """
+        start_time = time.time()
+        self.logger.info(f"근무표 생성 시작: {len(self.nurses)}명의 간호사, {num_days}일")
+        
+        # 근무표 초기화
+        self.roster = np.full((len(self.nurses), num_days), 'OFF', dtype='U3')
+        
+        # 각 날짜에 대해 근무 배정
+        for day in range(num_days):
+            self._assign_shifts_for_day(day)
+            
+            # 진행 상황 로깅
+            if (day + 1) % 7 == 0:
+                self.logger.info(f"{day + 1}일 완료 ({((day + 1) / num_days * 100):.1f}%)")
+                
+        # 만족도 지표 계산
+        self._calculate_satisfaction_metrics()
+        
+        end_time = time.time()
+        self.logger.info(f"근무표 생성 완료. 소요 시간: {end_time - start_time:.2f}초")
+        
+        return self.roster
+        
+    def _assign_shifts_for_day(self, day: int):
+        """특정 날짜의 근무를 배정합니다.
+        
+        Args:
+            day: 근무를 배정할 날짜 인덱스
+        """
+        # 각 교대 유형별로 필요한 인원 수만큼 배정
+        for shift_type, required_nurses in self.config.daily_shift_requirements.items():
+            assigned_count = 0
+            
+            # 선호도에 따라 간호사 정렬
+            nurse_preferences = []
+            for idx, nurse in enumerate(self.nurses):
+                if self.roster[idx, day] == 'OFF':  # 아직 배정되지 않은 간호사만 고려
+                    preference = nurse.get_shift_preference(shift_type, self.config)
+                    nurse_preferences.append((preference, idx))
+            
+            # 선호도 순으로 정렬
+            nurse_preferences.sort(reverse=True)
+            
+            # 필요한 인원만큼 배정
+            for _, nurse_idx in nurse_preferences:
+                if assigned_count >= required_nurses:
+                    break
+                    
+                nurse = self.nurses[nurse_idx]
+                self.roster[nurse_idx, day] = shift_type
+                nurse.update_shift_history(shift_type, day)
+                assigned_count += 1
+                
+            if assigned_count < required_nurses:
+                self.logger.warning(f"일자 {day + 1}: {shift_type} 교대에 필요한 인원을 배정하지 못했습니다 ({assigned_count}/{required_nurses})")
+                
+    def _calculate_satisfaction_metrics(self):
+        """근무표에 대한 만족도 지표를 계산합니다."""
+        metrics = {
+            '총 야간 근무 수': [],
+            '연속 야간 근무 발생 횟수': [],
+            '연속 근무일 수 초과 횟수': [],
+            '주당 휴무일 부족 횟수': []
+        }
+        
+        for nurse_idx, nurse in enumerate(self.nurses):
+            night_shifts = np.sum(self.roster[nurse_idx] == 'N')
+            metrics['총 야간 근무 수'].append(night_shifts)
+            
+            # 연속 야간 근무 체크
+            consecutive_nights = 0
+            consecutive_nights_violations = 0
+            for shift in self.roster[nurse_idx]:
+                if shift == 'N':
+                    consecutive_nights += 1
+                    if consecutive_nights > self.config.max_consecutive_nights:
+                        consecutive_nights_violations += 1
+                else:
+                    consecutive_nights = 0
+            metrics['연속 야간 근무 발생 횟수'].append(consecutive_nights_violations)
+            
+            # 연속 근무일 체크
+            consecutive_work = 0
+            consecutive_work_violations = 0
+            for shift in self.roster[nurse_idx]:
+                if shift != 'OFF':
+                    consecutive_work += 1
+                    if consecutive_work > self.config.max_consecutive_work_days:
+                        consecutive_work_violations += 1
+                else:
+                    consecutive_work = 0
+            metrics['연속 근무일 수 초과 횟수'].append(consecutive_work_violations)
+            
+            # 주당 휴무일 체크
+            weekly_off_violations = 0
+            for week in range(len(self.roster[nurse_idx]) // 7):
+                week_shifts = self.roster[nurse_idx][week * 7:(week + 1) * 7]
+                off_days = np.sum(week_shifts == 'OFF')
+                if off_days < 2:  # 주 2일 휴무 기준
+                    weekly_off_violations += 1
+            metrics['주당 휴무일 부족 횟수'].append(weekly_off_violations)
+            
+        self.satisfaction_metrics = metrics
+        
+    def export_to_excel(self, filename: str):
+        """근무표를 Excel 파일로 내보냅니다.
+        
+        Args:
+            filename: 저장할 Excel 파일 이름
+        """
+        if self.roster is None:
+            raise ValueError("근무표가 아직 생성되지 않았습니다.")
+            
+        # 근무표 데이터프레임 생성
+        df = pd.DataFrame(
+            self.roster,
+            index=[f"{nurse.name} ({nurse.experience_years}년차)" for nurse in self.nurses],
+            columns=[f"Day {i+1}" for i in range(self.roster.shape[1])]
+        )
+        
+        # 만족도 지표 데이터프레임 생성
+        metrics_df = pd.DataFrame(self.satisfaction_metrics)
+        metrics_df.index = [nurse.name for nurse in self.nurses]
+        
+        # Excel 파일로 저장
+        with pd.ExcelWriter(filename) as writer:
+            df.to_excel(writer, sheet_name='근무표')
+            metrics_df.to_excel(writer, sheet_name='만족도 지표')
+            
+        self.logger.info(f"근무표가 {filename}에 저장되었습니다.") 

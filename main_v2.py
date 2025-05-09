@@ -9,30 +9,30 @@ from roster_system import RosterSystem
 from typing import List, Optional
 
 class Timer:
-    """Context manager for timing code blocks."""
+    """코드 블록의 실행 시간을 측정하는 컨텍스트 매니저"""
     def __init__(self, description):
         self.description = description
         
     def __enter__(self):
         self.start = time.time()
-        print(f"\n{self.description}...")
+        print(f"\n{self.description} 시작...")
         return self
         
     def __exit__(self, *args):
         self.end = time.time()
         self.duration = self.end - self.start
-        print(f"{self.description} completed in {self.duration:.2f} seconds")
+        print(f"{self.description} 완료: {self.duration:.2f}초 소요")
 
 def load_test_data(filename):
-    """Load test data from JSON file."""
+    """JSON 파일에서 테스트 데이터를 로드합니다."""
     with open(filename, 'r') as f:
         return json.load(f)
 
 def create_nurses_from_data(nurses_data):
-    """Create nurse objects from JSON data."""
+    """JSON 데이터로부터 간호사 객체를 생성합니다."""
     nurses = []
     for nurse_data in nurses_data:
-        # Convert resignation_date to datetime if present
+        # resignation_date가 있으면 datetime으로 변환
         if 'resignation_date' in nurse_data:
             nurse_data['resignation_date'] = datetime.strptime(
                 nurse_data['resignation_date'], '%Y-%m-%d'
@@ -41,28 +41,28 @@ def create_nurses_from_data(nurses_data):
     return nurses
 
 def export_roster_to_excel(roster_system, filename):
-    """Export roster to Excel with metrics and summary information."""
+    """근무표를 지표와 요약 정보와 함께 Excel로 내보냅니다."""
     import openpyxl
     from openpyxl.utils import get_column_letter
     from openpyxl.styles import PatternFill, Font, Alignment
     
-    # Create shift assignment DataFrame (transposed format)
+    # 근무 배정 DataFrame 생성 (전치된 형식)
     days = pd.date_range(
         start=roster_system.target_month,
         periods=roster_system.num_days,
         freq='D'
     )
     
-    # Create transposed DataFrame - nurses as rows, days as columns
+    # 전치된 DataFrame 생성 - 행은 간호사, 열은 날짜
     df = pd.DataFrame(
         index=[n.name for n in roster_system.nurses],
         columns=[date.strftime('%Y-%m-%d') for date in days]
     )
     
-    # Add day of week information as a second header row later
+    # 요일 정보를 나중에 두 번째 헤더 행으로 추가
     day_of_week = [date.strftime('%a') for date in days]
     
-    # Fill in shift assignments
+    # 근무 배정 정보 채우기
     for day in range(roster_system.num_days):
         date_str = days[day].strftime('%Y-%m-%d')
         for n_idx, nurse in enumerate(roster_system.nurses):
@@ -72,9 +72,9 @@ def export_roster_to_excel(roster_system, filename):
             else:
                 df.loc[nurse.name, date_str] = '-'
     
-    # Count applied OFF requests for each nurse and track applied/not applied days
+    # 각 간호사의 적용된 휴무 요청 수 계산 및 적용/미적용 날짜 추적
     off_counts = {}
-    off_details = {}  # To store applied and not applied days
+    off_details = {}  # 적용 및 미적용 날짜 저장용
     off_requests = {int(k): v for k, v in load_test_data('test_data.json')['off_requests'].items()}
     
     for nurse_id, requested_days in off_requests.items():
@@ -88,9 +88,9 @@ def export_roster_to_excel(roster_system, filename):
         not_applied_days = []
         
         for day in requested_days:
-            if 1 <= day <= roster_system.num_days:  # Day is in the month
+            if 1 <= day <= roster_system.num_days:  # 해당 월의 날짜인 경우
                 off_idx = roster_system.config.shift_types.index('OFF')
-                # Check if the day was actually set to OFF
+                # 실제로 OFF로 설정되었는지 확인
                 if roster_system.roster[nurse_idx, day-1, off_idx] == 1:
                     off_counts[nurse_name] = off_counts.get(nurse_name, 0) + 1
                     applied_days.append(str(day))
@@ -107,10 +107,10 @@ def export_roster_to_excel(roster_system, filename):
     
     # Create Roster sheet
     ws_roster = wb.active
-    ws_roster.title = "Roster"
+    ws_roster.title = "근무표"
     
     # Add headers with day of week
-    ws_roster.cell(row=1, column=1, value="Nurse")
+    ws_roster.cell(row=1, column=1, value="간호사")
     for col, (date_str, day) in enumerate(zip(df.columns, day_of_week), 2):
         ws_roster.cell(row=1, column=col, value=f"{date_str} ({day})")
     
@@ -126,7 +126,7 @@ def export_roster_to_excel(roster_system, filename):
     
     for i, shift in enumerate(shift_types):
         row = start_row + i
-        ws_roster.cell(row=row, column=1, value=f"Total {shift}")
+        ws_roster.cell(row=row, column=1, value=f"합계 {shift}")
         
         for col, date_str in enumerate(df.columns, 2):
             # Count cells with this shift value in the column
@@ -135,7 +135,7 @@ def export_roster_to_excel(roster_system, filename):
     
     # Add required count row
     row = start_row + len(shift_types)
-    ws_roster.cell(row=row, column=1, value="Required")
+    ws_roster.cell(row=row, column=1, value="필요 인원")
     
     for col, date_str in enumerate(df.columns, 2):
         day_idx = col - 2
@@ -148,10 +148,10 @@ def export_roster_to_excel(roster_system, filename):
     
     # Add OFF request information with detailed applied/not applied days
     row = start_row + len(shift_types) + 2
-    ws_roster.cell(row=row, column=1, value="Applied OFF Requests")
-    ws_roster.cell(row=row, column=2, value="Count")
-    ws_roster.cell(row=row, column=3, value="Applied Days")
-    ws_roster.cell(row=row, column=4, value="Not Applied Days")
+    ws_roster.cell(row=row, column=1, value="적용된 휴무 요청")
+    ws_roster.cell(row=row, column=2, value="횟수")
+    ws_roster.cell(row=row, column=3, value="적용된 날짜")
+    ws_roster.cell(row=row, column=4, value="미적용된 날짜")
     
     for i, (nurse_name, count) in enumerate(off_counts.items()):
         nurse_row = row + i + 1
@@ -165,52 +165,89 @@ def export_roster_to_excel(roster_system, filename):
             ws_roster.cell(row=nurse_row, column=3, value=applied_days)
             ws_roster.cell(row=nurse_row, column=4, value=not_applied_days)
     
-    # Format the worksheet
-    for col in range(1, len(df.columns) + 5):  # Extended to include OFF request details
+    # Add OFF allocation information
+    row = start_row + len(shift_types) + len(off_counts) + 5
+    ws_roster.cell(row=row, column=1, value="휴무일 할당 현황")
+    ws_roster.cell(row=row, column=2, value="").font = Font(bold=True)
+    ws_roster.cell(row=row, column=3, value="").font = Font(bold=True)
+    ws_roster.cell(row=row, column=4, value="").font = Font(bold=True)
+    
+    # Header row for OFF allocations
+    row += 1
+    ws_roster.cell(row=row, column=1, value="간호사")
+    ws_roster.cell(row=row, column=2, value="공통 휴무일")
+    ws_roster.cell(row=row, column=3, value="기본 개인 휴무일")
+    ws_roster.cell(row=row, column=4, value="개인 조정일")
+    ws_roster.cell(row=row, column=5, value="총 할당일")
+    ws_roster.cell(row=row, column=6, value="잔여일")
+    
+    # 각 간호사별 휴무 할당 현황 표시
+    for i, nurse in enumerate(roster_system.nurses):
+        row += 1
+        nurse_name = nurse.name
+        global_off = roster_system.config.global_monthly_off_days
+        standard_off = roster_system.config.standard_personal_off_days
+        personal_adj = nurse.personal_off_adjustment
+        total_allocation = global_off + standard_off + personal_adj
+        
+        # 실제 사용된 휴무일 계산
+        off_idx = roster_system.config.shift_types.index('OFF')
+        used_offs = np.sum(roster_system.roster[i, :, off_idx])
+        remaining = nurse.remaining_off_days
+        
+        ws_roster.cell(row=row, column=1, value=nurse_name)
+        ws_roster.cell(row=row, column=2, value=global_off)
+        ws_roster.cell(row=row, column=3, value=standard_off)
+        ws_roster.cell(row=row, column=4, value=personal_adj)
+        ws_roster.cell(row=row, column=5, value=total_allocation)
+        ws_roster.cell(row=row, column=6, value=remaining)
+    
+    # 워크시트 서식 지정
+    for col in range(1, len(df.columns) + 5):  # 휴무 요청 상세 정보 포함하도록 확장
         ws_roster.column_dimensions[get_column_letter(col)].width = 15
     
-    # Create Metrics sheet (restructured as requested)
-    ws_metrics = wb.create_sheet(title='Metrics')
+    # 지표 시트 생성 (요청대로 재구성)
+    ws_metrics = wb.create_sheet(title='근무 지표')
     
-    # Get metrics
+    # 지표 가져오기
     metrics = roster_system.calculate_metrics()
     
-    # Get detailed metrics for individual nurse metrics
+    # 개별 간호사 지표를 위한 상세 지표 가져오기
     try:
         detailed_metrics = roster_system.calculate_detailed_metrics()
     except Exception:
         detailed_metrics = None
     
-    # Set up header row
-    ws_metrics.cell(row=1, column=1, value="Nurse")
-    metric_cols = ["nurse_shift_counts", "unassigned_slots", "staffing_violations", 
-                  "experience_violations", "consecutive_violations", "night_violations", 
-                  "weekend_distribution"]
+    # 헤더 행 설정
+    ws_metrics.cell(row=1, column=1, value="간호사")
+    metric_cols = ["근무 횟수", "미배정 근무", "인원 요구사항 위반", 
+                  "경력 요구사항 위반", "연속 근무 위반", "야간 근무 위반", 
+                  "주말 근무 분포"]
     
     for col, metric in enumerate(metric_cols, 2):
         ws_metrics.cell(row=1, column=col, value=metric)
     
-    # Calculate nurse-specific metrics
+    # 간호사별 지표 계산
     nurse_specific_metrics = {}
     
-    # First, track the global metrics we'll need to distribute
+    # 먼저, 분배할 전체 지표 추적
     global_metrics = {
-        "unassigned_slots": metrics.get("unassigned_slots", 0),
-        "staffing_violations": metrics.get("staffing_violations", 0),
-        "experience_violations": metrics.get("experience_violations", 0),
-        "consecutive_violations": metrics.get("consecutive_violations", 0),
-        "night_violations": metrics.get("night_violations", 0)
+        "미배정 근무": metrics.get("unassigned_slots", 0),
+        "인원 요구사항 위반": metrics.get("staffing_violations", 0),
+        "경력 요구사항 위반": metrics.get("experience_violations", 0),
+        "연속 근무 위반": metrics.get("consecutive_violations", 0),
+        "야간 근무 위반": metrics.get("night_violations", 0)
     }
     
-    # Count specific violations per nurse
+    # 간호사별 위반 사항 계산
     for n_idx, nurse in enumerate(roster_system.nurses):
         is_night_nurse = nurse.is_night_nurse
         nurse_specific_metrics[nurse.name] = {
-            "nurse_shift_counts": metrics.get("nurse_shift_counts", {}).get(nurse.name, {}),
-            "weekend_distribution": metrics.get("weekend_distribution", {}).get(nurse.name, 0),
-            "unassigned_slots": 0,  # Will count days without assignments
-            "consecutive_violations": 0,
-            "night_violations": 0
+            "근무 횟수": metrics.get("nurse_shift_counts", {}).get(nurse.name, {}),
+            "주말 근무 분포": metrics.get("weekend_distribution", {}).get(nurse.name, 0),
+            "미배정 근무": 0,  # 배정되지 않은 날짜 수 계산 예정
+            "연속 근무 위반": 0,
+            "야간 근무 위반": 0
         }
         
         # Count unassigned slots
@@ -218,70 +255,71 @@ def export_roster_to_excel(roster_system, filename):
         for day in range(roster_system.num_days):
             if not np.any(roster_system.roster[n_idx, day]):
                 unassigned_days += 1
-        nurse_specific_metrics[nurse.name]["unassigned_slots"] = unassigned_days
+        nurse_specific_metrics[nurse.name]["미배정 근무"] = unassigned_days
         
         # Count consecutive work days violations
         for day in range(roster_system.num_days):
             if not roster_system._check_consecutive_work_days(n_idx, day):
-                nurse_specific_metrics[nurse.name]["consecutive_violations"] += 1
+                nurse_specific_metrics[nurse.name]["연속 근무 위반"] += 1
         
         # Count night shift violations (only relevant for night nurses)
         if is_night_nurse:
             for day in range(roster_system.num_days):
                 if not roster_system._check_night_constraints(n_idx, day):
-                    nurse_specific_metrics[nurse.name]["night_violations"] += 1
+                    nurse_specific_metrics[nurse.name]["야간 근무 위반"] += 1
         
         # For staffing and experience violations, distribute evenly
-        if global_metrics["staffing_violations"] > 0:
-            nurse_specific_metrics[nurse.name]["staffing_violations"] = "-"
+        if global_metrics["인원 요구사항 위반"] > 0:
+            nurse_specific_metrics[nurse.name]["인원 요구사항 위반"] = "-"
         else:
-            nurse_specific_metrics[nurse.name]["staffing_violations"] = 0
+            nurse_specific_metrics[nurse.name]["인원 요구사항 위반"] = 0
             
-        if global_metrics["experience_violations"] > 0:
-            nurse_specific_metrics[nurse.name]["experience_violations"] = "-"
+        if global_metrics["경력 요구사항 위반"] > 0:
+            nurse_specific_metrics[nurse.name]["경력 요구사항 위반"] = "-"
         else:
-            nurse_specific_metrics[nurse.name]["experience_violations"] = 0
+            nurse_specific_metrics[nurse.name]["경력 요구사항 위반"] = 0
     
     # Add nurse data rows
     for row, nurse_name in enumerate(nurse_specific_metrics.keys(), 2):
         ws_metrics.cell(row=row, column=1, value=nurse_name)
         
         # Add nurse_shift_counts
-        shift_counts = nurse_specific_metrics[nurse_name]["nurse_shift_counts"]
+        shift_counts = nurse_specific_metrics[nurse.name]["근무 횟수"]
         if shift_counts:
             shift_counts_str = ", ".join([f"'{s}': {c}" for s, c in shift_counts.items()])
             shift_counts_str = "{" + shift_counts_str + "}"
             ws_metrics.cell(row=row, column=2, value=shift_counts_str)
         
         # Add other metrics
-        ws_metrics.cell(row=row, column=3, value=nurse_specific_metrics[nurse_name]["unassigned_slots"])
-        ws_metrics.cell(row=row, column=4, value=nurse_specific_metrics[nurse_name]["staffing_violations"])
-        ws_metrics.cell(row=row, column=5, value=nurse_specific_metrics[nurse_name]["experience_violations"])
-        ws_metrics.cell(row=row, column=6, value=nurse_specific_metrics[nurse_name]["consecutive_violations"])
-        ws_metrics.cell(row=row, column=7, value=nurse_specific_metrics[nurse_name]["night_violations"])
-        ws_metrics.cell(row=row, column=8, value=nurse_specific_metrics[nurse_name]["weekend_distribution"])
+        ws_metrics.cell(row=row, column=3, value=nurse_specific_metrics[nurse.name]["미배정 근무"])
+        ws_metrics.cell(row=row, column=4, value=nurse_specific_metrics[nurse.name]["인원 요구사항 위반"])
+        ws_metrics.cell(row=row, column=5, value=nurse_specific_metrics[nurse.name]["경력 요구사항 위반"])
+        ws_metrics.cell(row=row, column=6, value=nurse_specific_metrics[nurse.name]["연속 근무 위반"])
+        ws_metrics.cell(row=row, column=7, value=nurse_specific_metrics[nurse.name]["야간 근무 위반"])
+        ws_metrics.cell(row=row, column=8, value=nurse_specific_metrics[nurse.name]["주말 근무 분포"])
     
     # Add global metrics (in rows beneath nurses)
     global_metrics_row = len(nurse_specific_metrics) + 3
-    ws_metrics.cell(row=global_metrics_row, column=1, value="Global Metrics")
+    ws_metrics.cell(row=global_metrics_row, column=1, value="전체 지표")
     
     # Add global metrics values
-    ws_metrics.cell(row=global_metrics_row, column=3, value=global_metrics["unassigned_slots"])
-    ws_metrics.cell(row=global_metrics_row, column=4, value=global_metrics["staffing_violations"])
-    ws_metrics.cell(row=global_metrics_row, column=5, value=global_metrics["experience_violations"])
-    ws_metrics.cell(row=global_metrics_row, column=6, value=global_metrics["consecutive_violations"])
-    ws_metrics.cell(row=global_metrics_row, column=7, value=global_metrics["night_violations"])
+    ws_metrics.cell(row=global_metrics_row, column=3, value=global_metrics["미배정 근무"])
+    ws_metrics.cell(row=global_metrics_row, column=4, value=global_metrics["인원 요구사항 위반"])
+    ws_metrics.cell(row=global_metrics_row, column=5, value=global_metrics["경력 요구사항 위반"])
+    ws_metrics.cell(row=global_metrics_row, column=6, value=global_metrics["연속 근무 위반"])
+    ws_metrics.cell(row=global_metrics_row, column=7, value=global_metrics["야간 근무 위반"])
     
-    # Format the Metrics worksheet
-    for col in range(1, 9):  # Adjust column widths
-        if col == 2:  # nurse_shift_counts needs more space
-            ws_metrics.column_dimensions[get_column_letter(col)].width = 30
-        else:
-            ws_metrics.column_dimensions[get_column_letter(col)].width = 20
+    # Add OFF allocation section to Metrics sheet
+    off_section_row = global_metrics_row + 3
+    ws_metrics.cell(row=off_section_row, column=1, value="휴무일 설정").font = Font(bold=True)
+    ws_metrics.cell(row=off_section_row+1, column=1, value="공통 월간 휴무일")
+    ws_metrics.cell(row=off_section_row+1, column=2, value=roster_system.config.global_monthly_off_days)
+    ws_metrics.cell(row=off_section_row+2, column=1, value="기본 개인 휴무일")
+    ws_metrics.cell(row=off_section_row+2, column=2, value=roster_system.config.standard_personal_off_days)
     
     # Save the workbook
     wb.save(filename)
-    print(f"\nTransposed roster exported to {filename} with shift counts and detailed OFF request information")
+    print(f"\n근무표가 {filename}에 저장되었습니다.")
 
 class RosterGenerator:
     def __init__(self, roster_system):
@@ -664,122 +702,140 @@ class RosterGenerator:
         return True
 
 def main():
-    print("\n=== Starting Nurse Rostering System V2 with Global Optimization ===")
+    """메인 함수"""
+    print("\n=== 간호사 근무표 생성 시스템 V2 시작 (전역 최적화 적용) ===")
     
-    # Install OR-Tools if not already installed
+    # OR-Tools 설치 확인
     try:
         import ortools
     except ImportError:
-        print("\nInstalling OR-Tools...")
+        print("\nOR-Tools 설치 중...")
         import subprocess
         subprocess.check_call(["pip", "install", "ortools"])
     
-    # Load test data
-    with Timer("Loading test data"):
+    # 테스트 데이터 로드
+    with Timer("테스트 데이터 로드"):
         data = load_test_data('test_data.json')
         
-    # Create configuration
-    with Timer("Creating configuration"):
-        config = NurseRosterConfig(**data['config'])
-        print(f"Configured shift requirements: {config.daily_shift_requirements}")
-        
-    # Create nurses
-    with Timer("Creating nurse objects"):
+    # 간호사 객체 생성
+    with Timer("간호사 객체 생성"):
         nurses = create_nurses_from_data(data['nurses'])
-        print(f"Created {len(nurses)} nurse objects")
+        print(f"{len(nurses)}명의 간호사 객체가 생성되었습니다.")
         
-    # Create roster system
-    with Timer("Initializing roster system"):
+    # 설정된 전역 월간 휴무일로 설정 생성
+    with Timer("설정 초기화"):
+        config_data = data['config']
+        
+        # 전역 월간 휴무일이 설정에 있는지 확인
+        if 'global_monthly_off_days' not in config_data:
+            print(f"기본 전역 월간 휴무일 사용: 3일")
+            config_data['global_monthly_off_days'] = 3
+        else:
+            print(f"설정된 전역 월간 휴무일 사용: {config_data['global_monthly_off_days']}일")
+            
+        config = NurseRosterConfig(**config_data)
+        
+        # 설정에 따라 각 간호사의 휴무일 초기화
+        total_personal_off = 0
+        for nurse in nurses:
+            avail_days = nurse.initialize_off_days(config)
+            total_personal_off += avail_days
+            
+        print(f"간호사 휴무일 초기화 완료: 총 {total_personal_off}일의 개인 휴무일")
+        print(f"전역 월간 휴무일: {config.global_monthly_off_days}일")
+        
+    # 근무표 시스템 생성
+    with Timer("근무표 시스템 초기화"):
         target_month = datetime.strptime(data['target_month'], '%Y-%m-%d').date()
         roster_system = RosterSystem(
             nurses=nurses,
             target_month=target_month,
             config=config
         )
-        print(f"Initialized roster system for {target_month.strftime('%B %Y')}")
+        print(f"{target_month.strftime('%Y년 %m월')} 근무표 시스템이 초기화되었습니다.")
     
-    # Apply off requests first (as hard constraints)
-    with Timer("Applying off requests"):
+    # 먼저 휴무 요청 적용 (하드 제약조건으로)
+    with Timer("휴무 요청 적용"):
         off_requests = {int(k): v for k, v in data['off_requests'].items()}
         roster_system.apply_off_requests(off_requests)
-        print(f"Applied {len(off_requests)} off requests")
+        print(f"{len(off_requests)}개의 휴무 요청이 적용되었습니다.")
     
-    # Generate initial roster using the RosterGenerator for seeding
-    with Timer("Generating initial roster for seeding"):
+    # RosterGenerator를 사용하여 초기 근무표 생성
+    with Timer("초기 근무표 생성"):
         generator = RosterGenerator(roster_system)
         generator.generate_roster()
         
-    # Optimize globally using CP-SAT
-    with Timer("Optimizing roster with CP-SAT (Global optimization)"):
+    # CP-SAT를 사용한 전역 최적화
+    with Timer("CP-SAT를 사용한 근무표 최적화 (전역 최적화)"):
         success = roster_system.optimize_roster_with_cp_sat(time_limit_seconds=60)
         if success:
-            print("Global optimization successful!")
+            print("전역 최적화가 성공적으로 완료되었습니다!")
         else:
-            print("Global optimization failed, falling back to LNS approach...")
-            # If global optimization failed, try LNS
-            with Timer("Refining with Large Neighborhood Search"):
+            print("전역 최적화 실패, LNS 접근법으로 전환합니다...")
+            # 전역 최적화 실패 시 LNS 시도
+            with Timer("대규모 근린 탐색(LNS)으로 개선"):
                 success = roster_system.optimize_with_lns(max_iterations=5, time_limit_per_iteration=20)
                 if success:
-                    print("LNS refinement successful!")
+                    print("LNS 개선이 성공적으로 완료되었습니다!")
                 else:
-                    print("LNS refinement completed with some remaining violations.")
+                    print("LNS 개선이 완료되었으나 일부 제약조건 위반이 남아있습니다.")
     
-    # Calculate and print metrics
-    with Timer("Calculating detailed metrics"):
+    # 지표 계산 및 출력
+    with Timer("상세 지표 계산"):
         try:
             detailed_metrics = roster_system.calculate_detailed_metrics()
             violations = detailed_metrics.get('constraint_violations', {})
             
-            print("\n=== Constraint Violations ===")
+            print("\n=== 제약조건 위반 현황 ===")
             if not violations:
-                print("No violations found! Perfect solution achieved.")
+                print("위반 사항이 없습니다! 완벽한 해결책을 찾았습니다.")
             else:
                 for violation_type, count in violations.items():
-                    print(f"{violation_type}: {count}")
+                    print(f"{violation_type}: {count}건")
                 
             if 'workload_distribution' in detailed_metrics and 'statistics' in detailed_metrics['workload_distribution']:
                 workload = detailed_metrics['workload_distribution']['statistics']
-                print(f"\nWorkload statistics:")
-                print(f"  Average shifts per nurse: {workload.get('mean_shifts', 0):.2f}")
-                print(f"  Min shifts: {workload.get('min_shifts', 0)}, Max shifts: {workload.get('max_shifts', 0)}")
+                print(f"\n근무 부하 통계:")
+                print(f"  간호사당 평균 근무 수: {workload.get('mean_shifts', 0):.2f}")
+                print(f"  최소 근무 수: {workload.get('min_shifts', 0)}, 최대 근무 수: {workload.get('max_shifts', 0)}")
             
             if 'nurse_satisfaction' in detailed_metrics:
                 satisfaction = detailed_metrics['nurse_satisfaction'].get('average', 0)
-                print(f"\nAverage nurse satisfaction score: {satisfaction:.2f}")
+                print(f"\n평균 간호사 만족도 점수: {satisfaction:.2f}")
         except Exception as e:
-            print(f"Error calculating detailed metrics: {e}")
-            # Calculate basic metrics instead
+            print(f"상세 지표 계산 중 오류 발생: {e}")
+            # 기본 지표로 대체
             basic_metrics = roster_system.calculate_metrics()
-            print("\n=== Basic Metrics ===")
+            print("\n=== 기본 지표 ===")
             for key, value in basic_metrics.items():
                 if not isinstance(value, dict):
                     print(f"{key}: {value}")
     
-    # Print final roster
-    print("\n=== Final Roster ===")
+    # 최종 근무표 출력
+    print("\n=== 최종 근무표 ===")
     roster_system.print_roster()
     
-    # Export to Excel with metrics
-    with Timer("Exporting results"):
-        export_roster_to_excel(roster_system, 'roster_v4.xlsx')
-        print(f"Results exported to roster_v4.xlsx")
+    # 지표와 함께 Excel로 내보내기
+    with Timer("결과 내보내기"):
+        export_roster_to_excel(roster_system, 'roster_eval/roster_v6.xlsx')
+        print(f"결과가 roster_eval/roster_v6.xlsx 파일로 저장되었습니다.")
         
-        # Export detailed metrics to a separate file if they were calculated
+        # 상세 지표가 계산된 경우 별도 파일로 내보내기
         try:
             if 'detailed_metrics' in locals() and detailed_metrics:
                 with open('detailed_metrics.json', 'w') as f:
                     import json
                     json.dump(detailed_metrics, f, indent=2, default=lambda x: float(x) if isinstance(x, np.float32) else x)
-                print("Detailed metrics exported to detailed_metrics.json")
+                print("상세 지표가 detailed_metrics.json 파일로 저장되었습니다.")
             else:
-                # Export basic metrics instead
+                # 기본 지표로 대체하여 저장
                 basic_metrics = roster_system.calculate_metrics()
                 with open('basic_metrics.json', 'w') as f:
                     import json
                     json.dump(basic_metrics, f, indent=2, default=lambda x: float(x) if isinstance(x, np.float32) else x)
-                print("Basic metrics exported to basic_metrics.json")
+                print("기본 지표가 basic_metrics.json 파일로 저장되었습니다.")
         except Exception as e:
-            print(f"Error exporting metrics: {e}")
-    
+            print(f"지표 내보내기 중 오류 발생: {e}")
+
 if __name__ == "__main__":
     main() 
