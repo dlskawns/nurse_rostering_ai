@@ -3,10 +3,9 @@ import numpy as np
 from datetime import date, datetime, timedelta
 import calendar
 import time
-from config import NurseRosterConfig, DEFAULT_CONFIG
-from nurse import Nurse
 import pandas as pd
 import logging
+
 
 class RosterSystem:
     """간호사 근무표 생성 및 관리를 위한 주요 클래스."""
@@ -31,7 +30,18 @@ class RosterSystem:
         
         # 선호도 행렬 초기화
         self._initialize_preferences()
-        
+        #### 수정된곳
+        self.max_off_per_nurse = []
+        for nurse in self.nurses:
+            # 글로벌 + 기본 개인 + 개인 조정치(음/양수) = 총 허용 OFF
+            max_allowed = (
+                self.config.global_monthly_off_days
+                + self.config.standard_personal_off_days
+                + nurse.personal_off_adjustment
+            )
+            # 음수라도 0 이하로 떨어지지 않도록 보정
+            self.max_off_per_nurse.append(max(0, max_allowed))
+        ####
         # 로깅 설정
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
@@ -125,18 +135,13 @@ class RosterSystem:
                 print(f"경고: {nurse.name} 간호사는 충분한 휴무일이 없습니다 "
                       f"(요청: {len(valid_days)}일, 가능: {nurse.remaining_off_days}일)")
                 continue
-            
+          
             off_idx = self.config.shift_types.index('OFF')
             for day in valid_days:
-                if np.any(self.roster[nurse_idx, day]):
-                    # 기존 배정 제거
-                    self.roster[nurse_idx, day] = 0
-                self.roster[nurse_idx, day, off_idx] = 1
-                
+            #### 신규코드
+                self.preference_matrix[nurse_idx, day, off_idx] = 4
             nurse.update_off_days(len(valid_days))
             
-    
-        
     def _find_violations(self) -> List[dict]:
         """Find all constraint violations in current roster."""
         violations = []
@@ -180,8 +185,9 @@ class RosterSystem:
                     })
                     
         return violations
+   
 
-    def get_roster_matrix(self) -> np.ndarray:
+    def get_rostㄴer_matrix(self) -> np.ndarray:
         """Return the current roster matrix."""
         return self.roster
         
@@ -360,204 +366,7 @@ class RosterSystem:
             'shift_transitions': self._analyze_shift_transitions()
         }
         return patterns
-        
-    def _analyze_consecutive_shifts(self) -> Dict:
-        """Analyze consecutive shift patterns."""
-        consecutive_counts = {
-            'day': [],     # For 'D' shift
-            'evening': [], # For 'E' shift
-            'night': [],   # For 'N' shift
-            'off': []      # For 'OFF' shift
-        }
-        
-        # Map shift types to dictionary keys
-        shift_map = {
-            'D': 'day',
-            'E': 'evening',
-            'N': 'night',
-            'OFF': 'off'
-        }
-        
-        for n_idx in range(len(self.nurses)):
-            for shift in self.config.shift_types:
-                shift_idx = self.config.shift_types.index(shift)
-                assignments = self.roster[n_idx, :, shift_idx]
-                
-                # Count consecutive assignments
-                count = 0
-                max_consecutive = 0
-                for day in range(self.num_days):
-                    if assignments[day]:
-                        count += 1
-                        max_consecutive = max(max_consecutive, count)
-                    else:
-                        count = 0
-                
-                # Use the mapping to get the correct key
-                key = shift_map.get(shift, 'other')
-                consecutive_counts[key].append(max_consecutive)
-                
-        return {
-            shift: {
-                'max': max(counts) if counts else 0,
-                'avg': np.mean(counts) if counts else 0,
-                'std': np.std(counts) if counts else 0
-            }
-            for shift, counts in consecutive_counts.items()
-        }
-        
-    def _analyze_weekend_distribution(self) -> Dict:
-        """Analyze the distribution of weekend shifts."""
-        weekend_stats = {
-            'per_nurse': {},
-            'overall': {'total_weekends': 0, 'nurses_per_weekend': []}
-        }
-        
-        try:
-            for n_idx, nurse in enumerate(self.nurses):
-                weekend_count = 0
-                for day in range(self.num_days):
-                    if self._is_weekend(day) and np.any(self.roster[n_idx, day, :-1]):
-                        weekend_count += 1
-                weekend_stats['per_nurse'][nurse.name] = weekend_count
-                
-            # Calculate nurses per weekend
-            for day in range(self.num_days):
-                if self._is_weekend(day):
-                    weekend_stats['overall']['total_weekends'] += 1
-                    nurses_working = sum(
-                        1 for n_idx in range(len(self.nurses))
-                        if np.any(self.roster[n_idx, day, :-1])
-                    )
-                    weekend_stats['overall']['nurses_per_weekend'].append(nurses_working)
-        except Exception as e:
-            print(f"Warning: Error calculating weekend distribution: {e}")
-            # Return empty stats if there's an error
-            return {
-                'per_nurse': {},
-                'overall': {'total_weekends': 0, 'nurses_per_weekend': []}
-            }
-                
-        return weekend_stats
-        
-    def _analyze_shift_transitions(self) -> Dict:
-        """Analyze transitions between different shifts."""
-        transitions = {
-            f"{s1}->{s2}": 0
-            for s1 in self.config.shift_types
-            for s2 in self.config.shift_types
-        }
-        
-        for n_idx in range(len(self.nurses)):
-            for day in range(self.num_days - 1):
-                try:
-                    # Find which shift is assigned for current day
-                    current_shifts = np.where(self.roster[n_idx, day] == 1)[0]
-                    next_shifts = np.where(self.roster[n_idx, day + 1] == 1)[0]
-                    
-                    if len(current_shifts) > 0 and len(next_shifts) > 0:
-                        current = current_shifts[0]
-                        next_day = next_shifts[0]
-                        
-                        transition = f"{self.config.shift_types[current]}->{self.config.shift_types[next_day]}"
-                        transitions[transition] += 1
-                except IndexError:
-                    # Skip if there's any missing assignment
-                    continue
-                    
-        return transitions
-        
-    def _estimate_nurse_satisfaction(self) -> Dict:
-        """Estimate nurse satisfaction based on preferences and assignments."""
-        satisfaction = {}
-        
-        for n_idx, nurse in enumerate(self.nurses):
-            matches = 0
-            total = 0
-            
-            for day in range(self.num_days):
-                assigned_shift = np.where(self.roster[n_idx, day] == 1)[0][0]
-                pref_score = self.preference_matrix[n_idx, day, assigned_shift]
-                matches += pref_score
-                total += 1
-                
-            satisfaction[nurse.name] = {
-                'score': matches / total if total > 0 else 0,
-                'preferred_shifts_ratio': matches / total if total > 0 else 0
-            }
-            
-        return {
-            'per_nurse': satisfaction,
-            'average': np.mean([s['score'] for s in satisfaction.values()])
-        }
-        
-    def _analyze_coverage(self) -> Dict:
-        """Analyze shift coverage and staffing levels."""
-        coverage = {
-            'daily': {},
-            'overall': {}
-        }
-        
-        for day in range(self.num_days):
-            coverage['daily'][day] = {}
-            for shift in self.config.shift_types[:-1]:  # Exclude OFF
-                shift_idx = self.config.shift_types.index(shift)
-                required = self.config.daily_shift_requirements[shift]
-                actual = np.sum(self.roster[:, day, shift_idx])
-                coverage['daily'][day][shift] = {
-                    'required': required,
-                    'actual': actual,
-                    'difference': actual - required
-                }
-                
-        # Calculate overall statistics
-        for shift in self.config.shift_types[:-1]:
-            shift_idx = self.config.shift_types.index(shift)
-            required_total = self.config.daily_shift_requirements[shift] * self.num_days
-            actual_total = np.sum(self.roster[:, :, shift_idx])
-            coverage['overall'][shift] = {
-                'required_total': required_total,
-                'actual_total': actual_total,
-                'coverage_ratio': actual_total / required_total if required_total > 0 else 1.0
-            }
-            
-        return coverage
-        
-    def _analyze_fairness(self) -> Dict:
-        """Analyze fairness in shift distribution."""
-        fairness = {
-            'shift_distribution': {},
-            'weekend_fairness': {},
-            'workload_balance': {}
-        }
-        
-        # Analyze shift type distribution
-        for shift in self.config.shift_types[:-1]:
-            shift_idx = self.config.shift_types.index(shift)
-            assignments = [
-                np.sum(self.roster[n_idx, :, shift_idx])
-                for n_idx in range(len(self.nurses))
-            ]
-            fairness['shift_distribution'][shift] = {
-                'gini_coefficient': self._calculate_gini(assignments),
-                'coefficient_of_variation': np.std(assignments) / np.mean(assignments) if np.mean(assignments) > 0 else 0
-            }
-            
-        return fairness
-        
-    def _calculate_gini(self, array: List[float]) -> float:
-        """Calculate Gini coefficient as a measure of inequality."""
-        array = np.array(array)
-        if np.all(array == 0):
-            return 0
-        array = array.flatten()
-        if np.amin(array) < 0:
-            array -= np.amin(array)
-        array += 0.0000001
-        array = np.sort(array)
-        index = np.arange(1, array.shape[0] + 1)
-        n = array.shape[0]
-        return ((np.sum((2 * index - n - 1) * array)) / (n * np.sum(array)))
+
 
     def optimize_roster_with_cp_sat(self, time_limit_seconds=30):
         """Optimize the roster using CP-SAT global constraint solver.
@@ -575,7 +384,7 @@ class RosterSystem:
         
         # Create the model
         model = cp_model.CpModel()
-        
+        off_idx = self.config.shift_types.index('OFF')
         # 1. Define variables
         # x[nurse, day, shift] = 1 if nurse is assigned to shift on day
         x = {}
@@ -605,6 +414,11 @@ class RosterSystem:
         for n_idx in range(len(self.nurses)):
             for day in range(self.num_days):
                 model.AddExactlyOne(x[n_idx, day, s_idx] for s_idx in range(len(self.config.shift_types)))
+
+        #### 신규 부분
+            total_off = sum(x[n_idx, day, off_idx] for day in range(self.num_days))
+            model.Add(total_off <= self.max_off_per_nurse[n_idx])
+        #### 
         
         # 3. Add staffing requirements
         for day in range(self.num_days):
@@ -706,14 +520,14 @@ class RosterSystem:
             for day in range(self.num_days):
                 for s_idx, shift in enumerate(self.config.shift_types):
                     # Scale preference to integer (CP-SAT needs integer coefficients)
-                    pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 100)
+                    pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 10)
                     objective_terms.append(pref_score * x[n_idx, day, s_idx])
         
         # 10.2 Night nurse specialization bonus
         for n_idx, nurse in enumerate(self.nurses):
             if nurse.is_night_nurse:
                 # Bonus for night nurses working night shifts
-                night_bonus = sum(200 * x[n_idx, day, night_idx] for day in range(self.num_days))
+                night_bonus = sum(2 * x[n_idx, day, night_idx] for day in range(self.num_days))
                 objective_terms.append(night_bonus)
         
         # 10.3 Workload balance penalty - Simplified to avoid non-affine expressions
@@ -732,7 +546,13 @@ class RosterSystem:
             ]
             work_days[n_idx] = model.NewIntVar(0, self.num_days, f'work_days_n{n_idx}')
             model.Add(work_days[n_idx] == sum(work_shifts))
-        
+        # 11. 휴무일 제한 추가
+        off_idx = self.config.shift_types.index('OFF')
+        for n_idx, nurse in enumerate(self.nurses):
+            total_off = sum(x[n_idx, day, off_idx] for day in range(self.num_days))
+            allowed_off = nurse.remaining_off_days
+            model.Add(total_off <= allowed_off)
+
         # Add fairness constraints - target at least min_work_days per nurse
         min_work_days = (self.num_days * sum(self.config.daily_shift_requirements.values())) // (len(self.nurses) * 2)
         for n_idx in range(len(self.nurses)):
@@ -742,15 +562,6 @@ class RosterSystem:
             excess_var = model.NewIntVar(0, self.num_days, f'excess_n{n_idx}')
             model.Add(excess_var >= work_days[n_idx] - (self.num_days - min_work_days))
             objective_terms.append(-100 * excess_var)  # Penalize excess
-        
-        # 11. 휴무일 제한 추가
-        off_idx = self.config.shift_types.index('OFF')
-        for n_idx, nurse in enumerate(self.nurses):
-            total_off = sum(x[n_idx, day, off_idx] for day in range(self.num_days))
-            allowed_off = nurse.remaining_off_days
-            model.Add(total_off <= allowed_off)
-
-
         
         # Set the objective
         model.Maximize(sum(objective_terms))
@@ -778,6 +589,7 @@ class RosterSystem:
             print(f"Optimization completed in {time.time() - start_time:.2f} seconds")
             print(f"Objective value: {solver.ObjectiveValue()}")
             
+            
             if status == cp_model.OPTIMAL:
                 print("Found optimal solution!")
             else:
@@ -785,6 +597,7 @@ class RosterSystem:
                 
             return True
         else:
+            print(print("Best objective bound:", solver.BestObjectiveBound()))
             print("No solution found.")
             return False
         
@@ -1046,7 +859,206 @@ class RosterSystem:
                 
             if assigned_count < required_nurses:
                 self.logger.warning(f"일자 {day + 1}: {shift_type} 교대에 필요한 인원을 배정하지 못했습니다 ({assigned_count}/{required_nurses})")
+
+#### 평가용 로직 
+    def _analyze_consecutive_shifts(self) -> Dict:
+        """Analyze consecutive shift patterns."""
+        consecutive_counts = {
+            'day': [],     # For 'D' shift
+            'evening': [], # For 'E' shift
+            'night': [],   # For 'N' shift
+            'off': []      # For 'OFF' shift
+        }
+        
+        # Map shift types to dictionary keys
+        shift_map = {
+            'D': 'day',
+            'E': 'evening',
+            'N': 'night',
+            'OFF': 'off'
+        }
+        
+        for n_idx in range(len(self.nurses)):
+            for shift in self.config.shift_types:
+                shift_idx = self.config.shift_types.index(shift)
+                assignments = self.roster[n_idx, :, shift_idx]
                 
+                # Count consecutive assignments
+                count = 0
+                max_consecutive = 0
+                for day in range(self.num_days):
+                    if assignments[day]:
+                        count += 1
+                        max_consecutive = max(max_consecutive, count)
+                    else:
+                        count = 0
+                
+                # Use the mapping to get the correct key
+                key = shift_map.get(shift, 'other')
+                consecutive_counts[key].append(max_consecutive)
+                
+        return {
+            shift: {
+                'max': max(counts) if counts else 0,
+                'avg': np.mean(counts) if counts else 0,
+                'std': np.std(counts) if counts else 0
+            }
+            for shift, counts in consecutive_counts.items()
+        }
+        
+    def _analyze_weekend_distribution(self) -> Dict:
+        """Analyze the distribution of weekend shifts."""
+        weekend_stats = {
+            'per_nurse': {},
+            'overall': {'total_weekends': 0, 'nurses_per_weekend': []}
+        }
+        
+        try:
+            for n_idx, nurse in enumerate(self.nurses):
+                weekend_count = 0
+                for day in range(self.num_days):
+                    if self._is_weekend(day) and np.any(self.roster[n_idx, day, :-1]):
+                        weekend_count += 1
+                weekend_stats['per_nurse'][nurse.name] = weekend_count
+                
+            # Calculate nurses per weekend
+            for day in range(self.num_days):
+                if self._is_weekend(day):
+                    weekend_stats['overall']['total_weekends'] += 1
+                    nurses_working = sum(
+                        1 for n_idx in range(len(self.nurses))
+                        if np.any(self.roster[n_idx, day, :-1])
+                    )
+                    weekend_stats['overall']['nurses_per_weekend'].append(nurses_working)
+        except Exception as e:
+            print(f"Warning: Error calculating weekend distribution: {e}")
+            # Return empty stats if there's an error
+            return {
+                'per_nurse': {},
+                'overall': {'total_weekends': 0, 'nurses_per_weekend': []}
+            }
+                
+        return weekend_stats
+        
+    def _analyze_shift_transitions(self) -> Dict:
+        """Analyze transitions between different shifts."""
+        transitions = {
+            f"{s1}->{s2}": 0
+            for s1 in self.config.shift_types
+            for s2 in self.config.shift_types
+        }
+        
+        for n_idx in range(len(self.nurses)):
+            for day in range(self.num_days - 1):
+                try:
+                    # Find which shift is assigned for current day
+                    current_shifts = np.where(self.roster[n_idx, day] == 1)[0]
+                    next_shifts = np.where(self.roster[n_idx, day + 1] == 1)[0]
+                    
+                    if len(current_shifts) > 0 and len(next_shifts) > 0:
+                        current = current_shifts[0]
+                        next_day = next_shifts[0]
+                        
+                        transition = f"{self.config.shift_types[current]}->{self.config.shift_types[next_day]}"
+                        transitions[transition] += 1
+                except IndexError:
+                    # Skip if there's any missing assignment
+                    continue
+                    
+        return transitions
+        
+    def _estimate_nurse_satisfaction(self) -> Dict:
+        """Estimate nurse satisfaction based on preferences and assignments."""
+        satisfaction = {}
+        
+        for n_idx, nurse in enumerate(self.nurses):
+            matches = 0
+            total = 0
+            
+            for day in range(self.num_days):
+                assigned_shift = np.where(self.roster[n_idx, day] == 1)[0][0]
+                pref_score = self.preference_matrix[n_idx, day, assigned_shift]
+                matches += pref_score
+                total += 1
+                
+            satisfaction[nurse.name] = {
+                'score': matches / total if total > 0 else 0,
+                'preferred_shifts_ratio': matches / total if total > 0 else 0
+            }
+            
+        return {
+            'per_nurse': satisfaction,
+            'average': np.mean([s['score'] for s in satisfaction.values()])
+        }
+        
+    def _analyze_coverage(self) -> Dict:
+        """Analyze shift coverage and staffing levels."""
+        coverage = {
+            'daily': {},
+            'overall': {}
+        }
+        
+        for day in range(self.num_days):
+            coverage['daily'][day] = {}
+            for shift in self.config.shift_types[:-1]:  # Exclude OFF
+                shift_idx = self.config.shift_types.index(shift)
+                required = self.config.daily_shift_requirements[shift]
+                actual = np.sum(self.roster[:, day, shift_idx])
+                coverage['daily'][day][shift] = {
+                    'required': required,
+                    'actual': actual,
+                    'difference': actual - required
+                }
+                
+        # Calculate overall statistics
+        for shift in self.config.shift_types[:-1]:
+            shift_idx = self.config.shift_types.index(shift)
+            required_total = self.config.daily_shift_requirements[shift] * self.num_days
+            actual_total = np.sum(self.roster[:, :, shift_idx])
+            coverage['overall'][shift] = {
+                'required_total': required_total,
+                'actual_total': actual_total,
+                'coverage_ratio': actual_total / required_total if required_total > 0 else 1.0
+            }
+            
+        return coverage
+        
+    def _analyze_fairness(self) -> Dict:
+        """Analyze fairness in shift distribution."""
+        fairness = {
+            'shift_distribution': {},
+            'weekend_fairness': {},
+            'workload_balance': {}
+        }
+        
+        # Analyze shift type distribution
+        for shift in self.config.shift_types[:-1]:
+            shift_idx = self.config.shift_types.index(shift)
+            assignments = [
+                np.sum(self.roster[n_idx, :, shift_idx])
+                for n_idx in range(len(self.nurses))
+            ]
+            fairness['shift_distribution'][shift] = {
+                'gini_coefficient': self._calculate_gini(assignments),
+                'coefficient_of_variation': np.std(assignments) / np.mean(assignments) if np.mean(assignments) > 0 else 0
+            }
+            
+        return fairness
+        
+    def _calculate_gini(self, array: List[float]) -> float:
+        """Calculate Gini coefficient as a measure of inequality."""
+        array = np.array(array)
+        if np.all(array == 0):
+            return 0
+        array = array.flatten()
+        if np.amin(array) < 0:
+            array -= np.amin(array)
+        array += 0.0000001
+        array = np.sort(array)
+        index = np.arange(1, array.shape[0] + 1)
+        n = array.shape[0]
+        return ((np.sum((2 * index - n - 1) * array)) / (n * np.sum(array)))
+
     def _calculate_satisfaction_metrics(self):
         """근무표에 대한 만족도 지표를 계산합니다."""
         metrics = {
