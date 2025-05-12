@@ -105,59 +105,6 @@ class RosterSystem:
                 return False
         return True
         
-    def _apply_softmax_sampling(self, preferences: np.ndarray) -> int:
-        """소프트맥스 샘플링을 적용하여 교대 배정을 결정합니다."""
-        exp_prefs = np.exp(preferences * self.config.sampling_temperature)
-        probs = exp_prefs / np.sum(exp_prefs)
-        return np.random.choice(len(preferences), p=probs)
-        
-    def generate_initial_roster(self):
-        """선호도의 소프트맥스 샘플링을 사용하여 초기 근무표를 생성합니다."""
-        print("\n초기 근무표 생성 중...")
-        print(f"대상 월: {self.target_month.strftime('%Y년 %m월')}")
-        print(f"간호사 수: {len(self.nurses)}명")
-        print(f"일수: {self.num_days}일")
-        print(f"교대 요구사항: {self.config.daily_shift_requirements}")
-        
-        start_time = time.time()
-        assignments = 0
-        
-        for day in range(self.num_days):
-            for shift in self.config.daily_shift_requirements:
-                shift_idx = self.config.shift_types.index(shift)
-                required = self.config.daily_shift_requirements[shift]
-                
-                # 이 교대에 가능한 간호사 가져오기
-                available_nurses = [
-                    (n_idx, nurse) for n_idx, nurse in enumerate(self.nurses)
-                    if not np.any(self.roster[n_idx, day]) and  # 이미 배정되지 않음
-                    self._check_night_constraints(n_idx, day) and
-                    self._check_consecutive_work_days(n_idx, day)
-                ]
-                
-                # 소프트맥스 샘플링을 사용하여 교대 배정
-                for _ in range(required):
-                    if not available_nurses:
-                        print(f"경고: {day + 1}일 {shift} 교대에 가능한 간호사가 부족합니다")
-                        break
-                        
-                    # 배정 확률 계산
-                    probs = np.array([
-                        self.preference_matrix[n_idx, day, shift_idx]
-                        for n_idx, _ in available_nurses
-                    ])
-                    
-                    # 간호사 샘플링
-                    selected_idx = self._apply_softmax_sampling(probs)
-                    nurse_idx, _ = available_nurses.pop(selected_idx)
-                    
-                    # 교대 배정
-                    self.roster[nurse_idx, day, shift_idx] = 1
-                    assignments += 1
-                    
-        print(f"초기 근무표 생성 완료: {time.time() - start_time:.4f}초 소요")
-        print(f"총 배정 수: {assignments}")
-        
     def apply_off_requests(self, off_requests: Dict[int, List[int]]):
         """간호사의 휴무일 요청을 적용합니다.
         
@@ -188,79 +135,7 @@ class RosterSystem:
                 
             nurse.update_off_days(len(valid_days))
             
-    def _get_constraint_weights(self) -> Dict[str, float]:
-        """다양한 유형의 제약 조건에 대한 가중치를 가져옵니다."""
-        return {
-            'experience': 1.0,  # 경력 요구사항
-            'night': 0.9,      # 야간 근무 제약 조건
-            'consecutive': 0.8, # 연속 근무일
-            'shift_requirement': 0.7,  # 일일 교대 요구사항
-            'off_pattern': 0.6  # 휴무일 패턴
-        }
-
-    def _calculate_violation_score(self, violations: List[dict]) -> float:
-        """가중치가 적용된 위반 점수를 계산합니다."""
-        weights = self._get_constraint_weights()
-        score = 0.0
-        
-        for violation in violations:
-            weight = weights.get(violation['type'], 0.5)
-            if violation['type'] == 'shift_requirement':
-                # Score based on how far from required number
-                diff = abs(violation['required'] - violation['actual'])
-                score += weight * diff
-            else:
-                score += weight
-                
-        return score
-
-    def optimize_roster_weighted(self, max_iterations: int = 1000, improvement_threshold: float = 0.001):
-        """Optimize roster using weighted constraint satisfaction."""
-        print("\nStarting weighted roster optimization...")
-        start_time = time.time()
-        iteration = 0
-        best_score = float('inf')
-        best_roster = None
-        
-        while iteration < max_iterations:
-            current_violations = self._find_violations()
-            current_score = self._calculate_violation_score(current_violations)
-            
-            if current_score < best_score:
-                if best_score - current_score < improvement_threshold:
-                    print(f"Minimal improvement after {iteration} iterations")
-                    break
-                    
-                best_score = current_score
-                best_roster = self.roster.copy()
-                
-            if current_score == 0:
-                print("Perfect solution found!")
-                break
-                
-            # Sort violations by weight and fix highest priority first
-            weights = self._get_constraint_weights()
-            sorted_violations = sorted(
-                current_violations,
-                key=lambda v: weights.get(v['type'], 0.5),
-                reverse=True
-            )
-            
-            for violation in sorted_violations:
-                self._fix_violation(violation)
-                
-            if iteration % 100 == 0:
-                print(f"Iteration {iteration}: Score = {current_score:.4f}")
-                
-            iteration += 1
-            
-        if best_roster is not None and best_score < self._calculate_violation_score(self._find_violations()):
-            self.roster = best_roster
-            
-        total_time = time.time() - start_time
-        print(f"Optimization completed in {total_time:.4f} seconds")
-        print(f"Final score: {best_score:.4f}")
-        print(f"Total iterations: {iteration}")
+    
         
     def _find_violations(self) -> List[dict]:
         """Find all constraint violations in current roster."""
@@ -305,153 +180,6 @@ class RosterSystem:
                     })
                     
         return violations
-        
-    def _fix_violation(self, violation: dict):
-        """Fix a specific constraint violation."""
-        if violation['type'] == 'shift_requirement':
-            self._fix_shift_requirement(violation)
-        elif violation['type'] == 'experience':
-            self._fix_experience_requirement(violation)
-        elif violation['type'] == 'night':
-            self._fix_night_constraint(violation)
-        elif violation['type'] == 'consecutive':
-            self._fix_consecutive_constraint(violation)
-            
-    def _fix_shift_requirement(self, violation: dict):
-        """Fix shift requirement violation by swapping assignments."""
-        day = violation['day']
-        shift = violation['shift']
-        shift_idx = self.config.shift_types.index(shift)
-        
-        if violation['actual'] < violation['required']:
-            # Need more nurses for this shift
-            available_nurses = [
-                n_idx for n_idx, nurse in enumerate(self.nurses)
-                if not np.any(self.roster[n_idx, day]) and
-                self._check_night_constraints(n_idx, day) and
-                self._check_consecutive_work_days(n_idx, day)
-            ]
-            
-            if available_nurses:
-                # Assign available nurse with highest preference
-                prefs = [self.preference_matrix[n_idx, day, shift_idx] for n_idx in available_nurses]
-                best_nurse = available_nurses[np.argmax(prefs)]
-                self.roster[best_nurse, day, shift_idx] = 1
-        else:
-            # Too many nurses for this shift
-            assigned_nurses = np.where(self.roster[:, day, shift_idx] == 1)[0]
-            # Remove nurse with lowest preference
-            prefs = [self.preference_matrix[n_idx, day, shift_idx] for n_idx in assigned_nurses]
-            worst_nurse = assigned_nurses[np.argmin(prefs)]
-            self.roster[worst_nurse, day, shift_idx] = 0
-            
-    def _fix_experience_requirement(self, violation: dict):
-        """Fix experience requirement violation by swapping nurses."""
-        day = violation['day']
-        
-        # Find experienced and inexperienced nurses working this day
-        experienced_nurses = [
-            (n_idx, nurse) for n_idx, nurse in enumerate(self.nurses)
-            if nurse.experience_years >= self.config.min_experience_per_shift
-        ]
-        
-        # Check each shift type
-        for shift in ['D', 'E', 'N']:
-            shift_idx = self.config.shift_types.index(shift)
-            
-            # Count experienced nurses in this shift
-            exp_count = sum(
-                1 for n_idx, _ in experienced_nurses
-                if self.roster[n_idx, day, shift_idx] == 1
-            )
-            
-            # If we need more experienced nurses
-            while exp_count < self.config.required_experienced_nurses:
-                # Find available experienced nurse
-                available_exp = [
-                    n_idx for n_idx, _ in experienced_nurses
-                    if not np.any(self.roster[n_idx, day]) and
-                    self._check_night_constraints(n_idx, day) and
-                    self._check_consecutive_work_days(n_idx, day)
-                ]
-                
-                if not available_exp:
-                    # Try to swap with inexperienced nurse
-                    working_inexperienced = [
-                        n_idx for n_idx, nurse in enumerate(self.nurses)
-                        if nurse.experience_years < self.config.min_experience_per_shift and
-                        self.roster[n_idx, day, shift_idx] == 1
-                    ]
-                    
-                    if working_inexperienced and available_exp:
-                        # Swap an inexperienced nurse with an experienced one
-                        inexp_idx = working_inexperienced[0]
-                        exp_idx = available_exp[0]
-                        
-                        # Remove inexperienced nurse
-                        self.roster[inexp_idx, day, shift_idx] = 0
-                        # Add experienced nurse
-                        self.roster[exp_idx, day, shift_idx] = 1
-                        exp_count += 1
-                    else:
-                        break
-                else:
-                    # Add available experienced nurse
-                    exp_idx = available_exp[0]
-                    self.roster[exp_idx, day, shift_idx] = 1
-                    exp_count += 1
-                    
-    def _fix_night_constraint(self, violation: dict):
-        """Fix night shift constraint violation."""
-        nurse_idx = violation['nurse_idx']
-        day = violation['day']
-        night_idx = self.config.shift_types.index('N')
-        
-        # If this creates consecutive nights or exceeds monthly limit
-        if not self._check_night_constraints(nurse_idx, day):
-            # Remove the night shift
-            self.roster[nurse_idx, day, night_idx] = 0
-            
-            # Try to assign to another nurse
-            available_nurses = [
-                n_idx for n_idx, nurse in enumerate(self.nurses)
-                if n_idx != nurse_idx and
-                not np.any(self.roster[n_idx, day]) and
-                self._check_night_constraints(n_idx, day) and
-                self._check_consecutive_work_days(n_idx, day)
-            ]
-            
-            if available_nurses:
-                # Choose nurse with highest night shift preference
-                prefs = [self.preference_matrix[n_idx, day, night_idx] for n_idx in available_nurses]
-                best_nurse = available_nurses[np.argmax(prefs)]
-                self.roster[best_nurse, day, night_idx] = 1
-                
-    def _fix_consecutive_constraint(self, violation: dict):
-        """Fix consecutive work days constraint violation."""
-        nurse_idx = violation['nurse_idx']
-        day = violation['day']
-        off_idx = self.config.shift_types.index('OFF')
-        
-        # Find the day in the consecutive sequence to make OFF
-        if day >= self.config.max_consecutive_work_days:
-            # Look at the previous max_consecutive_work_days days
-            window = self.roster[nurse_idx, 
-                               day-self.config.max_consecutive_work_days:day+1, 
-                               :off_idx]
-            
-            # Find the day with lowest preference sum
-            day_prefs = np.sum(window * self.preference_matrix[nurse_idx, 
-                                                             day-self.config.max_consecutive_work_days:day+1, 
-                                                             :off_idx], 
-                             axis=1)
-            worst_day_rel = np.argmin(day_prefs)
-            worst_day = day - self.config.max_consecutive_work_days + worst_day_rel
-            
-            # Clear all assignments for that day
-            self.roster[nurse_idx, worst_day] = 0
-            # Set as OFF day
-            self.roster[nurse_idx, worst_day, off_idx] = 1
 
     def get_roster_matrix(self) -> np.ndarray:
         """Return the current roster matrix."""
@@ -1014,6 +742,15 @@ class RosterSystem:
             excess_var = model.NewIntVar(0, self.num_days, f'excess_n{n_idx}')
             model.Add(excess_var >= work_days[n_idx] - (self.num_days - min_work_days))
             objective_terms.append(-100 * excess_var)  # Penalize excess
+        
+        # 11. 휴무일 제한 추가
+        off_idx = self.config.shift_types.index('OFF')
+        for n_idx, nurse in enumerate(self.nurses):
+            total_off = sum(x[n_idx, day, off_idx] for day in range(self.num_days))
+            allowed_off = nurse.remaining_off_days
+            model.Add(total_off <= allowed_off)
+
+
         
         # Set the objective
         model.Maximize(sum(objective_terms))

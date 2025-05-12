@@ -479,59 +479,6 @@ class RosterGenerator:
                 
         return requirements_met, messages
 
-    def _get_shift_priority(self, nurse, shift, day):
-        """Calculate priority score for assigning a nurse to a shift.
-        
-        Args:
-            nurse: Nurse object
-            shift: Shift type ('D', 'E', 'N')
-            day: Day index
-            
-        Returns:
-            float: Priority score (higher means more suitable)
-        """
-        priority = 1.0
-        
-        # Base priority by nurse type and shift
-        if nurse.is_night_nurse:
-            if shift == 'N':
-                priority *= 2.5  # Increased priority for night nurses on night shifts
-            elif shift == 'D':
-                priority *= 0.1  # Strongly discourage day shifts for night nurses
-            elif shift == 'E':
-                priority *= 0.3  # Evening shifts are slightly better than day shifts
-        else:
-            if shift == 'N':
-                priority *= 0.5  # Lower priority for non-night nurses on night shifts
-            
-        # Experience-based priority
-        if nurse.experience_years >= self.config.min_experience_per_shift:
-            priority *= 1.5
-            # Extra boost for experienced nurses when we need them
-            exp_nurses = sum(1 for n in self.nurses 
-                            if (n.experience_years >= self.config.min_experience_per_shift and
-                                np.any(self.roster_system.roster[self.nurses.index(n), day])))
-            if exp_nurses < self.config.required_experienced_nurses:
-                priority *= 1.3
-            
-        # Workload balancing
-        nurse_idx = self.nurses.index(nurse)
-        total_shifts = np.sum(self.roster_system.roster[nurse_idx, :day])
-        avg_shifts = np.mean([np.sum(self.roster_system.roster[i, :day]) 
-                             for i in range(len(self.nurses))])
-        if total_shifts < avg_shifts:
-            priority *= 1.2  # Boost priority for nurses with fewer shifts
-        
-        # Weekend handling
-        if self._is_weekend(day):
-            weekend_shifts = sum(1 for d in range(day) 
-                               if self._is_weekend(d) and 
-                               np.any(self.roster_system.roster[nurse_idx, d]))
-            if weekend_shifts == 0:
-                priority *= 1.2  # Boost priority for nurses who haven't worked weekends
-            
-        return priority
-
     def _calculate_fatigue_score(self, nurse_idx: int, day: int) -> float:
         """Calculate fatigue score for a nurse based on recent work history."""
         if day < 1:
