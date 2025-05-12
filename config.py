@@ -23,12 +23,13 @@ class NurseRosterConfig:
     # 휴무일 관리
     global_monthly_off_days: int = 3  # 모든 간호사에게 적용되는 전체 휴무일(공휴일, 특별 휴무일)
     standard_personal_off_days: int = 8  # 간호사별 표준 개인 휴무일 수
+    max_additional_off_days: int = 2  # 개인 표준휴무일 + 전체휴무일에 추가로 허용되는 최대 휴무일 수
     
     # 교대 배정 비율 - 각 교대 유형에 대한 선호도 가중치 제어
     day_shift_ratio: float = 1.0  # 주간 근무 비율
     evening_shift_ratio: float = 1.0  # 저녁 근무 비율
-    night_shift_ratio: float = 1.0  # 야간 근무 비율
-    off_shift_ratio: float = 1.2  # 휴무일 비율 (높을수록 휴무일 선호도 증가)
+    night_shift_ratio: float = 1.2  # 야간 근무 비율 (높을수록 야간 근무 선호도 증가)
+    off_shift_ratio: float = 0.8  # 휴무일 비율 (낮을수록 휴무일 선호도 감소)
     
     # 선호도 행렬 가중치
     night_nurse_weight: float = 2.0  # 야간 간호사의 야간 근무 가중치
@@ -40,7 +41,8 @@ class NurseRosterConfig:
     
     def __post_init__(self):
         if self.daily_shift_requirements is None:
-            self.daily_shift_requirements = {'D': 3, 'E': 3, 'N': 2}
+            # 비율을 좀 더 균등하게 조정 - 휴무가 너무 많아지지 않도록
+            self.daily_shift_requirements = {'D': 4, 'E': 4, 'N': 3}
             
     @property
     def shift_types(self) -> List[str]:
@@ -61,7 +63,9 @@ class NurseRosterConfig:
         Returns:
             월별 할당된 총 휴무일 수
         """
-        return self.global_monthly_off_days + self.standard_personal_off_days + personal_off_adjustment
+        base_off_days = self.global_monthly_off_days + self.standard_personal_off_days + personal_off_adjustment
+        # 최대 허용되는 추가 휴무일 제한 적용
+        return min(base_off_days, self.global_monthly_off_days + self.standard_personal_off_days + self.max_additional_off_days)
 
 # 기본 설정
 DEFAULT_CONFIG = NurseRosterConfig() 

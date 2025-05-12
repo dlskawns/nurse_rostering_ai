@@ -701,17 +701,83 @@ class RosterGenerator:
         
         return True
 
+    def _optimize_roster_section(self, nurse_indices, day_indices, max_iterations=50, fix_violations=True):
+        """특정 간호사 그룹과 일자 구간에 대한 근무표 최적화"""
+        # 현재 구간의 근무표 추출
+        current_section = self.roster_system.roster[np.ix_(nurse_indices, day_indices)]
+        
+        # 초기 버전 저장
+        best_section = current_section.copy()
+        best_score = self._evaluate_section(nurse_indices, day_indices)
+        
+        print(f"구간 최적화 시작: {len(nurse_indices)}명 간호사, {len(day_indices)}일 구간")
+        print(f"초기 점수: {best_score:.4f}")
+        
+        # 반복 최적화
+        for iteration in range(max_iterations):
+            # 변경할 무작위 간호사와 일자 선택
+            nurse_idx = np.random.choice(nurse_indices)
+            day_idx = np.random.choice(day_indices)
+            
+            # 현재 교대 기록
+            current_shift = np.where(self.roster_system.roster[nurse_idx, day_idx] == 1)[0][0]
+            
+            # 가능한 다른 교대 목록
+            possible_shifts = []
+            for shift_idx, shift in enumerate(self.roster_system.config.shift_types):
+                # Night Nurse는 Day 교대 불가
+                if shift == 'D' and self.nurses[nurse_idx].is_night_nurse:
+                    continue
+                    
+                if shift_idx != current_shift:
+                    # 제약 조건 확인
+                    temp_roster = self.roster_system.roster.copy()
+                    temp_roster[nurse_idx, day_idx] = 0  # 현재 교대 제거
+                    temp_roster[nurse_idx, day_idx, shift_idx] = 1  # 새 교대 할당
+                    
+                    if self._check_constraints(nurse_idx, day_idx, shift_idx, temp_roster):
+                        possible_shifts.append(shift_idx)
+            
+            if not possible_shifts:
+                continue  # 가능한 변경 없음
+                
+            # 무작위 교대로 변경
+            new_shift = np.random.choice(possible_shifts)
+            self.roster_system.roster[nurse_idx, day_idx] = 0
+            self.roster_system.roster[nurse_idx, day_idx, new_shift] = 1
+            
+            # 제약 조건 위반 수정 (선택적)
+            if fix_violations:
+                violations = self._find_violations_in_section(nurse_indices, day_indices)
+                if violations:
+                    self._fix_violations(violations)
+                
+            # 점수 평가
+            new_score = self._evaluate_section(nurse_indices, day_indices)
+            
+            # 더 나은 솔루션이면 저장
+            if new_score > best_score:
+                best_score = new_score
+                best_section = self.roster_system.roster[np.ix_(nurse_indices, day_indices)].copy()
+                print(f"  개선됨 (반복 {iteration}): 점수 {new_score:.4f}")
+            else:
+                # 이전 상태로 복원 (더 나빠진 경우)
+                self.roster_system.roster[np.ix_(nurse_indices, day_indices)] = best_section.copy()
+        
+        print(f"최종 점수: {best_score:.4f} ({max_iterations} 반복 후)")
+        return best_score
+
 def main():
     """메인 함수"""
-    print("\n=== 간호사 근무표 생성 시스템 V2 시작 (전역 최적화 적용) ===")
+    print("\n=== 간호사 근무표 생성 시스템 V2 시작 (어텐션 기반 최적화 적용) ===")
     
-    # OR-Tools 설치 확인
+    # PyTorch 설치 확인
     try:
-        import ortools
+        import torch
     except ImportError:
-        print("\nOR-Tools 설치 중...")
+        print("\nPyTorch 설치 중...")
         import subprocess
-        subprocess.check_call(["pip", "install", "ortools"])
+        subprocess.check_call(["pip", "install", "torch"])
     
     # 테스트 데이터 로드
     with Timer("테스트 데이터 로드"):
@@ -760,25 +826,27 @@ def main():
         roster_system.apply_off_requests(off_requests)
         print(f"{len(off_requests)}개의 휴무 요청이 적용되었습니다.")
     
-    # RosterGenerator를 사용하여 초기 근무표 생성
-    with Timer("초기 근무표 생성"):
-        generator = RosterGenerator(roster_system)
-        generator.generate_roster()
+    # 어텐션 기반으로 초기 근무표 생성
+    with Timer("어텐션 기반 초기 근무표 생성"):
+        roster_system.generate_initial_roster_with_attention()
         
-    # CP-SAT를 사용한 전역 최적화
-    with Timer("CP-SAT를 사용한 근무표 최적화 (전역 최적화)"):
-        success = roster_system.optimize_roster_with_cp_sat(time_limit_seconds=60)
+    # 어텐션 기반 LNS로 최적화
+    with Timer("어텐션 기반 LNS 최적화"):
+        success = roster_system.optimize_roster_with_attention_lns(
+            max_iterations=10,
+            time_limit_per_iteration=30
+        )
         if success:
-            print("전역 최적화가 성공적으로 완료되었습니다!")
+            print("어텐션 기반 LNS 최적화가 성공적으로 완료되었습니다!")
         else:
-            print("전역 최적화 실패, LNS 접근법으로 전환합니다...")
-            # 전역 최적화 실패 시 LNS 시도
-            with Timer("대규모 근린 탐색(LNS)으로 개선"):
-                success = roster_system.optimize_with_lns(max_iterations=5, time_limit_per_iteration=20)
+            print("어텐션 기반 LNS 최적화 실패, CP-SAT으로 전환합니다...")
+            # LNS 실패 시 CP-SAT 시도
+            with Timer("CP-SAT 최적화"):
+                success = roster_system.optimize_roster_with_cp_sat(time_limit_seconds=60)
                 if success:
-                    print("LNS 개선이 성공적으로 완료되었습니다!")
+                    print("CP-SAT 최적화가 성공적으로 완료되었습니다!")
                 else:
-                    print("LNS 개선이 완료되었으나 일부 제약조건 위반이 남아있습니다.")
+                    print("CP-SAT 최적화도 실패했습니다. 최선의 해를 사용합니다.")
     
     # 지표 계산 및 출력
     with Timer("상세 지표 계산"):
@@ -817,8 +885,8 @@ def main():
     
     # 지표와 함께 Excel로 내보내기
     with Timer("결과 내보내기"):
-        export_roster_to_excel(roster_system, 'roster_eval/roster_v6.xlsx')
-        print(f"결과가 roster_eval/roster_v6.xlsx 파일로 저장되었습니다.")
+        export_roster_to_excel(roster_system, 'roster_eval/roster_v7.xlsx')
+        print(f"결과가 roster_eval/roster_v7.xlsx 파일로 저장되었습니다.")
         
         # 상세 지표가 계산된 경우 별도 파일로 내보내기
         try:

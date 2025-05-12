@@ -7,7 +7,10 @@ from config import NurseRosterConfig, DEFAULT_CONFIG
 from nurse import Nurse
 import pandas as pd
 import logging
-
+from attention_scheduler import AttentionBasedRosterGenerator
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 class RosterSystem:
     """간호사 근무표 생성 및 관리를 위한 주요 클래스."""
     
@@ -36,6 +39,8 @@ class RosterSystem:
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
         
+        self.attention_scheduler = None  # 어텐션 스케줄러 초기화용
+        
         print(f"초기화 완료: {time.time() - start_time:.4f}초 소요")
         
     def _initialize_preferences(self):
@@ -53,6 +58,12 @@ class RosterSystem:
         
     def _check_night_constraints(self, nurse_idx: int, day: int) -> bool:
         """간호사에 대한 야간 근무 관련 제약 조건을 확인합니다."""
+        # 야간 전담 간호사는 주간(D) 교대 불가
+        if self.nurses[nurse_idx].is_night_nurse:
+            day_idx = self.config.shift_types.index('D')
+            if self.roster[nurse_idx, day, day_idx] == 1:
+                return False
+
         if day < 2:  # 확인할 이력이 충분하지 않음
             return True
             
@@ -565,7 +576,10 @@ class RosterSystem:
         return metrics
 
     def _is_weekend(self, day):
-        """Check if given day is weekend."""
+        """해당 일자가 주말인지 확인 (토요일, 일요일)"""
+        # 1일차부터 시작한다고 가정하고 계산
+        # RosterSystem에 first_day_index가 없는 경우를 대비해 기본적인 주말 판단
+        # 주말 근무가 토, 일이라면 전체 일수의 약 2/7이 주말이어야 함
         return day % 7 >= 5
 
     def _initialize_roster(self):
@@ -1383,4 +1397,729 @@ class RosterSystem:
             df.to_excel(writer, sheet_name='근무표')
             metrics_df.to_excel(writer, sheet_name='만족도 지표')
             
-        self.logger.info(f"근무표가 {filename}에 저장되었습니다.") 
+        self.logger.info(f"근무표가 {filename}에 저장되었습니다.")
+
+    def initialize_attention_scheduler(self):
+        """어텐션 기반 스케줄러 초기화"""
+        if self.attention_scheduler is None:
+            self.attention_scheduler = AttentionBasedRosterGenerator(self)
+            
+    def generate_initial_roster_with_attention(self):
+        """어텐션 기반으로 초기 근무표 생성"""
+        self.initialize_attention_scheduler()
+        self.roster = self.attention_scheduler.generate_roster()
+        
+    def optimize_roster_with_attention_lns(self, max_iterations=10, time_limit_per_iteration=30):
+        """어텐션 기반 LNS로 근무표 최적화 (개선된 버전)"""
+        print("\n어텐션 기반 LNS 최적화 시작...")
+        
+        if self.attention_scheduler is None:
+            self.initialize_attention_scheduler()
+            
+        # LNS 반복 횟수 초기화
+        self._lns_iteration = 0
+        
+        # 어텐션 모델의 학습률 설정 (초기에는 높게, 나중에는 낮게)
+        initial_lr = 1e-3
+        self.attention_scheduler.optimizer = torch.optim.Adam(
+            self.attention_scheduler.model.parameters(), 
+            lr=initial_lr
+        )
+            
+        best_roster = self.roster.copy()
+        best_score = self.calculate_total_score()
+        
+        # 점수가 None인 경우 초기화
+        if best_score is None:
+            print("경고: 초기 점수 계산이 None 값을 반환했습니다. 0으로 초기화합니다.")
+            best_score = 0.0
+            
+        print(f"초기 점수: {best_score:.4f}")
+        
+        # 연속으로 개선되지 않은 횟수
+        no_improvement_count = 0
+        
+        # 최초 실행 시 휴무일 수 확인 및 제한 적용
+        self._enforce_off_day_limits()
+        
+        for iteration in range(max_iterations):
+            print(f"\n반복 {iteration + 1}/{max_iterations}")
+            
+            # 학습률 감소 (annealing)
+            if iteration > 0 and iteration % 3 == 0:
+                curr_lr = initial_lr * (0.7 ** (iteration // 3))
+                for param_group in self.attention_scheduler.optimizer.param_groups:
+                    param_group['lr'] = curr_lr
+                print(f"학습률 조정: {curr_lr:.6f}")
+            
+            # 1. 위반이 많은 구간 식별
+            violations = self.find_violation_blocks()
+            if not violations:
+                print("위반 사항이 없거나 최적화가 수렴했습니다!")
+                break
+                
+            # 의미 있는 개선이 없는 경우 조기 종료
+            improvement_found = False
+                
+            # 2. 각 위반 구간에 대해
+            for block_idx, block in enumerate(violations):
+                print(f"\n위반 구간 {block_idx+1}/{len(violations)} 최적화 중...")
+                nurses_idx, days = block
+                
+                # 3. 해당 구간만 어텐션으로 재생성
+                partial_roster = self.attention_scheduler.generate_roster()
+                
+                # 4. 부분 교체 (개선된 버전 사용)
+                temp_roster, changes = self.partial_roster_replacement(
+                    self.roster, partial_roster, nurses_idx, days
+                )
+                
+                # 변경 사항이 없으면 다음 블록으로
+                if changes == 0:
+                    print("변경 사항 없음, 다음 블록으로 진행")
+                    continue
+                
+                # 5. 휴무일 제한 적용
+                temp_roster = self._enforce_off_day_limits(temp_roster)
+                
+                # 6. 점수 계산 및 수락 여부 결정
+                new_score = self.calculate_total_score(temp_roster)
+                
+                # None 값 처리
+                if new_score is None:
+                    print("경고: 새 점수 계산이 None 값을 반환했습니다. 0으로 처리합니다.")
+                    new_score = 0.0
+                
+                score_diff = new_score - best_score
+                print(f"이전 점수: {best_score:.4f}, 새 점수: {new_score:.4f}, 차이: {score_diff:.4f}")
+                
+                # 점수 개선 또는 일정 확률로 악화된 해도 수락 (초기에 더 자주)
+                accept_probability = max(0, 0.5 - 0.1 * iteration)
+                accept_worse = score_diff < 0 and np.random.random() < accept_probability
+                
+                if score_diff > 0 or accept_worse:
+                    # 해 수락
+                    self.roster = temp_roster.copy()
+                    
+                    if score_diff > 0:
+                        print(f"개선된 해 발견: {new_score:.4f} (↑{score_diff:.4f})")
+                        best_roster = temp_roster.copy()
+                        best_score = new_score
+                        improvement_found = True
+                        no_improvement_count = 0
+                    else:
+                        print(f"악화된 해 수락 (확률: {accept_probability:.2f}): {new_score:.4f} (↓{-score_diff:.4f})")
+                        
+                    # 간호사 만족도 계산 및 모델 페어 매트릭스 업데이트
+                    satisfaction_scores = self.calculate_nurse_satisfaction()
+                    self.attention_scheduler.update_pair_matrix(satisfaction_scores)
+                    
+                    # 일정 확률로 모델 가중치 업데이트 (강화 학습 컨셉)
+                    if iteration > 0:
+                        reward = score_diff * 10.0  # 점수 차이를 보상으로 사용
+                        self._update_attention_model(reward)
+                        
+            # 개선이 없으면 카운트 증가
+            if not improvement_found:
+                no_improvement_count += 1
+                print(f"이번 반복에서 개선 없음 (현재 {no_improvement_count}회 연속)")
+            
+            # 일정 횟수 연속으로 개선이 없으면 조기 종료
+            if no_improvement_count >= 3:
+                print(f"{no_improvement_count}회 연속 개선 없음, 최적화 종료")
+                break
+                    
+        # 최적화 관련 필드 정리
+        if hasattr(self, '_lns_iteration'):
+            delattr(self, '_lns_iteration')
+            
+        # 최종 결과는 항상 최고 점수 해
+        self.roster = best_roster
+        
+        # 마지막으로 한 번 더 휴무일 제한 적용
+        self.roster = self._enforce_off_day_limits(self.roster)
+        
+        print(f"최종 점수: {best_score:.4f}")
+        return True
+    
+    def _enforce_off_day_limits(self, roster=None):
+        """각 간호사의 휴무일 수가 제한을 초과하지 않도록 적용"""
+        if roster is None:
+            roster = self.roster.copy()
+        else:
+            roster = roster.copy()
+            
+        off_idx = self.config.shift_types.index('OFF')
+        max_allowed_off_days = {}
+        
+        # 각 간호사에 대해 최대 허용 휴무일 계산
+        for n_idx, nurse in enumerate(self.nurses):
+            # 기본 허용 휴무일: 공통 휴무일 + 개인 휴무일 + 최대 추가 허용 휴무일
+            # Nurse 객체에 off_day_adjustment 속성이 없는 경우 0으로 처리
+            personal_adjustment = getattr(nurse, 'off_day_adjustment', 0)
+            max_allowed = self.config.calculate_total_off_days(personal_adjustment)
+            max_allowed_off_days[n_idx] = max_allowed
+            
+            # 현재 휴무일 수 확인
+            current_off_days = np.sum(roster[n_idx, :, off_idx])
+            
+            # 초과된 경우 일부 휴무일을 근무일로 변경
+            if current_off_days > max_allowed:
+                excess = int(current_off_days - max_allowed)
+                print(f"간호사 {nurse.name}의 휴무일이 {current_off_days}일로 제한({max_allowed}일)을 {excess}일 초과했습니다.")
+                
+                # 휴무일 중 일부를 근무일로 변경
+                off_days = np.where(roster[n_idx, :, off_idx] == 1)[0]
+                
+                # 초과된 만큼 휴무일을 랜덤하게 선택하여 변경
+                days_to_change = np.random.choice(off_days, size=min(excess, len(off_days)), replace=False)
+                
+                for day in days_to_change:
+                    # 해당 날짜의 OFF 제거
+                    roster[n_idx, day, off_idx] = 0
+                    
+                    # 다른 교대로 배정 (야간 교대 선호)
+                    if nurse.is_night_nurse:
+                        night_idx = self.config.shift_types.index('N')
+                        roster[n_idx, day, night_idx] = 1
+                    else:
+                        # 임의의 근무 교대 선택 (야간 제외)
+                        non_off_shifts = [i for i, s in enumerate(self.config.shift_types) 
+                                         if s != 'OFF' and (s != 'N' or nurse.experience_years >= 3)]
+                        shift_idx = np.random.choice(non_off_shifts)
+                        roster[n_idx, day, shift_idx] = 1
+                
+                print(f"  → {excess}일의 휴무일을 근무일로 변경했습니다.")
+        
+        return roster
+
+    def _update_attention_model(self, reward):
+        """어텐션 모델 가중치 업데이트 (강화 학습 컨셉)"""
+        if reward <= 0:
+            return  # 보상이 0 이하면 업데이트 안함
+            
+        # 단순 스케일링 (실제 강화학습보다 단순화)
+        scale = min(0.1, reward * 0.01)  
+        
+        # 헤드 가중치에 보상 적용
+        model = self.attention_scheduler.model
+        with torch.no_grad():
+            # 헤드별 가중치 강화
+            model.head_weights.data *= (1.0 + scale * torch.rand_like(model.head_weights))
+            model.head_weights.data /= model.head_weights.data.sum()  # 정규화
+            
+        print(f"어텐션 모델 가중치 업데이트 적용 (보상: {reward:.4f}, 스케일: {scale:.4f})")
+
+    def calculate_nurse_satisfaction(self):
+        """간호사별 만족도 점수 계산 (개선된 버전)"""
+        # torch 모듈 직접 임포트
+        import torch
+        import torch.nn.functional as F
+        
+        satisfaction = torch.zeros(len(self.nurses))
+        
+        for n_idx, nurse in enumerate(self.nurses):
+            # 1. 선호 근무 반영도
+            preference_score = self._calculate_preference_score(n_idx)
+            
+            # 2. 근무 패턴 적절성
+            pattern_score = self._calculate_pattern_score(n_idx)
+            
+            # 3. 휴무 요청 반영도
+            off_score = self._calculate_off_request_score(n_idx)
+            
+            # 4. 간호사 타입별 적합성
+            type_score = 0.0
+            night_idx = self.config.shift_types.index('N')
+            night_shifts = np.sum(self.roster[n_idx, :, night_idx])
+            
+            if nurse.is_night_nurse:
+                # 야간 전담 간호사는 야간 근무가 많을수록 높은 점수
+                night_ratio = night_shifts / self.num_days
+                type_score = 0.5 + 0.5 * night_ratio
+            else:
+                # 일반 간호사는 야간 근무 부담이 적을수록 높은 점수
+                max_nights = self.config.max_night_shifts_per_month
+                type_score = 1.0 - (night_shifts / max_nights) * 0.5
+                
+            # 5. 근무 균형성
+            off_idx = self.config.shift_types.index('OFF')
+            work_days = np.sum(self.roster[n_idx, :, :off_idx])
+            balance_score = 1.0 - abs(work_days - (self.num_days * 0.7)) / (self.num_days * 0.7)
+            balance_score = max(0, balance_score)
+            
+            # 종합 점수 계산 (가중합)
+            satisfaction[n_idx] = (
+                0.3 * preference_score + 
+                0.2 * pattern_score + 
+                0.2 * off_score + 
+                0.15 * type_score +
+                0.15 * balance_score
+            )
+            
+        # 점수 정규화 (0~1 사이)
+        if torch.min(satisfaction) < 0:
+            satisfaction = satisfaction - torch.min(satisfaction)
+            
+        # 소프트맥스로 확률 분포 변환
+        return F.softmax(satisfaction, dim=0)
+        
+    def _calculate_preference_score(self, n_idx):
+        """간호사의 근무 선호도 반영 점수 계산"""
+        import torch
+        
+        total_score = 0.0
+        total_days = 0
+        
+        for day in range(self.num_days):
+            # 해당 날짜에 배정된 교대 찾기
+            assigned_shift_idx = np.where(self.roster[n_idx, day] == 1)[0]
+            if len(assigned_shift_idx) == 0:
+                continue
+                
+            assigned_shift_idx = assigned_shift_idx[0]
+            # 해당 교대에 대한 간호사의 선호도 점수
+            pref_score = self.preference_matrix[n_idx, day, assigned_shift_idx]
+            total_score += pref_score
+            total_days += 1
+            
+        # 평균 점수 계산 (0~1 사이)
+        if total_days > 0:
+            avg_score = total_score / total_days
+        else:
+            avg_score = 0.5  # 기본값
+            
+        return float(avg_score)
+        
+    def _calculate_pattern_score(self, n_idx):
+        """간호사의 근무 패턴 적절성 점수 계산"""
+        # 1. 연속 근무일 패턴 확인
+        consecutive_work = 0
+        max_consecutive_work = 0
+        
+        # 2. 교대 전환 패턴 확인 (야간→오전 등 부적절한 전환 확인)
+        bad_transitions = 0
+        
+        # 3. 주말 근무 패턴
+        weekend_work = 0
+        total_weekends = 0
+        
+        # 오프 인덱스
+        off_idx = self.config.shift_types.index('OFF')
+        
+        # 연속 근무일 및 전환 패턴 점수 계산
+        for day in range(self.num_days):
+            # 연속 근무일 계산
+            if np.any(self.roster[n_idx, day, :off_idx]):  # 근무 중
+                consecutive_work += 1
+                if consecutive_work > max_consecutive_work:
+                    max_consecutive_work = consecutive_work
+            else:
+                consecutive_work = 0
+                
+            # 주말 근무 확인
+            if self._is_weekend(day):
+                total_weekends += 1
+                if np.any(self.roster[n_idx, day, :off_idx]):  # 근무 중
+                    weekend_work += 1
+                    
+            # 교대 전환 패턴 확인 (야간→오전 등)
+            if day > 0:
+                night_idx = self.config.shift_types.index('N')
+                day_idx = self.config.shift_types.index('D')
+                
+                # 야간에서 오전으로 전환 확인
+                if (self.roster[n_idx, day-1, night_idx] == 1 and 
+                    self.roster[n_idx, day, day_idx] == 1):
+                    bad_transitions += 1
+        
+        # 점수 계산 (높을수록 좋음)
+        
+        # 1. 연속 근무일 점수 (적정 범위인 3-5일이 가장 좋음)
+        if 3 <= max_consecutive_work <= 5:
+            consec_score = 1.0
+        elif max_consecutive_work <= 6:
+            consec_score = 0.8
+        elif max_consecutive_work <= 7:
+            consec_score = 0.6
+        else:
+            consec_score = 0.4
+            
+        # 2. 전환 패턴 점수 (나쁜 전환이 적을수록 좋음)
+        trans_score = 1.0 - (bad_transitions * 0.2)
+        trans_score = max(0.0, trans_score)
+        
+        # 3. 주말 근무 분포 점수 (균형적일수록 좋음)
+        if total_weekends > 0:
+            weekend_ratio = weekend_work / total_weekends
+            weekend_score = 1.0 - abs(weekend_ratio - 0.5) * 2  # 50% 주말 근무가 이상적
+        else:
+            weekend_score = 1.0
+            
+        # 가중 평균으로 종합 점수 계산
+        pattern_score = (0.4 * consec_score + 
+                         0.4 * trans_score + 
+                         0.2 * weekend_score)
+                         
+        return float(pattern_score)
+        
+    def _calculate_off_request_score(self, n_idx):
+        """간호사의 휴무 요청 반영도 점수 계산"""
+        # 해당 간호사의 ID 찾기
+        nurse = self.nurses[n_idx]
+        nurse_id = nurse.id
+        
+        # 테스트 데이터에서 휴무 요청 정보 로드
+        try:
+            import json
+            with open('test_data.json', 'r') as f:
+                data = json.load(f)
+                off_requests = {int(k): v for k, v in data.get('off_requests', {}).items()}
+        except Exception as e:
+            # 파일을 열 수 없는 경우 기본값 사용
+            print(f"휴무 요청 데이터를 불러올 수 없습니다: {e}")
+            return 0.5
+            
+        # 해당 간호사의 휴무 요청이 없으면 기본 점수 반환
+        if nurse_id not in off_requests:
+            return 1.0  # 요청이 없으므로 만족도 최대
+            
+        # 요청된 휴무일
+        requested_days = [d-1 for d in off_requests.get(nurse_id, []) if 1 <= d <= self.num_days]  # 0-기반 인덱스로 변환
+        
+        if not requested_days:
+            return 1.0  # 유효한 요청이 없음
+            
+        # 실제 휴무일
+        off_idx = self.config.shift_types.index('OFF')
+        actual_off_days = [day for day in range(self.num_days) if self.roster[n_idx, day, off_idx] == 1]
+        
+        # 요청 반영률 계산
+        fulfilled = 0
+        for day in requested_days:
+            if day in actual_off_days:
+                fulfilled += 1
+                
+        fulfillment_ratio = fulfilled / len(requested_days) if requested_days else 1.0
+        
+        return float(fulfillment_ratio)
+
+    def find_violation_blocks(self):
+        """위반이 많은 구간 식별"""
+        violations = []
+        window_size = 7
+        max_violations_to_check = 3  # 최대 3개 위반 구간만 반환
+        
+        # 전체 위반 찾기
+        total_violations = self._find_violations()
+        
+        # 종료 조건: 위반이 없거나 충분한 반복 후
+        if not total_violations:
+            print("위반 없음: 최적화 완료")
+            return []
+        
+        # 반복 횟수 추적 및 종료 조건 확인
+        if not hasattr(self, '_lns_iteration'):
+            self._lns_iteration = 1
+        else:
+            self._lns_iteration += 1
+        
+        if self._lns_iteration > 10:  # 최대 10회 반복으로 제한
+            print(f"최대 반복 횟수({self._lns_iteration-1}회) 도달: 최적화 종료")
+            return []
+        
+        # 현재 점수 계산
+        current_score = self.calculate_total_score()
+        
+        # 이전 점수 추적
+        if not hasattr(self, '_previous_scores'):
+            self._previous_scores = [current_score]
+        else:
+            # 점수 변화가 없으면 조기 종료
+            if len(self._previous_scores) >= 3:
+                last_three = self._previous_scores[-3:]
+                if all(abs(s - last_three[0]) < 0.001 for s in last_three):
+                    print("점수 개선 없음: 최적화 종료")
+                    return []
+            self._previous_scores.append(current_score)
+        
+        # 위반 일자별 그룹화
+        violation_days = {}
+        for v in total_violations:
+            if 'day' in v:
+                day = v['day']
+                if day not in violation_days:
+                    violation_days[day] = []
+                violation_days[day].append(v)
+                
+        # 위반이 가장 많은 구간 찾기
+        day_counts = {day: len(viols) for day, viols in violation_days.items()}
+        if not day_counts:
+            print("일자별 위반이 감지되지 않음")
+            return []
+        
+        # 위반이 많은 순서로 일자 정렬
+        sorted_days = sorted(day_counts.keys(), key=lambda d: day_counts[d], reverse=True)
+        print(f"위반이 많은 상위 일자: {sorted_days[:5]}")
+        
+        # 위반이 많은 일자 중심으로 윈도우 설정
+        for center_day in sorted_days[:max_violations_to_check]:
+            start_day = max(0, center_day - window_size // 2)
+            end_day = min(self.num_days - 1, start_day + window_size - 1)
+            
+            # 윈도우 구간 내 영향받는 간호사 찾기
+            affected_nurses = []
+            for v in total_violations:
+                if 'day' in v and start_day <= v['day'] <= end_day:
+                    if 'nurse_idx' in v and v['nurse_idx'] not in affected_nurses:
+                        affected_nurses.append(v['nurse_idx'])
+            
+            if affected_nurses:
+                violations.append((affected_nurses, slice(start_day, end_day + 1)))
+                print(f"위반 구간 식별: 일자 {start_day}-{end_day}, 간호사 {len(affected_nurses)}명")
+                
+        # 특별한 위반이 없으면 랜덤 구간 탐색 (초기 반복에서만)
+        if not violations and self._lns_iteration <= 3:
+            # 랜덤하게 일부 간호사와 일자 선택
+            random_nurses = np.random.choice(
+                range(len(self.nurses)), 
+                size=min(5, len(self.nurses)), 
+                replace=False
+            ).tolist()
+            
+            # 무작위 구간 선택
+            random_start = np.random.randint(0, max(1, self.num_days - window_size))
+            random_end = random_start + window_size - 1
+            
+            violations.append((random_nurses, slice(random_start, random_end + 1)))
+            print(f"랜덤 탐색 구간: 일자 {random_start}-{random_end}, 간호사 {len(random_nurses)}명")
+                
+        return violations
+
+    def partial_roster_replacement(self, original_roster, partial_roster, nurses_idx, days):
+        """부분 근무표 교체 개선 버전"""
+        result_roster = original_roster.copy()
+        
+        # 디버깅용 출력
+        print(f"교체 전 고유 시프트 분포: {np.unique(np.argmax(original_roster[nurses_idx, days], axis=-1), return_counts=True)}")
+        
+        # 교체 구간의 이전 상태 저장
+        before_shifts = {}
+        for n_idx in nurses_idx:
+            n_shifts = []
+            for d in range(days.start, days.stop):
+                if d < self.num_days:
+                    shift_idx = np.argmax(original_roster[n_idx, d])
+                    n_shifts.append(self.config.shift_types[shift_idx])
+            before_shifts[n_idx] = n_shifts
+        
+        # 실제 교체 수행
+        for n_idx in nurses_idx:
+            for d_idx, d in enumerate(range(days.start, days.stop)):
+                if d < self.num_days:
+                    # 간호사 off 요청 유지 (휴무일은 그대로 유지)
+                    off_idx = self.config.shift_types.index('OFF')
+                    if original_roster[n_idx, d, off_idx] == 1:
+                        continue
+                        
+                    # 어텐션 모델의 결과로 교체
+                    result_roster[n_idx, d] = partial_roster[n_idx, d]
+                    
+                    # 교대 검증: 항상 정확히 하나의 교대가 배정되어 있어야 함
+                    if not np.sum(result_roster[n_idx, d]) == 1:
+                        # 문제가 있으면 가장 높은 값을 가진 교대 하나만 선택
+                        max_idx = np.argmax(result_roster[n_idx, d])
+                        result_roster[n_idx, d] = 0
+                        result_roster[n_idx, d, max_idx] = 1
+        
+        # 교체 후 고유 시프트 분포 출력
+        print(f"교체 후 고유 시프트 분포: {np.unique(np.argmax(result_roster[nurses_idx, days], axis=-1), return_counts=True)}")
+        
+        # 교체 요약 출력
+        after_shifts = {}
+        changes = 0
+        for n_idx in nurses_idx:
+            n_shifts = []
+            for d in range(days.start, days.stop):
+                if d < self.num_days:
+                    shift_idx = np.argmax(result_roster[n_idx, d])
+                    n_shifts.append(self.config.shift_types[shift_idx])
+                    
+                    # 변경 감지
+                    if d - days.start < len(before_shifts[n_idx]) and self.config.shift_types[shift_idx] != before_shifts[n_idx][d - days.start]:
+                        changes += 1
+            after_shifts[n_idx] = n_shifts
+            
+        print(f"교체 영역 내 변경된 교대 수: {changes}")
+        
+        return result_roster, changes
+
+    def calculate_total_score(self, roster=None):
+        """근무표 전체 점수 계산 (더 세밀한 버전)"""
+        if roster is None:
+            roster = self.roster
+            
+        try:
+            # 1. 선호도 점수 (higher is better)
+            preference_score = 0.0
+            for n_idx in range(len(self.nurses)):
+                for day in range(self.num_days):
+                    shift_idx = np.where(roster[n_idx, day] == 1)[0]
+                    if len(shift_idx) > 0:
+                        preference_score += self.preference_matrix[n_idx, day, shift_idx[0]]
+            preference_score /= max(1, len(self.nurses) * self.num_days)  # 정규화, 0으로 나누기 방지
+            
+            # 2. 제약조건 위반 패널티 (lower is better)
+            violations = self._find_violations_in_roster(roster)
+            
+            # 위반 유형별로 다른 가중치 부여
+            violation_weights = {
+                'shift_requirement': 1.5,  # 인원 요구사항
+                'experience': 1.2,        # 경험 요구사항
+                'night': 1.0,             # 야간 제약조건
+                'consecutive': 0.8        # 연속 근무일
+            }
+            
+            weighted_violations = 0
+            for v in violations:
+                v_type = v.get('type', 'unknown')
+                weight = violation_weights.get(v_type, 1.0)
+                weighted_violations += weight
+                
+            violation_penalty = weighted_violations * 0.01  # 낮은 가중치로 시작
+            
+            # 3. 균형 점수 (간호사별 근무 배분의 균등함, higher is better)
+            shift_counts = []
+            for n_idx in range(len(self.nurses)):
+                counts = {}
+                for shift_idx, shift in enumerate(self.config.shift_types):
+                    if shift != 'OFF':  # OFF 제외
+                        counts[shift] = np.sum(roster[n_idx, :, shift_idx])
+                shift_counts.append(sum(counts.values()))
+            
+            # 표준편차가 낮을수록 균등 배분
+            if shift_counts:
+                std_dev = np.std(shift_counts)
+                balance_score = 1.0 / (1.0 + std_dev)  # 0~1 사이 값으로 변환
+            else:
+                balance_score = 0.5  # 기본값 설정
+            
+            # 4. 연속 근무/휴무 패턴 점수 (higher is better)
+            pattern_score = 0.0
+            for n_idx in range(len(self.nurses)):
+                # 연속 근무일 체크
+                consecutive_work = 0
+                max_consecutive = 0
+                for day in range(self.num_days):
+                    off_idx = self.config.shift_types.index('OFF')
+                    if np.any(roster[n_idx, day, :off_idx]):  # 근무 중
+                        consecutive_work += 1
+                        max_consecutive = max(max_consecutive, consecutive_work)
+                    else:
+                        consecutive_work = 0
+                
+                # 연속 근무일이 적정 수준이면 높은 점수
+                if max_consecutive <= 5:  # 적정 연속 근무일
+                    pattern_score += 1.0
+                elif max_consecutive <= 6:  # 약간 높음
+                    pattern_score += 0.8
+                elif max_consecutive <= 7:  # 높음
+                    pattern_score += 0.6
+                else:  # 매우 높음
+                    pattern_score += 0.3
+                
+            pattern_score /= max(1, len(self.nurses))  # 정규화, 0으로 나누기 방지
+            
+            # 5. 야간 근무 할당 적절성 (higher is better)
+            night_score = 0.0
+            night_idx = self.config.shift_types.index('N')
+            
+            for n_idx, nurse in enumerate(self.nurses):
+                night_count = np.sum(roster[n_idx, :, night_idx])
+                
+                # 야간 전담 간호사는 야간 근무가 많을수록 높은 점수
+                if nurse.is_night_nurse:
+                    night_ratio = night_count / max(1, self.num_days)  # 0으로 나누기 방지
+                    night_score += 0.5 + 0.5 * night_ratio  # 0.5 ~ 1.0
+                else:
+                    # 일반 간호사는 야간 근무가 적절히 배분되면 높은 점수
+                    max_nights = max(1, self.config.max_night_shifts_per_month)  # 0으로 나누기 방지
+                    if night_count <= max_nights / 2:
+                        night_score += 1.0
+                    elif night_count <= max_nights:
+                        night_score += 0.7
+                    else:
+                        night_score += 0.3
+                    
+            night_score /= max(1, len(self.nurses))  # 정규화, 0으로 나누기 방지
+            
+            # 가중합으로 최종 점수 계산 (높을수록 좋음)
+            final_score = (
+                0.35 * preference_score +         # 선호도 35%
+                0.25 * (1.0 - violation_penalty) + # 제약조건 25% (패널티 낮을수록 좋음)
+                0.15 * balance_score +            # 균형성 15%
+                0.15 * pattern_score +            # 근무 패턴 15%
+                0.10 * night_score                # 야간 근무 적절성 10%
+            )
+            
+            # 디버깅용 자세한 점수 구성 출력
+            print(f"세부 점수 - 선호도: {preference_score:.4f}, 제약: {1.0-violation_penalty:.4f}, " +
+                  f"균형: {balance_score:.4f}, 패턴: {pattern_score:.4f}, 야간: {night_score:.4f}")
+            
+            return float(final_score)  # 명시적으로 float로 변환
+        except Exception as e:
+            print(f"점수 계산 중 오류 발생: {e}")
+            # 기본 점수 반환
+            return 0.0
+
+    def _find_violations_in_roster(self, roster):
+        """특정 근무표의 제약조건 위반 찾기"""
+        violations = []
+        
+        # 원래 근무표 백업
+        original_roster = self.roster.copy()
+        self.roster = roster.copy()
+        
+        # 기존 함수 사용하여 위반 찾기
+        violations = self._find_violations()
+        
+        # 원래 근무표 복원
+        self.roster = original_roster
+        
+        return violations
+
+    def _check_daily_requirements(self, day):
+        """일별 필요 인원수와 경험 요구사항 체크"""
+        requirements_met = True
+        
+        # 1. 교대별 필요 인원수 체크
+        for shift, required in self.config.daily_shift_requirements.items():
+            shift_idx = self.config.shift_types.index(shift)
+            assigned = np.sum(self.roster[:, day, shift_idx])
+            if assigned != required:
+                print(f"일자 {day+1}: {shift} 교대 인원 요구사항 불충족 ({assigned}/{required})")
+                requirements_met = False
+                
+        # 2. 경험 있는 간호사 요구사항 체크
+        # 정확한 인덱스 사용을 위해 경험있는 간호사 목록 명시적 구성
+        exp_idx = [i for i, n in enumerate(self.nurses) if n.experience_years >= self.config.min_experience_per_shift]
+        for shift in ['D', 'E', 'N']:
+            shift_idx = self.config.shift_types.index(shift)
+            exp_count = sum(self.roster[i, day, shift_idx] for i in exp_idx)
+            if exp_count < self.config.required_experienced_nurses:
+                print(f"일자 {day+1}: {shift} 교대 경험자 요구사항 불충족 ({exp_count}/{self.config.required_experienced_nurses})")
+                requirements_met = False
+        
+        # 3. 야간 전담 간호사 제약 조건 검사 (중요!)
+        day_idx = self.config.shift_types.index('D')
+        night_nurse_violations = 0
+        for i, nurse in enumerate(self.nurses):
+            if nurse.is_night_nurse and self.roster[i, day, day_idx] == 1:
+                night_nurse_violations += 1
+                print(f"위반: 일자 {day+1}에 야간 전담 간호사 {nurse.name}이(가) 주간(D) 근무 배정됨")
+                requirements_met = False
+        
+        if night_nurse_violations > 0:
+            print(f"일자 {day+1}: 야간 전담 간호사 주간근무 위반 {night_nurse_violations}건")
+        
+        return requirements_met

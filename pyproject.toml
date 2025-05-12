@@ -11,4 +11,5 @@ dependencies = [
     "ortools>=9.12.4544",
     "pandas>=2.2.3",
     "timer>=0.3.0",
+    "torch>=2.7.0",
 ]
