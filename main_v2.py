@@ -649,140 +649,142 @@ class RosterGenerator:
         return True
 
 def main():
-    """메인 함수"""
-    print("\n=== 간호사 근무표 생성 시스템 V2 시작 (전역 최적화 적용) ===")
-    
-    # OR-Tools 설치 확인
-    try:
-        import ortools
-    except ImportError:
-        print("\nOR-Tools 설치 중...")
-        import subprocess
-        subprocess.check_call(["pip", "install", "ortools"])
-    
+    """메인 함수: 테스트 데이터 로드, 근무표 시스템 생성, 최적화."""
     # 테스트 데이터 로드
-    with Timer("테스트 데이터 로드"):
-        data = load_test_data('test_data.json')
-        
-    # 간호사 객체 생성
-    with Timer("간호사 객체 생성"):
-        nurses = create_nurses_from_data(data['nurses'])
-        print(f"{len(nurses)}명의 간호사 객체가 생성되었습니다.")
-        
-    # 설정된 전역 월간 휴무일로 설정 생성
-    with Timer("설정 초기화"):
-        config_data = data['config']
-        
-        # 전역 월간 휴무일이 설정에 있는지 확인
-        if 'global_monthly_off_days' not in config_data:
-            print(f"기본 전역 월간 휴무일 사용: 3일")
-            config_data['global_monthly_off_days'] = 3
-        else:
-            print(f"설정된 전역 월간 휴무일 사용: {config_data['global_monthly_off_days']}일")
-            
-        config = NurseRosterConfig(**config_data)
-        
-        # 설정에 따라 각 간호사의 휴무일 초기화
-        total_personal_off = 0
-        for nurse in nurses:
-            avail_days = nurse.initialize_off_days(config)
-            total_personal_off += avail_days
-            
-        print(f"간호사 휴무일 초기화 완료: 총 {total_personal_off}일의 개인 휴무일")
-        print(f"전역 월간 휴무일: {config.global_monthly_off_days}일")
-        
+    data = load_test_data('test_data_shift.json')  # 새로운 테스트 데이터 파일 사용
+    
+    # 시스템 구성 설정
+    config_data = data.get('config', {})
+    config = NurseRosterConfig(
+        daily_shift_requirements=config_data.get('daily_shift_requirements', {"D": 3, "E": 3, "N": 2}),
+        min_experience_per_shift=config_data.get('min_experience_per_shift', 3),
+        required_experienced_nurses=config_data.get('required_experienced_nurses', 1),
+        enforce_two_offs_per_week=config_data.get('enforce_two_offs_per_week', False),
+        max_night_shifts_per_month=config_data.get('max_night_shifts_per_month', 15),
+        max_consecutive_nights=config_data.get('max_consecutive_nights', 2),
+        max_consecutive_work_days=config_data.get('max_consecutive_work_days', 6),
+        global_monthly_off_days=config_data.get('global_monthly_off_days', 3),
+        standard_personal_off_days=config_data.get('standard_personal_off_days', 8),
+        day_shift_ratio=config_data.get('day_shift_ratio', 1.0),
+        evening_shift_ratio=config_data.get('evening_shift_ratio', 1.0),
+        night_shift_ratio=config_data.get('night_shift_ratio', 1.0),
+        off_shift_ratio=config_data.get('off_shift_ratio', 1.2),
+        shift_preference_weights=config_data.get('shift_preference_weights', {
+            'D': 5.0, 'E': 5.0, 'N': 5.0, 'OFF': 10.0
+        }),
+        pair_preference_weight=config_data.get('pair_preference_weight', 3.0)
+    )
+    
+    # 대상 월 파싱
+    target_month = datetime.strptime(data['target_month'], '%Y-%m-%d').date()
+    
+    # 간호사 생성
+    nurses = create_nurses_from_data(data['nurses'])
+    for nurse in nurses:
+        nurse.initialize_off_days(config)
+    
     # 근무표 시스템 생성
     with Timer("근무표 시스템 초기화"):
-        target_month = datetime.strptime(data['target_month'], '%Y-%m-%d').date()
-        roster_system = RosterSystem(
-            nurses=nurses,
-            target_month=target_month,
-            config=config
-        )
-        print(f"{target_month.strftime('%Y년 %m월')} 근무표 시스템이 초기화되었습니다.")
+        roster_system = RosterSystem(nurses, target_month, config)
     
-    # 먼저 휴무 요청 적용 (하드 제약조건으로)
-    with Timer("휴무 요청 적용"):
+    # 휴무 요청 적용
+    if 'off_requests' in data:
+        print("\n휴무 요청 적용 중...")
+        # 문자열 키를 정수로 변환
         off_requests = {int(k): v for k, v in data['off_requests'].items()}
         roster_system.apply_off_requests(off_requests)
-        print(f"{len(off_requests)}개의 휴무 요청이 적용되었습니다.")
     
-    # RosterGenerator를 사용하여 초기 근무표 생성
-    with Timer("초기 근무표 생성"):
-        generator = RosterGenerator(roster_system)
-        generator.generate_roster()
-        
-    # CP-SAT를 사용한 전역 최적화
-    with Timer("CP-SAT를 사용한 근무표 최적화 (전역 최적화)"):
-        success = roster_system.optimize_roster_with_cp_sat(time_limit_seconds=60)
-        if success:
-            print("전역 최적화가 성공적으로 완료되었습니다!")
-        else:
-            print("전역 최적화 실패, LNS 접근법으로 전환합니다...")
-            # 전역 최적화 실패 시 LNS 시도
-            with Timer("대규모 근린 탐색(LNS)으로 개선"):
-                success = roster_system.optimize_with_lns(max_iterations=5, time_limit_per_iteration=20)
-                if success:
-                    print("LNS 개선이 성공적으로 완료되었습니다!")
-                else:
-                    print("LNS 개선이 완료되었으나 일부 제약조건 위반이 남아있습니다.")
+    # 선호 근무 유형 적용 (새로운 기능)
+    if 'shift_preferences' in data:
+        print("\n선호 근무 유형 적용 중...")
+        roster_system.apply_shift_preferences(data['shift_preferences'])
     
-    # 지표 계산 및 출력
-    with Timer("상세 지표 계산"):
-        try:
-            detailed_metrics = roster_system.calculate_detailed_metrics()
-            violations = detailed_metrics.get('constraint_violations', {})
-            
-            print("\n=== 제약조건 위반 현황 ===")
-            if not violations:
-                print("위반 사항이 없습니다! 완벽한 해결책을 찾았습니다.")
-            else:
-                for violation_type, count in violations.items():
-                    print(f"{violation_type}: {count}건")
-                
-            if 'workload_distribution' in detailed_metrics and 'statistics' in detailed_metrics['workload_distribution']:
-                workload = detailed_metrics['workload_distribution']['statistics']
-                print(f"\n근무 부하 통계:")
-                print(f"  간호사당 평균 근무 수: {workload.get('mean_shifts', 0):.2f}")
-                print(f"  최소 근무 수: {workload.get('min_shifts', 0)}, 최대 근무 수: {workload.get('max_shifts', 0)}")
-            
-            if 'nurse_satisfaction' in detailed_metrics:
-                satisfaction = detailed_metrics['nurse_satisfaction'].get('average', 0)
-                print(f"\n평균 간호사 만족도 점수: {satisfaction:.2f}")
-        except Exception as e:
-            print(f"상세 지표 계산 중 오류 발생: {e}")
-            # 기본 지표로 대체
-            basic_metrics = roster_system.calculate_metrics()
-            print("\n=== 기본 지표 ===")
-            for key, value in basic_metrics.items():
-                if not isinstance(value, dict):
-                    print(f"{key}: {value}")
+    # 페어링 선호도 적용 (새로운 기능)
+    if 'nurse_pair_preferences' in data:
+        print("\n간호사 페어링 선호도 적용 중...")
+        roster_system.apply_pair_preferences(data['nurse_pair_preferences'])
     
-    # 최종 근무표 출력
-    print("\n=== 최종 근무표 ===")
+    # CP-SAT 솔버로 최적화
+    with Timer("CP-SAT 최적화"):
+        roster_system.optimize_roster_with_cp_sat(time_limit_seconds=30)
+    
+    # 최적화 결과 출력
+    print("\n최적화된 근무표:")
     roster_system.print_roster()
     
-    # 지표와 함께 Excel로 내보내기
-    with Timer("결과 내보내기"):
-        export_roster_to_excel(roster_system, 'roster_eval/roster_v6.xlsx')
-        print(f"결과가 roster_eval/roster_v6.xlsx 파일로 저장되었습니다.")
+    # 위반 사항 확인
+    violations = roster_system._find_violations()
+    if violations:
+        print(f"\n{len(violations)}개의 제약 위반 사항 발견:")
+        for v in violations[:10]:  # 처음 10개만 표시
+            print(f"  - {v}")
+        if len(violations) > 10:
+            print(f"  ... 및 {len(violations) - 10}개 더 있음")
+    else:
+        print("\n모든 제약 조건 충족!")
+    
+    # OFF 선호도 만족도 계산 및 출력
+    off_satisfaction = roster_system._calculate_off_preference_satisfaction()
+    print(f"\n선호 휴무일 만족도: {off_satisfaction:.2f}%")
+    
+    # 근무 유형 선호도 만족도 계산 및 출력
+    shift_satisfaction = roster_system._calculate_shift_preference_satisfaction()
+    print(f"근무 유형 선호도 만족도: {shift_satisfaction:.2f}%")
+    
+    # 페어링 선호도 만족도 계산 및 출력
+    if hasattr(roster_system, 'pair_matrix'):
+        pair_satisfaction = roster_system._calculate_pair_preference_satisfaction()
+        print(f"페어링 선호도 만족도:")
+        print(f"  - 함께 일하기: {pair_satisfaction['together']:.2f}%")
+        print(f"  - 따로 일하기: {pair_satisfaction['apart']:.2f}%")
+        print(f"  - 종합: {pair_satisfaction['overall']:.2f}%")
+    
+    # 선택적으로 LNS로 추가 최적화
+    use_lns = True
+    if use_lns:
+        with Timer("LNS 추가 최적화"):
+            roster_system.optimize_with_lns(max_iterations=5, time_limit_per_iteration=10)
         
-        # 상세 지표가 계산된 경우 별도 파일로 내보내기
-        try:
-            if 'detailed_metrics' in locals() and detailed_metrics:
-                with open('detailed_metrics.json', 'w') as f:
-                    import json
-                    json.dump(detailed_metrics, f, indent=2, default=lambda x: float(x) if isinstance(x, np.float32) else x)
-                print("상세 지표가 detailed_metrics.json 파일로 저장되었습니다.")
-            else:
-                # 기본 지표로 대체하여 저장
-                basic_metrics = roster_system.calculate_metrics()
-                with open('basic_metrics.json', 'w') as f:
-                    import json
-                    json.dump(basic_metrics, f, indent=2, default=lambda x: float(x) if isinstance(x, np.float32) else x)
-                print("기본 지표가 basic_metrics.json 파일로 저장되었습니다.")
-        except Exception as e:
-            print(f"지표 내보내기 중 오류 발생: {e}")
+        # 최종 최적화 결과 출력
+        print("\n최종 최적화된 근무표:")
+        roster_system.print_roster()
+        
+        # 위반 사항 재확인
+        violations = roster_system._find_violations()
+        if violations:
+            print(f"\n{len(violations)}개의 제약 위반 사항 발견:")
+            for v in violations[:10]:
+                print(f"  - {v}")
+            if len(violations) > 10:
+                print(f"  ... 및 {len(violations) - 10}개 더 있음")
+        else:
+            print("\n모든 제약 조건 충족!")
+            
+        # 선호도 만족도 재계산 및 출력
+        off_satisfaction = roster_system._calculate_off_preference_satisfaction()
+        print(f"\n최종 선호 휴무일 만족도: {off_satisfaction:.2f}%")
+        
+        shift_satisfaction = roster_system._calculate_shift_preference_satisfaction()
+        print(f"최종 근무 유형 선호도 만족도: {shift_satisfaction:.2f}%")
+        
+        if hasattr(roster_system, 'pair_matrix'):
+            pair_satisfaction = roster_system._calculate_pair_preference_satisfaction()
+            print(f"최종 페어링 선호도 만족도:")
+            print(f"  - 함께 일하기: {pair_satisfaction['together']:.2f}%")
+            print(f"  - 따로 일하기: {pair_satisfaction['apart']:.2f}%")
+            print(f"  - 종합: {pair_satisfaction['overall']:.2f}%")
+    
+    # 상세 메트릭 계산 및 출력 (옵션)
+    with Timer("상세 메트릭 계산"):
+        metrics = roster_system.calculate_detailed_metrics()
+    
+    # 결과를 JSON 파일로 저장
+    with open('detailed_metrics.json', 'w') as f:
+        json.dump(metrics, f, indent=2)
+    
+    # Excel 파일로 근무표 내보내기
+    export_roster_to_excel(roster_system, 'nurse_roster.xlsx')
+    print("\n근무표를 'nurse_roster.xlsx'로 내보냈습니다.")
 
 if __name__ == "__main__":
     main() 

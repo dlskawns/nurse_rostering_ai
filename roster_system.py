@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 import numpy as np
 from datetime import date, datetime, timedelta
 import calendar
@@ -143,6 +143,96 @@ class RosterSystem:
                 self.preference_matrix[nurse_idx, day, off_idx] = 10
             nurse.update_off_days(len(valid_days))
             
+    def apply_shift_preferences(self, shift_preferences: Dict[str, Dict[str, List[int]]]):
+        """간호사의 특정 근무 유형(D, E, N) 선호도를 적용합니다.
+        
+        Args:
+            shift_preferences: 간호사 ID를 근무 유형별 선호 날짜 목록에 매핑하는 딕셔너리
+                예: {"1": {"D": [4, 5], "E": [10, 11]}, "2": {"N": [20, 21]}}
+        """
+        print("근무 유형 선호도 적용 중...")
+        for nurse_id_str, shifts in shift_preferences.items():
+            nurse_id = int(nurse_id_str)
+            nurse_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_id), None)
+            
+            if nurse_idx is None:
+                print(f"경고: ID {nurse_id}인 간호사를 찾을 수 없습니다.")
+                continue
+                
+            for shift_type, days in shifts.items():
+                if shift_type not in self.config.shift_types:
+                    print(f"경고: 유효하지 않은 근무 유형: {shift_type}")
+                    continue
+                    
+                shift_idx = self.config.shift_types.index(shift_type)
+                # 설정에서 해당 근무 유형의 가중치 가져오기
+                weight = self.config.shift_preference_weights.get(shift_type, 5.0) if hasattr(self.config, 'shift_preference_weights') else 5.0
+                
+                for day in days:
+                    if 1 <= day <= self.num_days:
+                        day_idx = day - 1  # 0부터 시작하는 인덱싱으로 변환
+                        self.preference_matrix[nurse_idx, day_idx, shift_idx] = weight
+                        
+        print("근무 유형 선호도 적용 완료")
+        
+    def apply_pair_preferences(self, pair_preferences: Dict[str, List[Dict[str, Union[int, float]]]]):
+        """간호사 간의 페어링 선호도를 적용합니다.
+        
+        Args:
+            pair_preferences: 함께 또는 따로 일하고 싶은 간호사 쌍의 정보
+                예: {
+                    "work_together": [{"nurse_1": 1, "nurse_2": 5, "weight": 3.0}, ...],
+                    "work_apart": [{"nurse_1": 1, "nurse_2": 6, "weight": 3.0}, ...]
+                }
+        """
+        print("간호사 페어링 선호도 초기화 중...")
+        
+        # 간호사 페어링 선호도 매트릭스 초기화 (간호사 × 간호사)
+        self.pair_matrix = {
+            "together": np.zeros((len(self.nurses), len(self.nurses))),
+            "apart": np.zeros((len(self.nurses), len(self.nurses)))
+        }
+        
+        # together (함께 일하기 원하는 쌍) 처리
+        if "work_together" in pair_preferences:
+            for pair in pair_preferences["work_together"]:
+                nurse_1_id = pair["nurse_1"]
+                nurse_2_id = pair["nurse_2"]
+                weight = pair.get("weight", self.config.pair_preference_weight)
+                
+                nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
+                nurse_2_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_2_id), None)
+                
+                if nurse_1_idx is not None and nurse_2_idx is not None:
+                    self.pair_matrix["together"][nurse_1_idx, nurse_2_idx] = weight
+                    self.pair_matrix["together"][nurse_2_idx, nurse_1_idx] = weight  # 대칭적으로 설정
+                else:
+                    if nurse_1_idx is None:
+                        print(f"경고: ID {nurse_1_id}인 간호사를 찾을 수 없습니다.")
+                    if nurse_2_idx is None:
+                        print(f"경고: ID {nurse_2_id}인 간호사를 찾을 수 없습니다.")
+        
+        # apart (따로 일하기 원하는 쌍) 처리
+        if "work_apart" in pair_preferences:
+            for pair in pair_preferences["work_apart"]:
+                nurse_1_id = pair["nurse_1"]
+                nurse_2_id = pair["nurse_2"]
+                weight = pair.get("weight", self.config.pair_preference_weight)
+                
+                nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
+                nurse_2_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_2_id), None)
+                
+                if nurse_1_idx is not None and nurse_2_idx is not None:
+                    self.pair_matrix["apart"][nurse_1_idx, nurse_2_idx] = weight
+                    self.pair_matrix["apart"][nurse_2_idx, nurse_1_idx] = weight  # 대칭적으로 설정
+                else:
+                    if nurse_1_idx is None:
+                        print(f"경고: ID {nurse_1_id}인 간호사를 찾을 수 없습니다.")
+                    if nurse_2_idx is None:
+                        print(f"경고: ID {nurse_2_id}인 간호사를 찾을 수 없습니다.")
+                        
+        print("간호사 페어링 선호도 초기화 완료")
+        
     def _find_violations(self) -> List[dict]:
         """Find all constraint violations in current roster."""
         violations = []
@@ -536,21 +626,64 @@ class RosterSystem:
         for n_idx in range(len(self.nurses)):
             for day in range(self.num_days):
                 for s_idx, shift in enumerate(self.config.shift_types):
-                    if s_idx == off_idx:
-                        # OFF 선호도에 대해 매우 높은 가중치 적용 (20배 증가)
-                        pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 200)
+                    # 선호 근무 유형에 대한 가중치 계산
+                    if s_idx == off_idx and self.preference_matrix[n_idx, day, s_idx] >= 4:
+                        # 선호 휴무일에 매우 높은 가중치 적용
+                        pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 1000)
                     else:
-                        pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 10)
+                        # 다른 근무 유형에 대한 선호도 점수 계산 (D, E, N 선호도 반영)
+                        weight = self.config.shift_preference_weights.get(shift, 1.0) if hasattr(self.config, 'shift_preference_weights') else 1.0
+                        pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 100 * weight)
+                    
                     objective_terms.append(pref_score * x[n_idx, day, s_idx])
         
         # 10.2 Night nurse specialization bonus
         for n_idx, nurse in enumerate(self.nurses):
             if nurse.is_night_nurse:
                 # Bonus for night nurses working night shifts
-                night_bonus = sum(2 * x[n_idx, day, night_idx] for day in range(self.num_days))
+                night_bonus = sum(200 * x[n_idx, day, night_idx] for day in range(self.num_days))
                 objective_terms.append(night_bonus)
+                
+        # 10.3 간호사 페어링 선호도 반영
+        if hasattr(self, 'pair_matrix'):
+            # 함께 일하기 선호도 반영
+            for n1 in range(len(self.nurses)):
+                for n2 in range(n1 + 1, len(self.nurses)):
+                    # 함께 일하기 선호도
+                    if self.pair_matrix["together"][n1, n2] > 0:
+                        weight = int(self.pair_matrix["together"][n1, n2] * 100)
+                        for day in range(self.num_days):
+                            for shift in self.config.daily_shift_requirements.keys():
+                                s_idx = self.config.shift_types.index(shift)
+                                
+                                # n1과 n2가 같은 교대에 배정될 때 보너스
+                                together_var = model.NewBoolVar(f'together_{n1}_{n2}_{day}_{shift}')
+                                model.Add(together_var == 1).OnlyEnforceIf([x[n1, day, s_idx], x[n2, day, s_idx]])
+                                model.Add(together_var == 0).OnlyEnforceIf([x[n1, day, s_idx].Not()])
+                                model.Add(together_var == 0).OnlyEnforceIf([x[n2, day, s_idx].Not()])
+                                objective_terms.append(weight * together_var)
+                                
+                    # 따로 일하기 선호도
+                    if self.pair_matrix["apart"][n1, n2] > 0:
+                        weight = int(self.pair_matrix["apart"][n1, n2] * 100)
+                        for day in range(self.num_days):
+                            # n1과 n2가 다른 교대에 배정될 때 보너스
+                            # 각 근무 유형 쌍에 대해
+                            for s1 in self.config.daily_shift_requirements.keys():
+                                s1_idx = self.config.shift_types.index(s1)
+                                for s2 in self.config.daily_shift_requirements.keys():
+                                    if s1 == s2:
+                                        continue
+                                    s2_idx = self.config.shift_types.index(s2)
+                                    
+                                    # n1은 s1에, n2는 s2에 배정된 경우
+                                    apart_var = model.NewBoolVar(f'apart_{n1}_{n2}_{day}_{s1}_{s2}')
+                                    model.Add(apart_var == 1).OnlyEnforceIf([x[n1, day, s1_idx], x[n2, day, s2_idx]])
+                                    model.Add(apart_var == 0).OnlyEnforceIf([x[n1, day, s1_idx].Not()])
+                                    model.Add(apart_var == 0).OnlyEnforceIf([x[n2, day, s2_idx].Not()])
+                                    objective_terms.append(weight * apart_var)
         
-        # 10.3 Workload balance penalty - Simplified to avoid non-affine expressions
+        # 10.4 Workload balance penalty - Simplified to avoid non-affine expressions
         # Calculate total work days for each nurse directly
         off_idx = self.config.shift_types.index('OFF')
         
@@ -872,7 +1005,133 @@ class RosterSystem:
             return 100.0  # 선호 휴무일이 없으면 100% 만족
         
         return (satisfied_preferences / total_preferences) * 100.0
-    
+        
+    def _calculate_shift_preference_satisfaction(self):
+        """근무 유형(D, E, N) 선호도 만족도를 계산합니다."""
+        total_preferences = 0
+        satisfied_preferences = 0
+        
+        # 각 근무 유형에 대해 (OFF 제외)
+        for shift in self.config.daily_shift_requirements.keys():
+            s_idx = self.config.shift_types.index(shift)
+            weight = self.config.shift_preference_weights.get(shift, 1.0) if hasattr(self.config, 'shift_preference_weights') else 1.0
+            
+            # 각 간호사와 날짜에 대해
+            for n_idx in range(len(self.nurses)):
+                for day in range(self.num_days):
+                    # 해당 근무 유형의 가중치가 특정 값 이상이면 선호 근무로 간주
+                    if self.preference_matrix[n_idx, day, s_idx] >= weight:
+                        total_preferences += 1
+                        # 실제로 해당 근무 유형이 배정된 경우
+                        if self.roster[n_idx, day, s_idx] == 1:
+                            satisfied_preferences += 1
+        
+        if total_preferences == 0:
+            return 100.0  # 선호 근무 유형이 없으면 100% 만족
+        
+        return (satisfied_preferences / total_preferences) * 100.0
+        
+    def _calculate_pair_preference_satisfaction(self):
+        """간호사 페어링 선호도 만족도를 계산합니다."""
+        if not hasattr(self, 'pair_matrix'):
+            return {"together": 100.0, "apart": 100.0, "overall": 100.0}
+            
+        # 함께 일하기 선호도 만족도
+        total_together_prefs = 0
+        satisfied_together_prefs = 0
+        
+        # 따로 일하기 선호도 만족도
+        total_apart_prefs = 0
+        satisfied_apart_prefs = 0
+        
+        # 각 날짜에 대해
+        for day in range(self.num_days):
+            # 각 근무 유형에 대해
+            for shift in self.config.daily_shift_requirements.keys():
+                shift_idx = self.config.shift_types.index(shift)
+                
+                # 이 근무 유형에 배정된 간호사 찾기
+                assigned_nurses = [i for i in range(len(self.nurses)) 
+                                 if self.roster[i, day, shift_idx] == 1]
+                
+                # 함께 일하는 선호도 계산
+                for i in range(len(assigned_nurses)):
+                    for j in range(i+1, len(assigned_nurses)):
+                        n1 = assigned_nurses[i]
+                        n2 = assigned_nurses[j]
+                        
+                        # 함께 일하기 원하는 쌍인 경우
+                        if self.pair_matrix["together"][n1, n2] > 0:
+                            total_together_prefs += 1
+                            satisfied_together_prefs += 1
+                
+                # 다른 교대에 배정된 간호사들과의 관계 확인
+                for other_shift in self.config.daily_shift_requirements.keys():
+                    if shift == other_shift:
+                        continue
+                        
+                    other_shift_idx = self.config.shift_types.index(other_shift)
+                    other_assigned = [i for i in range(len(self.nurses)) 
+                                     if self.roster[i, day, other_shift_idx] == 1]
+                    
+                    # 두 교대 간의 간호사 쌍 확인
+                    for n1 in assigned_nurses:
+                        for n2 in other_assigned:
+                            # 따로 일하기 원하는 쌍인 경우
+                            if self.pair_matrix["apart"][n1, n2] > 0:
+                                total_apart_prefs += 1
+                                satisfied_apart_prefs += 1
+        
+        # 불만족 케이스 확인
+        for n1 in range(len(self.nurses)):
+            for n2 in range(n1+1, len(self.nurses)):
+                # 함께 일하기 원하는 쌍인 경우
+                if self.pair_matrix["together"][n1, n2] > 0:
+                    # 각 날짜에 대해 함께 근무했는지 확인
+                    for day in range(self.num_days):
+                        together_today = False
+                        
+                        # 각 근무 유형에 대해
+                        for shift in self.config.daily_shift_requirements.keys():
+                            shift_idx = self.config.shift_types.index(shift)
+                            
+                            # 둘 다 같은 교대에 배정된 경우
+                            if (self.roster[n1, day, shift_idx] == 1 and 
+                                self.roster[n2, day, shift_idx] == 1):
+                                together_today = True
+                                break
+                        
+                        # 이날 함께 근무하지 않았으면 총 선호도 카운트만 추가
+                        if not together_today:
+                            total_together_prefs += 1
+                
+                # 따로 일하기 원하는 쌍인 경우
+                if self.pair_matrix["apart"][n1, n2] > 0:
+                    # 각 날짜에 대해 같은 근무에 배정되었는지 확인
+                    for day in range(self.num_days):
+                        for shift in self.config.daily_shift_requirements.keys():
+                            shift_idx = self.config.shift_types.index(shift)
+                            
+                            # 둘 다 같은 교대에 배정된 경우 (선호도 불만족)
+                            if (self.roster[n1, day, shift_idx] == 1 and 
+                                self.roster[n2, day, shift_idx] == 1):
+                                total_apart_prefs += 1
+        
+        # 종합 만족도 계산
+        together_satisfaction = 100.0 if total_together_prefs == 0 else (satisfied_together_prefs / total_together_prefs) * 100.0
+        apart_satisfaction = 100.0 if total_apart_prefs == 0 else (satisfied_apart_prefs / total_apart_prefs) * 100.0
+        
+        # 종합 선호도 점수
+        total_prefs = total_together_prefs + total_apart_prefs
+        satisfied_prefs = satisfied_together_prefs + satisfied_apart_prefs
+        overall_satisfaction = 100.0 if total_prefs == 0 else (satisfied_prefs / total_prefs) * 100.0
+        
+        return {
+            "together": together_satisfaction,
+            "apart": apart_satisfaction,
+            "overall": overall_satisfaction
+        }
+        
     def _optimize_neighborhood(self, fixed_assignments, time_limit_seconds):
         """Optimize a neighborhood of the roster with some assignments fixed."""
         try:
@@ -973,13 +1232,54 @@ class RosterSystem:
         # Preference satisfaction - 특히 선호 휴무일에 높은 가중치 부여
         for n_idx in range(len(self.nurses)):
             for day in range(self.num_days):
-                for s_idx in range(len(self.config.shift_types)):
+                for s_idx, shift in enumerate(self.config.shift_types):
+                    # 선호 근무 유형에 대한 가중치 계산
                     if s_idx == off_idx and self.preference_matrix[n_idx, day, s_idx] >= 4:
                         # 선호 휴무일에 매우 높은 가중치 (더 증가)
                         pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 1000)
                     else:
-                        pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 100)
+                        # 다른 근무 유형에 대한 선호도 점수 계산 (D, E, N 선호도 반영)
+                        weight = self.config.shift_preference_weights.get(self.config.shift_types[s_idx], 1.0) if hasattr(self.config, 'shift_preference_weights') else 1.0
+                        pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 100 * weight)
                     objective_terms.append(pref_score * x[n_idx, day, s_idx])
+        
+        # 페어링 선호도 반영 - 함께 일하기 원하는 간호사 쌍
+        if hasattr(self, 'pair_matrix'):
+            for n1 in range(len(self.nurses)):
+                for n2 in range(n1+1, len(self.nurses)):
+                    # 함께 일하기 선호도
+                    if self.pair_matrix["together"][n1, n2] > 0:
+                        weight = int(self.pair_matrix["together"][n1, n2] * 100)
+                        for day in range(self.num_days):
+                            for shift in self.config.daily_shift_requirements.keys():
+                                s_idx = self.config.shift_types.index(shift)
+                                
+                                # n1과 n2가 같은 교대에 배정될 때 보너스
+                                together_var = model.NewBoolVar(f'together_{n1}_{n2}_{day}_{shift}')
+                                model.Add(together_var == 1).OnlyEnforceIf([x[n1, day, s_idx], x[n2, day, s_idx]])
+                                model.Add(together_var == 0).OnlyEnforceIf([x[n1, day, s_idx].Not()])
+                                model.Add(together_var == 0).OnlyEnforceIf([x[n2, day, s_idx].Not()])
+                                objective_terms.append(weight * together_var)
+                                
+                    # 따로 일하기 선호도
+                    if self.pair_matrix["apart"][n1, n2] > 0:
+                        weight = int(self.pair_matrix["apart"][n1, n2] * 100)
+                        for day in range(self.num_days):
+                            # n1과 n2가 다른 교대에 배정될 때 보너스
+                            # 각 근무 유형 쌍에 대해
+                            for s1 in self.config.daily_shift_requirements.keys():
+                                s1_idx = self.config.shift_types.index(s1)
+                                for s2 in self.config.daily_shift_requirements.keys():
+                                    if s1 == s2:
+                                        continue
+                                    s2_idx = self.config.shift_types.index(s2)
+                                    
+                                    # n1은 s1에, n2는 s2에 배정된 경우
+                                    apart_var = model.NewBoolVar(f'apart_{n1}_{n2}_{day}_{s1}_{s2}')
+                                    model.Add(apart_var == 1).OnlyEnforceIf([x[n1, day, s1_idx], x[n2, day, s2_idx]])
+                                    model.Add(apart_var == 0).OnlyEnforceIf([x[n1, day, s1_idx].Not()])
+                                    model.Add(apart_var == 0).OnlyEnforceIf([x[n2, day, s2_idx].Not()])
+                                    objective_terms.append(weight * apart_var)
         
         # Night nurse specialization bonus
         for n_idx, nurse in enumerate(self.nurses):

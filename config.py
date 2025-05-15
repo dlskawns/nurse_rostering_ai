@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import numpy as np
 
@@ -34,6 +34,17 @@ class NurseRosterConfig:
     night_nurse_weight: float = 2.0  # 야간 간호사의 야간 근무 가중치
     experience_weight: float = 1.5  # 경력 간호사 가중치
     consecutive_shift_penalty: float = -1.0  # 원치 않는 연속 근무에 대한 패널티
+    
+    # 선호도 가중치
+    shift_preference_weights: Dict[str, float] = field(default_factory=lambda: {
+        'D': 5.0,  # 주간 근무 선호도 가중치
+        'E': 5.0,  # 저녁 근무 선호도 가중치
+        'N': 5.0,  # 야간 근무 선호도 가중치
+        'OFF': 10.0  # 휴무 선호도 가중치
+    })
+    
+    # 페어링 가중치
+    pair_preference_weight: float = 3.0  # 페어링 선호도 반영 가중치
     
     # 소프트맥스 샘플링 온도
     sampling_temperature: float = 2.0
