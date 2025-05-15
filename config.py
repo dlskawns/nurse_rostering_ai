@@ -49,6 +49,9 @@ class NurseRosterConfig:
     # 소프트맥스 샘플링 온도
     sampling_temperature: float = 2.0
     
+    # 근무 요구사항 우선순위 (0~1) - 1에 가까울수록 더 강하게 근무 요구사항 강제
+    shift_requirement_priority: float = 0.8  # 근무 요구사항 우선순위
+    
     def __post_init__(self):
         if self.daily_shift_requirements is None:
             self.daily_shift_requirements = {'D': 3, 'E': 3, 'N': 2}

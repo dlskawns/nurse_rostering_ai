@@ -117,38 +117,61 @@ class RosterSystem:
         return True
         
     def apply_off_requests(self, off_requests: Dict[int, List[int]]):
-        """간호사의 휴무일 요청을 적용합니다.
-        
-        Args:
-            off_requests: 간호사 ID를 요청된 휴무일 목록(1부터 시작)에 매핑하는 딕셔너리
         """
-        for nurse_id, days in off_requests.items():
-            nurse_idx = next(i for i, n in enumerate(self.nurses) if n.id == nurse_id)
-            nurse = self.nurses[nurse_idx]
-            
-            # 월 내에 있는 날짜만 필터링
-            valid_days = [d - 1 for d in days if 1 <= d <= self.num_days]  # 0부터 시작하는 인덱싱으로 변환
+        간호사의 휴무(OFF) 요청을 날짜·강도(Δ-weight) 단위로 적용합니다.
+
+        Args
+        ----
+        off_requests : {
+            "간호사ID(문자열)": { "날짜(문자열)": delta_weight, ... }, ...
+        }
+        - 날짜는 1-based(예: "6" → 6일).
+        - delta_weight 는 기본 OFF-가중치(config.shift_preference_weights["OFF"])
+            에 더해질 추가점수.   (총점 = 기본 + delta)
+        """
+        off_idx     = self.config.shift_types.index("OFF")
+        base_weight = self.config.shift_preference_weights.get("OFF", 10.0)
+
+        for nurse_id_str, day_map in off_requests.items():
+            nurse_id  = int(nurse_id_str)
+            nurse_idx = next((i for i,n in enumerate(self.nurses) if n.id == nurse_id), None)
+            if nurse_idx is None:
+                print(f"[OFF] 경고: ID {nurse_id} 간호사 없음");  continue
+
+            valid_days = []
+            for day_str, delta in day_map.items():
+                d = int(day_str)
+                if 1 <= d <= self.num_days:
+                    valid_days.append(d)
             
             if not valid_days:
                 continue
             
+            nurse = self.nurses[nurse_idx]
             if not nurse.can_take_off(len(valid_days)):
-                print(f"경고: {nurse.name} 간호사는 충분한 휴무일이 없습니다 "
-                      f"(요청: {len(valid_days)}일, 가능: {nurse.remaining_off_days}일)")
+                print(f"[OFF] 경고: {nurse.name} – 잔여 휴무 부족 "
+                    f"(요청 {len(valid_days)}, 가능 {nurse.remaining_off_days})")
                 continue
-          
-            off_idx = self.config.shift_types.index('OFF')
-            for day in valid_days:
-                # 선호 휴무일에 더 높은 가중치 부여 (4에서 10으로 증가)
-                self.preference_matrix[nurse_idx, day, off_idx] = 10
-            nurse.update_off_days(len(valid_days))
+
+            # ★ 가중치 반영
+            for d in valid_days:
+                day_idx = d-1
+                delta   = day_map[str(d)]
+                self.preference_matrix[nurse_idx, day_idx, off_idx] = base_weight + delta
+
+        nurse.update_off_days(len(valid_days))
             
-    def apply_shift_preferences(self, shift_preferences: Dict[str, Dict[str, List[int]]]):
-        """간호사의 특정 근무 유형(D, E, N) 선호도를 적용합니다.
-        
-        Args:
-            shift_preferences: 간호사 ID를 근무 유형별 선호 날짜 목록에 매핑하는 딕셔너리
-                예: {"1": {"D": [4, 5], "E": [10, 11]}, "2": {"N": [20, 21]}}
+    def apply_shift_preferences(self, shift_preferences: Dict[str, Dict[str, Dict[str, float]]]):
+        """
+        간호사의 특정 근무 유형(D, E, N)에 대한 날짜별 선호도를 반영합니다.
+
+        shift_preferences 예시:
+        {
+            "1": {
+                "D": {"4": 1.0, "5": 3.2},
+                "E": {"10": 1.0, "11": 1.5}
+            }
+        }
         """
         print("근무 유형 선호도 적용 중...")
         for nurse_id_str, shifts in shift_preferences.items():
@@ -158,20 +181,20 @@ class RosterSystem:
             if nurse_idx is None:
                 print(f"경고: ID {nurse_id}인 간호사를 찾을 수 없습니다.")
                 continue
-                
-            for shift_type, days in shifts.items():
+            
+            for shift_type, day_weight_map in shifts.items():
                 if shift_type not in self.config.shift_types:
                     print(f"경고: 유효하지 않은 근무 유형: {shift_type}")
                     continue
-                    
-                shift_idx = self.config.shift_types.index(shift_type)
-                # 설정에서 해당 근무 유형의 가중치 가져오기
-                weight = self.config.shift_preference_weights.get(shift_type, 5.0) if hasattr(self.config, 'shift_preference_weights') else 5.0
                 
-                for day in days:
+                shift_idx = self.config.shift_types.index(shift_type)
+                default_weight = self.config.shift_preference_weights.get(shift_type, 5.0)
+
+                for day_str, delta in day_weight_map.items():
+                    day = int(day_str)
                     if 1 <= day <= self.num_days:
-                        day_idx = day - 1  # 0부터 시작하는 인덱싱으로 변환
-                        self.preference_matrix[nurse_idx, day_idx, shift_idx] = weight
+                        day_idx = day - 1
+                        self.preference_matrix[nurse_idx, day_idx, shift_idx] = default_weight + delta
                         
         print("근무 유형 선호도 적용 완료")
         
@@ -473,6 +496,28 @@ class RosterSystem:
         print("\nStarting global optimization with CP-SAT solver...")
         start_time = time.time()
         
+        # Get shift requirement priority
+        shift_req_priority = getattr(self.config, 'shift_requirement_priority', 0.8)
+        print(f"Shift requirement priority: {shift_req_priority:.2f}")
+        
+        # 가중치 계산 로직 개선 - 비선형 변환으로 더 효과적인 제어 
+        # Higher priority → higher staffing penalty and lower preference boost
+        staffing_penalty_base = 2000 
+        staffing_penalty_weight = int(staffing_penalty_base * (shift_req_priority ** 2))
+        
+        # 선호도에 대한 가중치는 요구사항 우선순위에 반비례하게 설정
+        # For preferences: non-linear inverse effect to create stronger contrast
+        pref_boost_min = 0.8
+        pref_boost_max = 2.5
+        preference_boost_factor = pref_boost_min + (pref_boost_max - pref_boost_min) * ((1 - shift_req_priority) ** 1.5)
+        
+        # 요구사항 우선순위가 극단적으로 높은 경우에 대한 특별 처리
+        if shift_req_priority > 0.95:
+            staffing_penalty_weight = int(staffing_penalty_base * 5)  # 매우 높은 패널티
+            preference_boost_factor = 0.5  # 선호도 가중치 크게 감소
+        
+        print(f"Dynamic weights: staffing penalty={staffing_penalty_weight}, preference boost={preference_boost_factor:.2f}")
+        
         # Create the model
         model = cp_model.CpModel()
         off_idx = self.config.shift_types.index('OFF')
@@ -504,7 +549,7 @@ class RosterSystem:
             for day in range(self.num_days):
                 model.AddExactlyOne(x[n_idx, day, s_idx] for s_idx in range(len(self.config.shift_types)))
         
-        # 3. Add staffing requirements - 이 부분은 소프트 제약으로 변경 (위반 시 패널티 적용)
+        # 3. Add staffing requirements - 소프트 제약으로 구현 (위반 시 패널티 적용)
         staffing_penalty_vars = []
         for day in range(self.num_days):
             for shift, required in self.config.daily_shift_requirements.items():
@@ -517,7 +562,7 @@ class RosterSystem:
                 model.Add(shortage >= required - num_assigned)
                 staffing_penalty_vars.append(shortage)
         
-        # 4. Add experience requirements - 이것도 소프트 제약으로 변경
+        # 4. Add experience requirements - 소프트 제약으로 구현
         exp_penalty_vars = []
         for day in range(self.num_days):
             for shift in ['D', 'E', 'N']:
@@ -541,7 +586,7 @@ class RosterSystem:
                     # Force day shift assignment to be 0 for night nurses
                     model.Add(x[n_idx, day, d_idx] == 0)
         
-        # 6. Add consecutive work days constraint - 소프트 제약으로 변경
+        # 6. Add consecutive work days constraint - 소프트 제약으로 구현
         consecutive_penalty_vars = []
         for n_idx in range(len(self.nurses)):
             for day in range(self.num_days - self.config.max_consecutive_work_days):
@@ -567,7 +612,7 @@ class RosterSystem:
         night_idx = self.config.shift_types.index('N')
         day_idx = self.config.shift_types.index('D')
         
-        # 7.1 Max consecutive nights - 소프트 제약으로 변경
+        # 7.1 Max consecutive nights - 소프트 제약으로 구현
         night_penalty_vars = []
         for n_idx in range(len(self.nurses)):
             for day in range(self.num_days - self.config.max_consecutive_nights):
@@ -584,7 +629,7 @@ class RosterSystem:
                 # If worked night shift yesterday, can't work day shift today
                 model.Add(x[n_idx, day, day_idx] <= 1 - x[n_idx, day-1, night_idx])
         
-        # 7.3 Monthly night shift limit - 소프트 제약으로 변경
+        # 7.3 Monthly night shift limit - 소프트 제약으로 구현
         monthly_night_penalty_vars = []
         for n_idx in range(len(self.nurses)):
             total_nights = sum(x[n_idx, day, night_idx] for day in range(self.num_days))
@@ -622,36 +667,48 @@ class RosterSystem:
         # 10. Objective function: maximize preference satisfaction with adjusted weights
         objective_terms = []
         
-        # 10.1 Preference satisfaction - 가중치 대폭 증가, 특히 OFF 선호도
+        # 10.1 Preference satisfaction with dynamic weight scaling
+        # 선호도 가중치도 기본값을 높여서 더 강한 값을 가지도록 조정
+        preference_base_multiplier = int(400 * preference_boost_factor)  # 기본 선호도 가중치 증가
+        off_preference_multiplier = int(800 * preference_boost_factor)   # 휴무 선호도 가중치 증가
+        
         for n_idx in range(len(self.nurses)):
             for day in range(self.num_days):
                 for s_idx, shift in enumerate(self.config.shift_types):
-                    # 선호 근무 유형에 대한 가중치 계산
-                    if s_idx == off_idx and self.preference_matrix[n_idx, day, s_idx] >= 4:
+                    # Get base and current preference values
+                    base_weight = self.config.shift_preference_weights.get(shift, 5.0)
+                    pref_value = self.preference_matrix[n_idx, day, s_idx]
+                    
+                    # 선호 근무 유형에 대한 가중치 계산 (동적 가중치 적용)
+                    if s_idx == off_idx and pref_value > 0:
                         # 선호 휴무일에 매우 높은 가중치 적용
-                        pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 1000)
+                        # 선호도 값을 기반으로 비선형 점수 계산 (선호도 차이를 더 크게 만듦)
+                        pref_score = int((pref_value ** 1.5) * off_preference_multiplier)
                     else:
                         # 다른 근무 유형에 대한 선호도 점수 계산 (D, E, N 선호도 반영)
-                        weight = self.config.shift_preference_weights.get(shift, 1.0) if hasattr(self.config, 'shift_preference_weights') else 1.0
-                        pref_score = int(self.preference_matrix[n_idx, day, s_idx] * 100 * weight)
+                        # 비선형 변환으로 높은 선호도에 보너스 부여
+                        pref_score = int((pref_value ** 1.3) * preference_base_multiplier)
                     
                     objective_terms.append(pref_score * x[n_idx, day, s_idx])
         
-        # 10.2 Night nurse specialization bonus
+        # 10.2 Night nurse specialization bonus - 동적 가중치 적용
+        night_nurse_bonus = int(500 * preference_boost_factor)
         for n_idx, nurse in enumerate(self.nurses):
             if nurse.is_night_nurse:
                 # Bonus for night nurses working night shifts
-                night_bonus = sum(200 * x[n_idx, day, night_idx] for day in range(self.num_days))
+                night_bonus = sum(night_nurse_bonus * x[n_idx, day, night_idx] for day in range(self.num_days))
                 objective_terms.append(night_bonus)
                 
-        # 10.3 간호사 페어링 선호도 반영
+        # 10.3 간호사 페어링 선호도 반영 - 동적 가중치 적용
+        pair_weight_multiplier = int(300 * preference_boost_factor)
+        
         if hasattr(self, 'pair_matrix'):
             # 함께 일하기 선호도 반영
             for n1 in range(len(self.nurses)):
                 for n2 in range(n1 + 1, len(self.nurses)):
                     # 함께 일하기 선호도
                     if self.pair_matrix["together"][n1, n2] > 0:
-                        weight = int(self.pair_matrix["together"][n1, n2] * 100)
+                        weight = int(self.pair_matrix["together"][n1, n2] * pair_weight_multiplier)
                         for day in range(self.num_days):
                             for shift in self.config.daily_shift_requirements.keys():
                                 s_idx = self.config.shift_types.index(shift)
@@ -665,7 +722,7 @@ class RosterSystem:
                                 
                     # 따로 일하기 선호도
                     if self.pair_matrix["apart"][n1, n2] > 0:
-                        weight = int(self.pair_matrix["apart"][n1, n2] * 100)
+                        weight = int(self.pair_matrix["apart"][n1, n2] * pair_weight_multiplier)
                         for day in range(self.num_days):
                             # n1과 n2가 다른 교대에 배정될 때 보너스
                             # 각 근무 유형 쌍에 대해
@@ -683,7 +740,7 @@ class RosterSystem:
                                     model.Add(apart_var == 0).OnlyEnforceIf([x[n2, day, s2_idx].Not()])
                                     objective_terms.append(weight * apart_var)
         
-        # 10.4 Workload balance penalty - Simplified to avoid non-affine expressions
+        # 10.4 Workload balance - Simplified to avoid non-affine expressions
         # Calculate total work days for each nurse directly
         off_idx = self.config.shift_types.index('OFF')
         
@@ -707,43 +764,64 @@ class RosterSystem:
             allowed_off = nurse.remaining_off_days
             model.Add(total_off <= allowed_off)
             
-            # 최소 휴무일 제약 완화 (적어도 남은 휴무일의 60%는 사용하도록)
-            min_off = int(allowed_off * 0.6)  # 80%에서 60%로 완화
+            # 최소 휴무일 제약 완화 (남은 휴무일의 일부는 사용하도록)
+            min_off = int(allowed_off * 0.6)  # 60% 정도는 사용하도록 유도
             min_off_shortage = model.NewIntVar(0, allowed_off, f'min_off_shortage_n{n_idx}')
             model.Add(min_off_shortage >= min_off - total_off)
             objective_terms.append(-50 * min_off_shortage)  # 최소 휴무일 부족에 대한 패널티
 
-        # Add fairness constraints
+        # Add fairness constraints (동적 가중치 적용)
+        fairness_weight = int(20 * preference_boost_factor)
         min_work_days = (self.num_days * sum(self.config.daily_shift_requirements.values())) // (len(self.nurses) * 2)
         for n_idx in range(len(self.nurses)):
-            # Encourage at least minimum workdays (가중치 감소)
-            objective_terms.append(5 * work_days[n_idx])  # 10에서 5로 감소
+            # Encourage at least minimum workdays
+            objective_terms.append(fairness_weight * work_days[n_idx])
             
-            # But penalize excessive workdays (가중치 감소)
+            # But penalize excessive workdays
             excess_var = model.NewIntVar(0, self.num_days, f'excess_n{n_idx}')
             model.Add(excess_var >= work_days[n_idx] - (self.num_days - min_work_days))
-            objective_terms.append(-10 * excess_var)  # 20에서 10으로 감소
+            objective_terms.append(-fairness_weight * 2 * excess_var)
         
-        # 제약 위반에 대한 패널티 추가 (소프트 제약)
-        # 인원 요구사항 위반 패널티 (높은 가중치)
-        for var in staffing_penalty_vars:
-            objective_terms.append(-800 * var)  # 인원 부족은 매우 큰 패널티
+        # 제약 위반에 대한 패널티 추가 (소프트 제약) - 동적 가중치 적용
+        # 인원 요구사항 위반 패널티 - 시프트별 중요도에 따라 차등 적용
+        for idx, var in enumerate(staffing_penalty_vars):
+            # 현재 이 패널티 변수가 어떤 시프트에 대한 것인지 파악
+            day_idx = idx // len(self.config.daily_shift_requirements)
+            shift_idx = idx % len(self.config.daily_shift_requirements)
+            shifts = list(self.config.daily_shift_requirements.keys())
             
-        # 경력 간호사 요구사항 위반 패널티
+            # 기본 패널티에 시프트별 추가 가중치
+            shift_penalty_factor = 1.0
+            if shift_idx < len(shifts):
+                current_shift = shifts[shift_idx]
+                # 야간 시프트는 더 중요하게 여김
+                if current_shift == 'N':
+                    shift_penalty_factor = 1.2
+            
+            # 패널티 적용 - 높은 값으로 조정
+            penalty = -int(staffing_penalty_weight * shift_penalty_factor) * var
+            objective_terms.append(penalty)
+        
+        # 경력 간호사 요구사항 위반 패널티 - 강화
+        exp_penalty_weight = int(500 * shift_req_priority)
         for var in exp_penalty_vars:
-            objective_terms.append(-200 * var)
-            
-        # 연속 근무일 초과 패널티
+            objective_terms.append(-exp_penalty_weight * var)
+        
+        # 건강 관련 제약은 shift_req_priority와 관계없이 항상 높은 가중치 유지
+        # 연속 근무일 초과 패널티 - 매우 높은 가중치 유지 
+        consecutive_penalty_weight = 600
         for var in consecutive_penalty_vars:
-            objective_terms.append(-300 * var)
-            
-        # 연속 야간 근무 초과 패널티
+            objective_terms.append(-consecutive_penalty_weight * var)
+        
+        # 연속 야간 근무 초과 패널티 - 매우 높은 가중치 유지
+        night_penalty_weight = 600
         for var in night_penalty_vars:
-            objective_terms.append(-300 * var)
-            
+            objective_terms.append(-night_penalty_weight * var)
+        
         # 월간 야간 근무 초과 패널티
+        monthly_night_penalty = int(400 * shift_req_priority)
         for var in monthly_night_penalty_vars:
-            objective_terms.append(-200 * var)
+            objective_terms.append(-monthly_night_penalty * var)
         
         # Set the objective
         model.Maximize(sum(objective_terms))
@@ -792,7 +870,17 @@ class RosterSystem:
             else:
                 print("Found feasible solution (may not be optimal)")
                 
-            # 결과 분석: 각 간호사별 선호 휴무일이 반영되었는지 확인
+            # 일일 근무 배정 분석
+            for day in range(self.num_days):
+                for shift in self.config.daily_shift_requirements.keys():
+                    s_idx = self.config.shift_types.index(shift)
+                    required = self.config.daily_shift_requirements[shift]
+                    assigned = sum(self.roster[n_idx, day, s_idx] for n_idx in range(len(self.nurses)))
+                    
+                    if assigned != required:
+                        print(f"날짜 {day+1}, {shift} 근무: {assigned}명 배정됨 (요구: {required}명)")
+                
+            # 선호 휴무일 반영 분석
             off_idx = self.config.shift_types.index('OFF')
             total_preferences = 0
             satisfied_preferences = 0

@@ -1,236 +1,239 @@
 {
   "constraint_violations": {
-    "night": 17
+    "shift_requirement": 10,
+    "experience": 2,
+    "night": 39,
+    "consecutive": 22
   },
   "workload_distribution": {
     "per_nurse": {
       "Head Nurse Kim": {
-        "total": 15.0,
-        "day": 7.0,
-        "evening": 6.0,
-        "night": 2.0,
-        "off": 16.0
+        "total": 21.0,
+        "day": 8.0,
+        "evening": 7.0,
+        "night": 6.0,
+        "off": 10.0
       },
       "Night Nurse Lee": {
-        "total": 22.0,
+        "total": 23.0,
         "day": 0.0,
-        "evening": 7.0,
-        "night": 15.0,
-        "off": 9.0
+        "evening": 6.0,
+        "night": 17.0,
+        "off": 8.0
       },
       "Night Nurse Jung": {
-        "total": 22.0,
+        "total": 24.0,
         "day": 0.0,
-        "evening": 7.0,
-        "night": 15.0,
-        "off": 9.0
+        "evening": 4.0,
+        "night": 20.0,
+        "off": 7.0
       },
       "Night Nurse Cho": {
-        "total": 22.0,
+        "total": 23.0,
         "day": 0.0,
-        "evening": 7.0,
+        "evening": 8.0,
         "night": 15.0,
-        "off": 9.0
+        "off": 8.0
       },
       "Senior Nurse Park": {
-        "total": 19.0,
-        "day": 7.0,
-        "evening": 11.0,
-        "night": 1.0,
-        "off": 12.0
+        "total": 21.0,
+        "day": 8.0,
+        "evening": 9.0,
+        "night": 4.0,
+        "off": 10.0
       },
       "Senior Nurse Yoon": {
-        "total": 19.0,
+        "total": 22.0,
         "day": 9.0,
-        "evening": 7.0,
-        "night": 3.0,
-        "off": 12.0
+        "evening": 8.0,
+        "night": 5.0,
+        "off": 9.0
       },
       "Nurse Choi": {
-        "total": 15.0,
-        "day": 8.0,
-        "evening": 5.0,
-        "night": 2.0,
-        "off": 16.0
+        "total": 23.0,
+        "day": 7.0,
+        "evening": 11.0,
+        "night": 5.0,
+        "off": 8.0
       },
       "Nurse Han": {
-        "total": 22.0,
-        "day": 12.0,
-        "evening": 8.0,
-        "night": 2.0,
-        "off": 9.0
+        "total": 23.0,
+        "day": 7.0,
+        "evening": 10.0,
+        "night": 6.0,
+        "off": 8.0
       },
       "Nurse Song": {
         "total": 20.0,
-        "day": 6.0,
-        "evening": 11.0,
-        "night": 3.0,
+        "day": 12.0,
+        "evening": 3.0,
+        "night": 5.0,
         "off": 11.0
       },
       "Junior Nurse Kang": {
-        "total": 14.0,
-        "day": 8.0,
-        "evening": 5.0,
-        "night": 1.0,
-        "off": 17.0
+        "total": 24.0,
+        "day": 12.0,
+        "evening": 7.0,
+        "night": 5.0,
+        "off": 7.0
       },
       "Junior Nurse Lim": {
-        "total": 15.0,
-        "day": 7.0,
-        "evening": 7.0,
-        "night": 1.0,
-        "off": 16.0
-      },
-      "Nurse Moon": {
         "total": 21.0,
-        "day": 14.0,
-        "evening": 7.0,
-        "night": 0.0,
+        "day": 13.0,
+        "evening": 6.0,
+        "night": 2.0,
         "off": 10.0
       },
-      "Nurse Oh": {
+      "Nurse Moon": {
         "total": 22.0,
-        "day": 15.0,
-        "evening": 5.0,
-        "night": 2.0,
+        "day": 10.0,
+        "evening": 9.0,
+        "night": 3.0,
         "off": 9.0
+      },
+      "Nurse Oh": {
+        "total": 23.0,
+        "day": 10.0,
+        "evening": 11.0,
+        "night": 2.0,
+        "off": 8.0
       }
     },
     "statistics": {
-      "mean_shifts": 19.076923076923077,
-      "std_shifts": 3.074999398662567,
-      "min_shifts": 14.0,
-      "max_shifts": 22.0
+      "mean_shifts": 22.307692307692307,
+      "std_shifts": 1.2015768732164085,
+      "min_shifts": 20.0,
+      "max_shifts": 24.0
     }
   },
   "shift_patterns": {
     "consecutive_shifts": {
       "day": {
-        "max": 4,
-        "avg": 2.1538461538461537,
-        "std": 1.3499945211372495
+        "max": 5,
+        "avg": 2.3846153846153846,
+        "std": 1.5461347109416754
       },
       "evening": {
         "max": 3,
-        "avg": 1.7692307692307692,
-        "std": 0.5756395979652218
+        "avg": 2.3846153846153846,
+        "std": 0.737820234355803
       },
       "night": {
-        "max": 2,
-        "avg": 1.2307692307692308,
-        "std": 0.5756395979652218
+        "max": 4,
+        "avg": 2.1538461538461537,
+        "std": 0.9483713850721502
       },
       "off": {
         "max": 4,
-        "avg": 2.6923076923076925,
-        "std": 0.9910845174403945
+        "avg": 2.5384615384615383,
+        "std": 0.8426500884694864
       }
     },
     "weekend_distribution": {
       "per_nurse": {
-        "Head Nurse Kim": 0,
-        "Night Nurse Lee": 4,
+        "Head Nurse Kim": 1,
+        "Night Nurse Lee": 8,
         "Night Nurse Jung": 7,
-        "Night Nurse Cho": 8,
-        "Senior Nurse Park": 6,
-        "Senior Nurse Yoon": 5,
-        "Nurse Choi": 5,
-        "Nurse Han": 4,
-        "Nurse Song": 4,
-        "Junior Nurse Kang": 6,
-        "Junior Nurse Lim": 4,
+        "Night Nurse Cho": 5,
+        "Senior Nurse Park": 3,
+        "Senior Nurse Yoon": 4,
+        "Nurse Choi": 6,
+        "Nurse Han": 5,
+        "Nurse Song": 6,
+        "Junior Nurse Kang": 8,
+        "Junior Nurse Lim": 8,
         "Nurse Moon": 5,
-        "Nurse Oh": 6
+        "Nurse Oh": 7
       },
       "overall": {
         "total_weekends": 8,
         "nurses_per_weekend": [
-          8,
-          8,
-          8,
-          8,
-          8,
-          8,
-          8,
-          8
+          9,
+          9,
+          9,
+          9,
+          10,
+          9,
+          9,
+          9
         ]
       }
     },
     "shift_transitions": {
-      "D->D": 33,
-      "D->E": 17,
-      "D->N": 3,
-      "D->OFF": 37,
-      "E->D": 20,
-      "E->E": 16,
-      "E->N": 18,
-      "E->OFF": 36,
+      "D->D": 44,
+      "D->E": 12,
+      "D->N": 12,
+      "D->OFF": 25,
+      "E->D": 18,
+      "E->E": 33,
+      "E->N": 23,
+      "E->OFF": 22,
       "N->D": 0,
-      "N->E": 19,
-      "N->N": 14,
-      "N->OFF": 27,
-      "OFF->D": 37,
-      "OFF->E": 38,
-      "OFF->N": 25,
-      "OFF->OFF": 50
+      "N->E": 29,
+      "N->N": 34,
+      "N->OFF": 29,
+      "OFF->D": 31,
+      "OFF->E": 22,
+      "OFF->N": 23,
+      "OFF->OFF": 33
     }
   },
   "nurse_satisfaction": {
     "per_nurse": {
       "Head Nurse Kim": {
-        "score": 1.2580645161290323,
-        "preferred_shifts_ratio": 1.2580645161290323
+        "score": 3.8806451612903228,
+        "preferred_shifts_ratio": 3.8806451612903228
       },
       "Night Nurse Lee": {
-        "score": 1.6193548387096774,
-        "preferred_shifts_ratio": 1.6193548387096774
+        "score": 3.822580645161292,
+        "preferred_shifts_ratio": 3.822580645161292
       },
       "Night Nurse Jung": {
-        "score": 1.6193548387096774,
-        "preferred_shifts_ratio": 1.6193548387096774
+        "score": 3.364516129032259,
+        "preferred_shifts_ratio": 3.364516129032259
       },
       "Night Nurse Cho": {
-        "score": 1.6193548387096774,
-        "preferred_shifts_ratio": 1.6193548387096774
+        "score": 3.1032258064516136,
+        "preferred_shifts_ratio": 3.1032258064516136
       },
       "Senior Nurse Park": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 3.0903225806451617,
+        "preferred_shifts_ratio": 3.0903225806451617
       },
       "Senior Nurse Yoon": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 3.0483870967741935,
+        "preferred_shifts_ratio": 3.0483870967741935
       },
       "Nurse Choi": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 2.8064516129032264,
+        "preferred_shifts_ratio": 2.8064516129032264
       },
       "Nurse Han": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 3.1032258064516136,
+        "preferred_shifts_ratio": 3.1032258064516136
       },
       "Nurse Song": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 2.77741935483871,
+        "preferred_shifts_ratio": 2.77741935483871
       },
       "Junior Nurse Kang": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 2.8225806451612905,
+        "preferred_shifts_ratio": 2.8225806451612905
       },
       "Junior Nurse Lim": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 2.883870967741936,
+        "preferred_shifts_ratio": 2.883870967741936
       },
       "Nurse Moon": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 2.583870967741935,
+        "preferred_shifts_ratio": 2.583870967741935
       },
       "Nurse Oh": {
-        "score": 1.0,
-        "preferred_shifts_ratio": 1.0
+        "score": 2.4322580645161294,
+        "preferred_shifts_ratio": 2.4322580645161294
       }
     },
-    "average": 1.1627791563275436
+    "average": 3.0553349875930524
   },
   "coverage_metrics": {
     "daily": {
@@ -246,8 +249,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -263,8 +266,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -280,8 +283,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -297,8 +300,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -314,8 +317,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -331,8 +334,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -348,8 +351,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -361,20 +364,20 @@
         },
         "E": {
           "required": 3,
-          "actual": 3.0,
-          "difference": 0.0
+          "actual": 4.0,
+          "difference": 1.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
       "8": {
         "D": {
           "required": 3,
-          "actual": 3.0,
-          "difference": 0.0
+          "actual": 4.0,
+          "difference": 1.0
         },
         "E": {
           "required": 3,
@@ -382,8 +385,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -399,8 +402,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -416,8 +419,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -433,8 +436,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -450,8 +453,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -467,8 +470,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -484,8 +487,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -501,8 +504,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -514,12 +517,12 @@
         },
         "E": {
           "required": 3,
-          "actual": 3.0,
-          "difference": 0.0
+          "actual": 4.0,
+          "difference": 1.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -531,12 +534,12 @@
         },
         "E": {
           "required": 3,
-          "actual": 3.0,
-          "difference": 0.0
+          "actual": 5.0,
+          "difference": 2.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -552,16 +555,16 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
-          "difference": 0.0
+          "required": 3,
+          "actual": 4.0,
+          "difference": 1.0
         }
       },
       "19": {
         "D": {
           "required": 3,
-          "actual": 3.0,
-          "difference": 0.0
+          "actual": 4.0,
+          "difference": 1.0
         },
         "E": {
           "required": 3,
@@ -569,8 +572,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -586,8 +589,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -603,16 +606,16 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
       "22": {
         "D": {
           "required": 3,
-          "actual": 3.0,
-          "difference": 0.0
+          "actual": 4.0,
+          "difference": 1.0
         },
         "E": {
           "required": 3,
@@ -620,8 +623,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -633,12 +636,12 @@
         },
         "E": {
           "required": 3,
-          "actual": 3.0,
-          "difference": 0.0
+          "actual": 4.0,
+          "difference": 1.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -654,8 +657,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -667,12 +670,12 @@
         },
         "E": {
           "required": 3,
-          "actual": 3.0,
-          "difference": 0.0
+          "actual": 4.0,
+          "difference": 1.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -688,8 +691,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -705,8 +708,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -722,8 +725,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       },
@@ -739,9 +742,9 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
-          "difference": 0.0
+          "required": 3,
+          "actual": 4.0,
+          "difference": 1.0
         }
       },
       "30": {
@@ -756,8 +759,8 @@
           "difference": 0.0
         },
         "N": {
-          "required": 2,
-          "actual": 2.0,
+          "required": 3,
+          "actual": 3.0,
           "difference": 0.0
         }
       }
@@ -765,34 +768,34 @@
     "overall": {
       "D": {
         "required_total": 93,
-        "actual_total": 93.0,
-        "coverage_ratio": 1.0
+        "actual_total": 96.0,
+        "coverage_ratio": 1.032258064516129
       },
       "E": {
         "required_total": 93,
-        "actual_total": 93.0,
-        "coverage_ratio": 1.0
+        "actual_total": 99.0,
+        "coverage_ratio": 1.064516129032258
       },
       "N": {
-        "required_total": 62,
-        "actual_total": 62.0,
-        "coverage_ratio": 1.0
+        "required_total": 93,
+        "actual_total": 95.0,
+        "coverage_ratio": 1.021505376344086
       }
     }
   },
   "fairness_metrics": {
     "shift_distribution": {
       "D": {
-        "gini_coefficient": 0.36393713304339326,
-        "coefficient_of_variation": 0.6621421212189528
+        "gini_coefficient": 0.32371794433426826,
+        "coefficient_of_variation": 0.5998408353703321
       },
       "E": {
-        "gini_coefficient": 0.13399503534779475,
-        "coefficient_of_variation": 0.2620657549882568
+        "gini_coefficient": 0.17560217329628847,
+        "coefficient_of_variation": 0.3113340405539887
       },
       "N": {
-        "gini_coefficient": 0.5558312538541585,
-        "coefficient_of_variation": 1.1865531714677109
+        "gini_coefficient": 0.3870445291165566,
+        "coefficient_of_variation": 0.7822122190803916
       }
     },
     "weekend_fairness": {},
