@@ -714,14 +714,14 @@ def main():
     
     # 위반 사항 확인
     violations = roster_system._find_violations()
-    if violations:
-        print(f"\n{len(violations)}개의 제약 위반 사항 발견:")
-        for v in violations[:10]:  # 처음 10개만 표시
-            print(f"  - {v}")
-        if len(violations) > 10:
-            print(f"  ... 및 {len(violations) - 10}개 더 있음")
-    else:
-        print("\n모든 제약 조건 충족!")
+    # if violations:
+    #     print(f"\n{len(violations)}개의 제약 위반 사항 발견:")
+    #     for v in violations[:10]:  # 처음 10개만 표시
+    #         print(f"  - {v}")
+    #     if len(violations) > 10:
+    #         print(f"  ... 및 {len(violations) - 10}개 더 있음")
+    # else:
+    #     print("\n모든 제약 조건 충족!")
     
     # OFF 선호도 만족도 계산 및 출력
     off_satisfaction = roster_system._calculate_off_preference_satisfaction()
