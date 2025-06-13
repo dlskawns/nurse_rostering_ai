@@ -1,11 +1,12 @@
 import operator
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, Annotated, List
-from agents.query_analyzer_agent import query_analyzer
-from agents.shift_analyzer_agent import create_shift_analyzer
-from agents.preference_analyzer_agent import create_preference_analyzer
+from app.agents.query_analyzer_agent import query_analyzer
+from app.agents.shift_analyzer_agent import create_shift_analyzer
+from app.agents.preference_analyzer_agent import create_preference_analyzer
 from langgraph.prebuilt import create_react_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
+# from agents.collector_agent import collector
 
 def collector(state):
     """

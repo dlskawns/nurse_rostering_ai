@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>간호사 근무 희망사항 제출</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>간호사 근무 희망사항</h1>
+
+        <div id="nurse-view">
+            <h2>간호사 설정</h2>
+            <div class="form-group">
+                <label for="wanted-input">희망 근무 내용 (Wanted)</label>
+                <textarea id="wanted-input" placeholder="예: 주말 출근은 최대한 N으로 하고싶어요."></textarea>
+            </div>
+            <button onclick="submitRequest()">근무 희망 제출</button>
+        </div>
+
+        <div class="loader" id="loader"></div>
+
+        <div id="result-container">
+            <h2>처리 결과</h2>
+            <pre id="result-json"></pre>
+        </div>
+    </div>
+
+    <script>
+        // test_data_shift.json의 'nurses' 데이터를 하드코딩합니다.
+        const nurseSchema = [
+            { "id": 1,  "name": "Head Nurse Kim",   "experience_years": 12, "is_head_nurse": true,  "head_nurse_off_pattern": "weekend", "remaining_off_days": 0, "personal_off_adjustment": 1 },
+            { "id": 2,  "name": "Night Nurse Lee",  "experience_years": 8,  "is_night_nurse": true, "remaining_off_days": 0, "personal_off_adjustment": -1 },
+            { "id": 3,  "name": "Night Nurse Jung", "experience_years": 7,  "is_night_nurse": true, "remaining_off_days": 0, "personal_off_adjustment": 0 },
+            { "id": 4,  "name": "Night Nurse Cho",  "experience_years": 6,  "is_night_nurse": true, "remaining_off_days": 0, "personal_off_adjustment": 0 },
+            { "id": 5,  "name": "Senior Nurse Park","experience_years": 5,  "remaining_off_days": 0, "personal_off_adjustment": 2 },
+            { "id": 6,  "name": "Senior Nurse Yoon","experience_years": 5,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
+            { "id": 7,  "name": "Nurse Choi",       "experience_years": 4,  "remaining_off_days": 0, "personal_off_adjustment": -1 },
+            { "id": 8,  "name": "Nurse Han",        "experience_years": 3,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
+            { "id": 9,  "name": "Nurse Song",       "experience_years": 3,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
+            { "id": 10, "name": "Junior Nurse Kang","experience_years": 2,  "remaining_off_days": 0, "personal_off_adjustment": 1 },
+            { "id": 11, "name": "Junior Nurse Lim", "experience_years": 2,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
+            { "id": 12, "name": "Nurse Moon",       "experience_years": 3,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
+            { "id": 13, "name": "Nurse Oh",         "experience_years": 2,  "remaining_off_days": 0, "personal_off_adjustment": 0 }
+        ];
+
+        async function submitRequest() {
+            const wantedInput = document.getElementById('wanted-input').value;
+            const resultContainer = document.getElementById('result-container');
+            const resultJson = document.getElementById('result-json');
+            const loader = document.getElementById('loader');
+
+            if (!wantedInput) {
+                alert('희망 근무 내용을 입력해주세요.');
+                return;
+            }
+
+            const payload = {
+                request: wantedInput,
+                schema: nurseSchema
+            };
+
+            // Show loader and hide previous result
+            loader.style.display = 'block';
+            resultContainer.style.display = 'none';
+
+            try {
+                const response = await fetch('/roster/invoke', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'API 요청에 실패했습니다.');
+                }
+
+                resultJson.textContent = JSON.stringify(data, null, 2);
+                resultContainer.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error:', error);
+                resultJson.textContent = `오류가 발생했습니다: ${error.message}`;
+                resultContainer.style.display = 'block';
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html> 
