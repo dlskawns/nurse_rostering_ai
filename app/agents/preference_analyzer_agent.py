@@ -107,7 +107,7 @@ class preferenceAnalyzerPrompt:
             # OUTPUT:
             """
 
-def preference_analyzer(state):
+async def preference_analyzer(state):
     client = state['model']
     phase = state['phase']
     query = state['requests'][phase]
@@ -117,7 +117,7 @@ def preference_analyzer(state):
     # query= "정쌤은 무조건 다 겹치게 해주세요"
     preference_analyzer_prompt = preferenceAnalyzerPrompt(data, query)
 
-
+    print('\n\n\n\n\n\n완료121212\n\n\n\n\n\n')
     response = client.models.generate_content(
     model="gemini-2.0-flash",
     contents=[preference_analyzer_prompt.human],                       # or [pil_img, information]
@@ -127,6 +127,7 @@ def preference_analyzer(state):
         system_instruction=preference_analyzer_prompt.system
     ),
     )   
+    print('\n\n\n\n\n\n완료131313\n\n\n\n\n\n')
     parts = response.candidates[0].content.parts
     print('----------------preference;;;;;;;;;;;;;;;',json.loads(parts[0].text))
     json_answer = json.loads(parts[0].text)
@@ -134,7 +135,7 @@ def preference_analyzer(state):
     return {'preference_result': [json_answer]}
 
 
-def create_preference_analyzer(parent_state):
+async def create_preference_analyzer(parent_state):
     requests = parent_state['query_preference']         # Shift List ex. ["9/9: D", "9/10: D", "9/16: OFF", "9/9, 9/10, 9/16 외에 웬만하면 E로 줘"]
     schema = parent_state['schema']
     client = parent_state['model']
@@ -149,9 +150,9 @@ def create_preference_analyzer(parent_state):
     graph.set_entry_point('init_data')
     for n in range(n_requests):
         def create_preference_node(n):
-            def wrapped_shift(state):
+            async def wrapped_shift(state):
                 state['phase']= n
-                return preference_analyzer(state)
+                return await preference_analyzer(state)
             return wrapped_shift
         graph.add_node('preference_analyzer' +str(n), create_preference_node(n))
         graph.add_edge('init_data', 'preference_analyzer' +str(n))
@@ -160,6 +161,6 @@ def create_preference_analyzer(parent_state):
     graph.add_edge('collector', END)
     graph_app = graph.compile()
 
-    result = graph_app.invoke({"requests": requests, "schema": schema, "model": client})
+    result = await graph_app.ainvoke({"requests": requests, "schema": schema, "model": client})
     return {"preference_results": [result]}
 

@@ -7,7 +7,7 @@ from google.genai import types
 import dotenv
 from langgraph.prebuilt import create_react_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
-
+import pprint
 dotenv.load_dotenv()
 
 print(dotenv.load_dotenv())
@@ -79,7 +79,7 @@ class queryAnalyzerPrompt:
         """
 
 
-def query_analyzer(state):
+async def query_analyzer(state):
     client = genai.Client()
 
     context = state['request']
@@ -99,6 +99,7 @@ def query_analyzer(state):
     parts = response.candidates[0].content.parts
     print(json.loads(parts[0].text))
     json_answer = json.loads(parts[0].text)
+    print('json_answer: ',json_answer)
     chat = json_answer['Chat']
     shift= json_answer['Shift']
     preference = json_answer['Preference']

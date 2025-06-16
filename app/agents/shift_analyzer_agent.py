@@ -1,17 +1,19 @@
 
 import json
 from pydantic import BaseModel
-from typing import List, TypedDict, Annotated, operator
+from typing import List, TypedDict, Annotated, operator, Dict
 from google import genai
 from google.genai import types
 from langgraph.graph import StateGraph, END
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
-
-
-# * 답변 시 알 수 없는 정보를 요구한다면, 아래 도구 목록을 참고해, 필요하다면 한 번에 하나의 tool 을 호출할 수 있습니다. 도구 호출이 적절치 않을 경우 직접 답변만 작성하세요.  
-#     {tools}
-# * 답변작성을 위한 processor 
+from langchain_google_genai import ChatGoogleGenerativeAI
+import os
+from langchain_core.messages import SystemMessage, HumanMessage
+            # * 답변 시 알 수 없는 정보를 요구한다면, 아래 도구 목록을 참고해, 필요하다면 한 번에 하나의 tool 을 호출할 수 있습니다. 
+            # 도구 호출이 적절치 않을 경우 직접 답변만 작성하세요.  
+            # {tools[0]}
+            # * 답변 작성을 위한 processor는 도구가 필요함을 캐치하고, 어떤 도구와 어떤 인자가 필요할 지 정확히 명시해야 합니다.
 
 
 def collector(state):
@@ -32,15 +34,16 @@ class ShiftSubgraph(TypedDict):
     # mcp_agent: object
     shift_result: Annotated[list, operator.add]
     model: object
+    mcp_tools: object
 
 class shiftResponse(TypedDict):
-    shift: str
-    date: List[int]
-    score: List[int]
+    shift: str 
+    date: List[int] 
+    score: List[int] 
 
 class shiftAnalyzer(BaseModel):
     processor: str
-    request_type: str
+    request_type: str 
     request_type_reason: str 
     request_importance: str 
     request_importance_reason: str 
@@ -99,14 +102,13 @@ class shiftAnalyzerPrompt:
             ```
             5. 처리 절차
 
-            발화에서 Request 유형과 중요도를 판정하고 이유를 기록.
+            * 발화에서 Request 유형과 중요도를 판정하고 이유를 기록.
+            * 중요도 점수 × 유형 Modifier 로 최종 weight 계산.
+            * 날짜/Shift 구체화 → result 채우기.
+            * (기간형 “5월 둘째 주” 등은 별도 날짜모듈에서 변환되었다고 가정)
+            * 해석 불가 문장·모호 표현은 request_type="other" 로.
 
-            중요도 점수 × 유형 Modifier 로 최종 weight 계산.
 
-            날짜/Shift 구체화 → result 채우기.
-            (기간형 “5월 둘째 주” 등은 별도 날짜모듈에서 변환되었다고 가정)
-
-            해석 불가 문장·모호 표현은 request_type="other" 로.
 
             ### 입력 예시
             “5월 12일은 아들 발표회니까 꼭 쉬고 싶어요”
@@ -127,7 +129,7 @@ class shiftAnalyzerPrompt:
                 "웬만하면 E로 줘"
 
             # OUTPUT:
-                {{"processor": "웬만하면이라는 기간이 확정되지 않는 상황으로 전체에 원하는 shift E를 부여",
+                {{"processor": "웬만하면이라는 기간이 확정되지 않는 상황이며, 5월은 31일이므로 31일 전체에 원하는 shift E를 부여",
                 "request_type": "keep",
                 "request_type_reason": "특별한 이유는 없지만, E로 달라고 하는 것을 볼 수 있음",
                 "request_importance": "1",
@@ -135,9 +137,7 @@ class shiftAnalyzerPrompt:
                 "result": {{
                     "shift": "E",
                     "date": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],
-                    "score":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-                    "
-
+                    "score":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]"
                 }}
                 }}
 
@@ -160,34 +160,42 @@ class shiftAnalyzerPrompt:
             # OUTPUT:
             """
 
-def shift_analyzer(state):
-
+async def shift_analyzer(state):
+    print('여기_shift')
     client = state['model']
     phase = state['phase']
     context = state['requests'][phase]
     # context = "일단 문선생님이랑은 무조건 따로 하고싶고, 천간호사랑 계속 같이 있고싶어요.. 진짜 많이 도와줘서 행복해요.. 그리고 웬만하면 D는 안하고 싶어요 ㅠ"
-
-    # tools = state['mcp_agent']
-    # print('\n\n\n\n\n\n',tools,'\n\n\n\n\n\n')
+    print('\n\n\n여까진옴\n\n\n')
+    tools = state['mcp_tools']
+    # print('\n\n\n\n\n\n',type(tools[0]),'\n\n\n\n\n\n')
     shift_analyzer_prompt = shiftAnalyzerPrompt(context)
+    # print('\n\n\n\n\n\n',shift_analyzer_prompt.human,'\n\n\n\n\n\n')
+    # print('\n\n\n\n\n\n',shift_analyzer_prompt.system,'\n\n\n\n\n\n')
+    agent = create_react_agent(client, tools, response_format=shiftAnalyzer)
+    # response = client.models.generate_content(
+    #     model="gemini-2.0-flash",
+    #     contents=[shift_analyzer_prompt.human],                       # or [pil_img, information]
+    #     config=types.GenerateContentConfig(
+    #         # response_mime_type="application/json",
+    #         # response_schema=shiftAnalyzer,      # ★ 핵심: Root 모델
+    #         system_instruction=shift_analyzer_prompt.system,
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=[shift_analyzer_prompt.human],                       # or [pil_img, information]
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=shiftAnalyzer,      # ★ 핵심: Root 모델
-            system_instruction=shift_analyzer_prompt.system,
-
-        ),
-    )
-    parts = response.candidates[0].content.parts
-    print(json.loads(parts[0].text))
-    json_answer = json.loads(parts[0].text)
-    return {"shift_result": [json_answer]}
+    #     ),
+    # )
+    print('\n\n\n\n\n\n완료11\n\n\n\n\n\n')
+    result = await agent.ainvoke({"messages": [SystemMessage(content=shift_analyzer_prompt.system), HumanMessage(content=shift_analyzer_prompt.human)]})
+    # parts = response.candidates[0].content.parts
+    print('\n\n\n\n\n\n완료\n\n\n\n\n\n')
+    sr: shiftAnalyzer = result["structured_response"]
+    print('\n\n\n\n\n\nsr: ',sr.result,'\n\n\n\n\n\n')
+    # print('\n\n\n\n\n\n',parts[0].text,'\n\n\n\n\n\n')
+    # print(json.loads(parts[0].text))
+    # json_answer = json.loads(parts[0].text)
+    return {"shift_result": [sr.result]}
 
 
-def create_shift_analyzer(parent_state):
+async def create_shift_analyzer(parent_state):
     mcp_client = MultiServerMCPClient(
         {
             "weather": {
@@ -196,14 +204,17 @@ def create_shift_analyzer(parent_state):
             }
         }
     )
-
-    print(mcp_client.get_tools())
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash",
+        temperature=0,
+        google_api_key=os.getenv("GOOGLE_API_KEY"),
+    )
+    # print('여기', mcp_client.get_tools())
     requests = parent_state['query_shift']         # Shift List ex. ["9/9: D", "9/10: D", "9/16: OFF", "9/9, 9/10, 9/16 외에 웬만하면 E로 줘"]
     client = parent_state['model']
 
-    import asyncio
-    # tools = asyncio.run(mcp_client.get_tools())
-
+    tools = await mcp_client.get_tools()
+    print('툴즈~~~', tools)
     n_requests = len(requests)
     if n_requests == 0:
         return {"shift_results": []}
@@ -213,9 +224,9 @@ def create_shift_analyzer(parent_state):
     graph.set_entry_point('init_data')
     for n in range(n_requests):
         def create_shift_node(n):
-            def wrapped_shift(state):
+            async def wrapped_shift(state):
                 state['phase']= n
-                return shift_analyzer(state)
+                return await shift_analyzer(state)
             return wrapped_shift
         graph.add_node('shift_analyzer' +str(n), create_shift_node(n))
         graph.add_edge('init_data', 'shift_analyzer' +str(n))
@@ -223,5 +234,5 @@ def create_shift_analyzer(parent_state):
     graph.add_edge('collector', END)
     graph_app = graph.compile()
 
-    result = graph_app.invoke({"requests": requests, "model": client})
+    result = await graph_app.ainvoke({"requests": requests, "model": llm, "mcp_tools": tools})
     return {"shift_results": [result]}

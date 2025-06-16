@@ -6,4 +6,4 @@ class RosterRequest(BaseModel):
     schema: List[Dict[str, Any]]
 
 class RosterResponse(BaseModel):
-    response: list
+    response: Any
