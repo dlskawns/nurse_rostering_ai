@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
@@ -19,8 +19,8 @@ router = APIRouter(
     tags=["auth"]
 )
 
-# This will look for the token in the cookie
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+# This was trying to read from the header, but we are using httpOnly cookies
+# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -59,7 +59,7 @@ async def logout(response: Response):
     return {"message": "Logout successful"}
 
 
-async def get_current_user_from_cookie(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def get_current_user_from_cookie(token: Optional[str] = Cookie(None, alias="access_token"), db: Session = Depends(get_db)):
     if token is None:
         return None
 

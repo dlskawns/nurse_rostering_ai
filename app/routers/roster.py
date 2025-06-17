@@ -1,13 +1,94 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, RedirectResponse
+from typing import Optional, List, Dict, Any
+
 from app.schemas.roster_schema import RosterRequest, RosterResponse
 from app.services.graph_service import graph_service
+from app.routers.auth import get_current_user_from_cookie
+from app.schemas.auth_schema import User
 
 router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
 
+# ─────────────────────────  로그인  ───────────────────────── #
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request},
+    )
 
-from typing import Dict, List, Any, Union
+# ─────────────────────────  메인 페이지  ───────────────────────── #
+@router.get("/", response_class=HTMLResponse)
+async def read_item(
+    request: Request,
+    current_user: Optional[User] = Depends(get_current_user_from_cookie),
+):
+    if current_user is None:
+        return RedirectResponse(url="/login", status_code=302)
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request, "user": current_user},
+    )
 
+# ─────────────────────────  수간호사 전용 메뉴  ───────────────────────── #
+@router.get("/head-nurse-management", response_class=HTMLResponse)
+async def head_nurse_management(
+    request: Request,
+    current_user: Optional[User] = Depends(get_current_user_from_cookie),
+):
+    if current_user is None:
+        return RedirectResponse(url="/login", status_code=302)
+    if not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return templates.TemplateResponse(
+        "head_nurse_management.html",
+        {"request": request, "user": current_user},
+    )
 
+@router.get("/roster-create", response_class=HTMLResponse)
+async def roster_create(
+    request: Request,
+    current_user: Optional[User] = Depends(get_current_user_from_cookie),
+):
+    if current_user is None:
+        return RedirectResponse(url="/login", status_code=302)
+    if not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return templates.TemplateResponse(
+        "roster_create.html",
+        {"request": request, "user": current_user},
+    )
+
+# ───────────────────────── API Endpoints ───────────────────────── #
+
+@router.post("/roster/invoke", response_model=RosterResponse)
+async def invoke_graph(request: RosterRequest):
+    """
+    그래프를 실행하여 로스터 관련 요청을 처리합니다.
+    """
+    try:
+        result = {}
+        response =  await graph_service.invoke(request.request, request.schema)
+        print('여기여기여기', response)
+        print('\n\n\n\n\n\n응답1:', parse_shift_results(response), '\n\n\n\n\n\n')
+        print('\n\n\n\n\n\n응답2:', parse_preferences(response), '\n\n\n\n\n\n')
+        if len(response[0]) > 0:
+            result['shift'] = parse_shift_results(response)
+            
+            # for i in range(len(response[0])):
+            #     result.append(response[0][i]['shift_result'][j]['result'] for j in range(len(response[0][i]['shift_result'])))
+        if len(response[1]) > 0:
+            result['preference'] = parse_preferences(response)
+            # for i in range(len(response[1])):
+        print('결과', result)    #     result.append(response[1][i]['preference_result'][j] for j in range(len(response[1][i]['preference_result'])))
+        if result == {}:
+            result = ["근무 희망사항이 없습니다."]
+        print('\n\n\n\n\n\n응답:', result, '\n\n\n\n\n\n')
+        return RosterResponse(response=result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 def parse_shift_results(
     response: List[List[Dict[str, Any]]]
@@ -96,31 +177,4 @@ def parse_preferences(
                     # 변환 불가능하면 skip
                     continue
 
-    return parsed
-
-@router.post("/invoke", response_model=RosterResponse)
-async def invoke_graph(request: RosterRequest):
-    """
-    그래프를 실행하여 로스터 관련 요청을 처리합니다.
-    """
-    try:
-        result = {}
-        response =  await graph_service.invoke(request.request, request.schema)
-        print('여기여기여기', response)
-        print('\n\n\n\n\n\n응답1:', parse_shift_results(response), '\n\n\n\n\n\n')
-        print('\n\n\n\n\n\n응답2:', parse_preferences(response), '\n\n\n\n\n\n')
-        if len(response[0]) > 0:
-            result['shift'] = parse_shift_results(response)
-            
-            # for i in range(len(response[0])):
-            #     result.append(response[0][i]['shift_result'][j]['result'] for j in range(len(response[0][i]['shift_result'])))
-        if len(response[1]) > 0:
-            result['preference'] = parse_preferences(response)
-            # for i in range(len(response[1])):
-        print('결과', result)    #     result.append(response[1][i]['preference_result'][j] for j in range(len(response[1][i]['preference_result'])))
-        if result == {}:
-            result = ["근무 희망사항이 없습니다."]
-        print('\n\n\n\n\n\n응답:', result, '\n\n\n\n\n\n')
-        return RosterResponse(response=result)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+    return parsed 
