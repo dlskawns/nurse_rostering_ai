@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>수간호사 데이터 조정 페이지</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+    <style>
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        th {
+            background-color: #f2f2f2;
+            color: #333;
+        }
+        .action-cell {
+            white-space: nowrap;
+        }
+        .action-cell button {
+            display: inline-block;
+            width: 30px;
+            padding: 5px;
+            margin: 0 2px;
+            font-size: 14px;
+            line-height: 1;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        .controls .file-upload-wrapper {
+            flex-grow: 1;
+        }
+        .controls button {
+            width: auto;
+            padding: 10px 20px;
+        }
+        .history-controls {
+            margin-left: auto;
+        }
+        .history-controls button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5em;
+            color: #6c757d;
+        }
+        .history-controls button:disabled {
+            color: #d1d1d1;
+            cursor: not-allowed;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .scrollable-table {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="mySidebar" class="sidebar">
+        <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">&times;</a>
+        <a href="/head-nurse-management" class="active">부서원 관리</a>
+        <a href="/">Wanted 작성</a>
+        {% if user.is_head_nurse %}
+        <a href="/roster-create">근무표 생성</a>
+        <a href="#">근무표 보기</a>
+        {% endif %}
+        <a href="javascript:void(0);" onclick="logout()">로그아웃</a>
+    </div>
+
+    <button class="openbtn" onclick="toggleNav()">&#9776;</button>
+
+    <div id="main">
+        <div class="container">
+            <h1>부서원 관리 페이지</h1>
+
+            <div class="controls">
+                <div class="file-upload-wrapper">
+                    <input type="file" id="excel-upload" accept=".xlsx, .xls">
+                    <button onclick="uploadExcel()">업로드</button>
+                </div>
+                <button id="add-nurse-button" onclick="addNurse()">부서원 추가</button>
+                <button id="edit-button" onclick="toggleEdit(true)">수정</button>
+                <button id="save-button" onclick="saveChanges()" disabled>저장</button>
+                <div class="history-controls">
+                    <button id="undo-button" onclick="undo()" disabled><i class="fa-solid fa-rotate-left"></i></button>
+                    <button id="redo-button" onclick="redo()" disabled><i class="fa-solid fa-rotate-right"></i></button>
+                </div>
+            </div>
+
+            <div class="scrollable-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>병동</th>
+                            <th>ID</th>
+                            <th>이름</th>
+                            <th>경력 (년)</th>
+                            <th>수간호사</th>
+                            <th>Keep 간호사</th>
+                            <th>이월 Off</th>
+                            <th>프리셉터</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="nurse-table-body">
+                        <!-- Nurse data will be populated here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let nurses = [];
+        let allNursesInGroup = []; // To populate preceptor dropdown
+        let history = [];
+        let redoStack = [];
+
+        async function fetchNurses() {
+            try {
+                const response = await fetch('/api/nurses');
+                if (!response.ok) {
+                    if (response.status === 401) window.location.href = '/login';
+                    throw new Error('간호사 정보를 불러오는데 실패했습니다.');
+                }
+                nurses = await response.json();
+                allNursesInGroup = JSON.parse(JSON.stringify(nurses));
+                renderTable();
+            } catch (error) {
+                console.error(error);
+                alert(error.message);
+            }
+        }
+
+        function pushToHistory() {
+            redoStack = []; // Clear redo stack on new action
+            history.push(JSON.parse(JSON.stringify(nurses)));
+            if (history.length > 5) {
+                history.shift();
+            }
+            document.getElementById('save-button').disabled = false;
+            updateHistoryButtons();
+        }
+
+        function undo() {
+            if (history.length > 0) {
+                redoStack.push(JSON.parse(JSON.stringify(nurses)));
+                nurses = history.pop();
+                renderTable();
+                updateHistoryButtons();
+            }
+        }
+
+        function redo() {
+            if (redoStack.length > 0) {
+                history.push(JSON.parse(JSON.stringify(nurses)));
+                nurses = redoStack.pop();
+                renderTable();
+                updateHistoryButtons();
+            }
+        }
+
+        function updateHistoryButtons() {
+            document.getElementById('undo-button').disabled = history.length === 0;
+            document.getElementById('redo-button').disabled = redoStack.length === 0;
+        }
+
+        // This would be populated from the excel file in a real scenario
+        function uploadExcel() {
+            // For now, it just re-renders the mock data.
+            // In a real implementation, you would use a library like SheetJS to parse the Excel file.
+            alert("엑셀 업로드 기능은 현재 구현되지 않았습니다. 샘플 데이터가 사용됩니다.");
+            renderTable();
+        }
+
+        function renderTable() {
+            const tableBody = document.getElementById('nurse-table-body');
+            tableBody.innerHTML = ''; // Clear existing rows
+
+            nurses.forEach(nurse => {
+                const row = document.createElement('tr');
+                row.setAttribute('data-id', nurse.nurse_id);
+
+                const preceptorOptions = allNursesInGroup
+                    .filter(n => n.nurse_id !== nurse.nurse_id)
+                    .map(n => `<option value="${n.nurse_id}" ${nurse.preceptor_id === n.nurse_id ? 'selected' : ''}>${n.name}</option>`)
+                    .join('');
+
+                const isNewRow = nurse.is_new;
+                const isEditing = !document.getElementById('edit-button').disabled;
+
+                row.innerHTML = `
+                    <td>A</td>
+                    <td>${nurse.nurse_id.substring(0, 8)}</td>
+                    <td><input type="text" value="${nurse.name}" class="nurse-field" data-field="name" disabled></td>
+                    <td class="action-cell">
+                        <button class="nurse-field" data-action="decrease" data-field="experience" disabled>-</button>
+                        <span class="experience-value">${nurse.experience}</span>
+                        <button class="nurse-field" data-action="increase" data-field="experience" disabled>+</button>
+                    </td>
+                    <td>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="nurse-field" data-field="is_head_nurse" ${nurse.is_head_nurse ? 'checked' : ''} disabled>
+                            <span class="slider"></span>
+                        </label>
+                    </td>
+                    <td>
+                        <select class="nurse-field" data-field="is_night_nurse" disabled>
+                            <option value="false" ${!nurse.is_night_nurse ? 'selected' : ''}>-</option>
+                            <option value="true" ${nurse.is_night_nurse ? 'selected' : ''}>N</option>
+                        </select>
+                    </td>
+                    <td class="action-cell">
+                        <button class="nurse-field" data-action="decrease" data-field="personal_off_adjustment" disabled>-</button>
+                        <span class="off-adj-value">${nurse.personal_off_adjustment}</span>
+                        <button class="nurse-field" data-action="increase" data-field="personal_off_adjustment" disabled>+</button>
+                    </td>
+                    <td>
+                        <select class="nurse-field" data-field="preceptor_id" disabled>
+                            <option value="">-</option>
+                            ${preceptorOptions}
+                        </select>
+                    </td>
+                    <td class="action-cell">
+                        ${isNewRow 
+                            ? `<button onclick="completeAdd('${nurse.nurse_id}')">✓</button><button onclick="deleteNurse('${nurse.nurse_id}', true)">🗑️</button>`
+                            : `<button class="delete-btn" style="visibility: hidden;" onclick="deleteNurse('${nurse.nurse_id}')">🗑️</button>`
+                        }
+                    </td>
+                `;
+                if (!isNewRow) {
+                    row.addEventListener('mouseenter', () => { if(isEditing) row.querySelector('.delete-btn').style.visibility = 'visible' });
+                    row.addEventListener('mouseleave', () => row.querySelector('.delete-btn').style.visibility = 'hidden');
+                }
+                tableBody.appendChild(row);
+            });
+            
+            const isEditing = !document.getElementById('edit-button').disabled;
+            toggleEdit(isEditing, false);
+            addEventListeners();
+        }
+
+        function toggleEdit(isEditing, doPushToHistory = true) {
+            if(isEditing && doPushToHistory) pushToHistory();
+
+            const fields = document.querySelectorAll('.nurse-field');
+            fields.forEach(field => {
+                const row = field.closest('tr');
+                const nurse = nurses.find(n => n.nurse_id === row.getAttribute('data-id'));
+                if (!nurse.is_new) {
+                    field.disabled = !isEditing;
+                }
+            });
+            document.querySelectorAll('.delete-btn').forEach(btn => btn.style.visibility = isEditing ? 'visible' : 'hidden');
+            
+            document.getElementById('edit-button').disabled = isEditing;
+            document.getElementById('add-nurse-button').disabled = !isEditing;
+            document.getElementById('save-button').disabled = !isEditing || history.length === 0;
+        }
+
+        function addNurse() {
+            pushToHistory();
+            const newNurse = {
+                nurse_id: uuid.v4(),
+                group_id: "{{ user.group_id }}", // Will be set on the backend
+                account_id: 'new_user_' + new Date().getTime(), // temp id
+                name: "New Nurse",
+                experience: 1,
+                is_head_nurse: false,
+                is_night_nurse: false,
+                personal_off_adjustment: 0,
+                preceptor_id: null,
+                is_new: true
+            };
+            nurses.push(newNurse);
+            renderTable();
+        }
+
+        function completeAdd(uuid) {
+            pushToHistory();
+            const nurse = nurses.find(n => n.nurse_id === uuid);
+            if(nurse) {
+                delete nurse.is_new;
+            }
+            renderTable();
+        }
+
+        function deleteNurse(uuid, isNew = false) {
+            if (!document.getElementById('edit-button').disabled && !isNew) {
+                 pushToHistory();
+            }
+            nurses = nurses.filter(n => n.nurse_id !== uuid);
+            renderTable();
+            if (!isNew) {
+                document.getElementById('save-button').disabled = false;
+            }
+        }
+
+        async function saveChanges() {
+            if (!nurses.some(n => n.is_head_nurse)) {
+                alert("적어도 한 명의 수간호사가 지정되어야 합니다.");
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/nurses/bulk-update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(nurses.map(n => {
+                        // Clean up temp flags before sending
+                        const { is_new, ...nurseData } = n;
+                        return nurseData;
+                    }))
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '저장에 실패했습니다.');
+                }
+
+                alert("변경사항이 저장되었습니다.");
+                history = [];
+                redoStack = [];
+                updateHistoryButtons();
+                document.getElementById('save-button').disabled = true;
+                toggleEdit(false);
+                fetchNurses(); // Refresh data from DB
+
+            } catch (error) {
+                console.error(error);
+                alert(error.message);
+            }
+        }
+        
+        function addEventListeners() {
+            document.querySelectorAll('.nurse-field[data-action]').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    if (button.disabled) return;
+                    pushToHistory();
+                    const row = e.target.closest('tr');
+                    const nurseId = row.getAttribute('data-id');
+                    const nurse = nurses.find(n => n.nurse_id === nurseId);
+                    const field = e.target.getAttribute('data-field');
+                    const action = e.target.getAttribute('data-action');
+
+                    if (action === 'increase') {
+                        nurse[field]++;
+                    } else if (action === 'decrease') {
+                        nurse[field]--;
+                    }
+                    
+                    if(field === 'experience') {
+                        row.querySelector('.experience-value').textContent = nurse[field];
+                    } else if(field === 'personal_off_adjustment') {
+                        row.querySelector('.off-adj-value').textContent = nurse[field];
+                    }
+                });
+            });
+
+            document.querySelectorAll('input.nurse-field[type="text"], select.nurse-field').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    if (input.disabled) return;
+                    pushToHistory();
+                    const row = e.target.closest('tr');
+                    const nurseId = row.getAttribute('data-id');
+                    const nurse = nurses.find(n => n.nurse_id === nurseId);
+                    const field = e.target.getAttribute('data-field');
+                    
+                    if (field === 'is_night_nurse') {
+                        nurse.is_night_nurse = e.target.value === 'true';
+                    } else if (field === 'preceptor_id') {
+                         nurse.preceptor_id = e.target.value || null;
+                    } else {
+                        nurse[field] = e.target.value;
+                    }
+                });
+            });
+
+             document.querySelectorAll('input.nurse-field[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    if (checkbox.disabled) return;
+                    pushToHistory();
+                    const row = e.target.closest('tr');
+                    const nurseId = row.getAttribute('data-id');
+                    const nurse = nurses.find(n => n.nurse_id === nurseId);
+                    const field = e.target.getAttribute('data-field');
+                    nurse[field] = e.target.checked;
+                });
+            });
+        }
+
+        // Initial render
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchNurses();
+            updateHistoryButtons();
+        });
+
+    </script>
+    <script>
+        function toggleNav() {
+            const sidebar = document.getElementById("mySidebar");
+            const main = document.getElementById("main");
+            if (sidebar.style.width === "250px") {
+                sidebar.style.width = "0";
+                main.style.marginLeft = "0";
+            } else {
+                sidebar.style.width = "250px";
+                main.style.marginLeft = "250px";
+            }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+
+        // Initialize sidebar state
+        document.addEventListener("DOMContentLoaded", function() {
+            document.getElementById("mySidebar").style.width = "250px";
+            document.getElementById("main").style.marginLeft = "250px";
+            // This is to avoid double-triggering the above listener
+        });
+    </script>
+</body>
+</html> 

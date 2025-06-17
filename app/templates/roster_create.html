@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>근무표 생성</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .roster-create-container {
+            display: flex;
+            gap: 20px;
+        }
+        .calendar-container {
+            flex: 1;
+        }
+        .nurse-status-container {
+            flex: 2;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .calendar {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .calendar-body table {
+            width: 100%;
+            text-align: center;
+        }
+        .calendar-body th {
+            padding-bottom: 10px;
+        }
+        .calendar-body td {
+            padding: 5px;
+            height: 40px;
+        }
+        .request-button {
+            width: 100%;
+            margin-top: 20px;
+        }
+        .nurse-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .nurse-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .nurse-card h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .nurse-card p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 12px;
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .status-submitted {
+            background-color: #28a745;
+        }
+        .status-not-submitted {
+            background-color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div id="mySidebar" class="sidebar">
+        <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">&times;</a>
+        <a href="/head-nurse-management">부서원 관리</a>
+        <a href="/">Wanted 작성</a>
+        <a href="/roster-create" class="active">근무표 생성</a>
+        <a href="#">근무표 보기</a>
+    </div>
+
+    <button class="openbtn" onclick="toggleNav()">&#9776;</button>
+
+    <div id="main">
+        <div class="container">
+            <h1>근무표 생성 페이지</h1>
+            
+            <div class="roster-create-container">
+                <div class="calendar-container">
+                    <div class="calendar">
+                        <div class="calendar-header">
+                            <button onclick="prevMonth()">&lt;</button>
+                            <h3 id="month-year"></h3>
+                            <button onclick="nextMonth()">&gt;</button>
+                        </div>
+                        <div class="calendar-body">
+                            <table id="calendar-table">
+                                <thead>
+                                    <tr>
+                                        <th>일</th><th>월</th><th>화</th><th>수</th><th>목</th><th>금</th><th>토</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <button id="request-btn" class="request-button" onclick="toggleRequest()">Wanted 작성 요청하기</button>
+                </div>
+
+                <div class="nurse-status-container">
+                    <h3>제출 현황</h3>
+                    <div id="nurse-card-grid" class="nurse-card-grid">
+                        <!-- Nurse cards will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentMonth = new Date().getMonth();
+        let currentYear = new Date().getFullYear();
+        let requestActive = false;
+        
+        // Mock nurse data (would be fetched from a server in a real app)
+        const allNurses = [
+            { id: 1, name: "Head Nurse Kim", experience_years: 12 },
+            { id: 2, name: "Night Nurse Lee", experience_years: 8 },
+            { id: 3, name: "Night Nurse Jung", experience_years: 7 },
+            { id: 4, name: "Night Nurse Cho", experience_years: 6 },
+            { id: 5, name: "Senior Nurse Park", experience_years: 5 },
+            { id: 6, name: "Senior Nurse Yoon", experience_years: 5 },
+            { id: 7, name: "Nurse Choi", experience_years: 4 },
+            { id: 8, name: "Nurse Han", experience_years: 3 },
+            { id: 9, name: "Nurse Song", experience_years: 3 },
+            { id: 10, name: "Junior Nurse Kang", experience_years: 2 },
+            { id: 11, name: "Junior Nurse Lim", experience_years: 2 },
+            { id: 12, name: "Nurse Moon", experience_years: 3 },
+            { id: 13, name: "Nurse Oh", experience_years: 2 }
+        ];
+
+        function renderCalendar() {
+            const monthYear = document.getElementById('month-year');
+            const calendarBody = document.querySelector('#calendar-table tbody');
+            
+            monthYear.textContent = `${currentYear}년 ${currentMonth + 1}월`;
+            calendarBody.innerHTML = '';
+
+            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+            let date = 1;
+            for (let i = 0; i < 6; i++) {
+                let row = document.createElement('tr');
+                for (let j = 0; j < 7; j++) {
+                    let cell = document.createElement('td');
+                    if (i === 0 && j < firstDay) {
+                        cell.textContent = '';
+                    } else if (date > daysInMonth) {
+                        break;
+                    } else {
+                        cell.textContent = date;
+                        date++;
+                    }
+                    row.appendChild(cell);
+                }
+                calendarBody.appendChild(row);
+                if (date > daysInMonth) break;
+            }
+        }
+
+        function prevMonth() {
+            currentMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+            currentYear = currentMonth === 11 ? currentYear - 1 : currentYear;
+            renderCalendar();
+        }
+
+        function nextMonth() {
+            currentMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+            currentYear = currentMonth === 0 ? currentYear + 1 : currentYear;
+            renderCalendar();
+        }
+
+        async function toggleRequest() {
+            requestActive = !requestActive;
+            const btn = document.getElementById('request-btn');
+            btn.textContent = requestActive ? 'Wanted 작성 요청 중단하기' : 'Wanted 작성 요청하기';
+            btn.disabled = requestActive;
+            
+            if (requestActive) {
+                await updateNurseStatus();
+            } else {
+                // Clear the nurse status grid if request is cancelled
+                document.getElementById('nurse-card-grid').innerHTML = '';
+                btn.disabled = false;
+            }
+        }
+
+        async function updateNurseStatus() {
+            const grid = document.getElementById('nurse-card-grid');
+            grid.innerHTML = '로딩 중...';
+            try {
+                const response = await fetch('wanted_submit.xlsx');
+                const arrayBuffer = await response.arrayBuffer();
+                const data = new Uint8Array(arrayBuffer);
+                const workbook = XLSX.read(data, {type:"array"});
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const submittedData = XLSX.utils.sheet_to_json(worksheet);
+                
+                const submittedIds = new Set(submittedData.map(item => item.ID));
+
+                grid.innerHTML = ''; // Clear after loading
+                allNurses.forEach(nurse => {
+                    const isSubmitted = submittedIds.has(nurse.id);
+                    const card = document.createElement('div');
+                    card.className = 'nurse-card';
+                    card.innerHTML = `
+                        <h4>${nurse.name}</h4>
+                        <p>ID: ${nurse.id}</p>
+                        <p>경력: ${nurse.experience_years}년</p>
+                        <div class="status-badge ${isSubmitted ? 'status-submitted' : 'status-not-submitted'}">
+                            ${isSubmitted ? '제출 완료' : '미제출'}
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+            } catch (error) {
+                console.error("Error reading Excel file:", error);
+                grid.innerHTML = '제출 현황을 불러오는데 실패했습니다.';
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', renderCalendar);
+    </script>
+    <script>
+        function toggleNav() {
+            const sidebar = document.getElementById("mySidebar");
+            const main = document.getElementById("main");
+            if (sidebar.style.width === "250px") {
+                sidebar.style.width = "0";
+                main.style.marginLeft = "0";
+            } else {
+                sidebar.style.width = "250px";
+                main.style.marginLeft = "250px";
+            }
+        }
+        // Initialize sidebar state
+        document.addEventListener("DOMContentLoaded", function() {
+            document.getElementById("mySidebar").style.width = "250px";
+            document.getElementById("main").style.marginLeft = "250px";
+        });
+    </script>
+</body>
+</html> 

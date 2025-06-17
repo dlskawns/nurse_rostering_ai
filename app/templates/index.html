@@ -7,44 +7,42 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>간호사 근무 희망사항</h1>
+    <div id="mySidebar" class="sidebar">
+        <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">&times;</a>
+        <a href="/head-nurse-management">부서원 관리</a>
+        <a href="/" class="active">Wanted 작성</a>
+        {% if user.is_head_nurse %}
+        <a href="/roster-create">근무표 생성</a>
+        <a href="#">근무표 보기</a>
+        {% endif %}
+        <a href="javascript:void(0);" onclick="logout()">로그아웃</a>
+    </div>
 
-        <div id="nurse-view">
-            <h2>간호사 설정</h2>
-            <div class="form-group">
-                <label for="wanted-input">희망 근무 내용 (Wanted)</label>
-                <textarea id="wanted-input" placeholder="예: 주말 출근은 최대한 N으로 하고싶어요."></textarea>
+    <button class="openbtn" onclick="toggleNav()">&#9776;</button>
+
+    <div id="main">
+        <div class="container">
+            <h1>간호사 근무 희망사항</h1>
+
+            <div id="nurse-view">
+                <h2>간호사 설정</h2>
+                <div class="form-group">
+                    <label for="wanted-input">희망 근무 내용 (Wanted)</label>
+                    <textarea id="wanted-input" placeholder="예: 주말 출근은 최대한 N으로 하고싶어요."></textarea>
+                </div>
+                <button onclick="submitRequest()">근무 희망 제출</button>
             </div>
-            <button onclick="submitRequest()">근무 희망 제출</button>
-        </div>
 
-        <div class="loader" id="loader"></div>
+            <div class="loader" id="loader"></div>
 
-        <div id="result-container">
-            <h2>처리 결과</h2>
-            <pre id="result-json"></pre>
+            <div id="result-container">
+                <h2>처리 결과</h2>
+                <pre id="result-json"></pre>
+            </div>
         </div>
     </div>
 
     <script>
-        // test_data_shift.json의 'nurses' 데이터를 하드코딩합니다.
-        const nurseSchema = [
-            { "id": 1,  "name": "Head Nurse Kim",   "experience_years": 12, "is_head_nurse": true,  "head_nurse_off_pattern": "weekend", "remaining_off_days": 0, "personal_off_adjustment": 1 },
-            { "id": 2,  "name": "Night Nurse Lee",  "experience_years": 8,  "is_night_nurse": true, "remaining_off_days": 0, "personal_off_adjustment": -1 },
-            { "id": 3,  "name": "Night Nurse Jung", "experience_years": 7,  "is_night_nurse": true, "remaining_off_days": 0, "personal_off_adjustment": 0 },
-            { "id": 4,  "name": "Night Nurse Cho",  "experience_years": 6,  "is_night_nurse": true, "remaining_off_days": 0, "personal_off_adjustment": 0 },
-            { "id": 5,  "name": "Senior Nurse Park","experience_years": 5,  "remaining_off_days": 0, "personal_off_adjustment": 2 },
-            { "id": 6,  "name": "Senior Nurse Yoon","experience_years": 5,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
-            { "id": 7,  "name": "Nurse Choi",       "experience_years": 4,  "remaining_off_days": 0, "personal_off_adjustment": -1 },
-            { "id": 8,  "name": "Nurse Han",        "experience_years": 3,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
-            { "id": 9,  "name": "Nurse Song",       "experience_years": 3,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
-            { "id": 10, "name": "Junior Nurse Kang","experience_years": 2,  "remaining_off_days": 0, "personal_off_adjustment": 1 },
-            { "id": 11, "name": "Junior Nurse Lim", "experience_years": 2,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
-            { "id": 12, "name": "Nurse Moon",       "experience_years": 3,  "remaining_off_days": 0, "personal_off_adjustment": 0 },
-            { "id": 13, "name": "Nurse Oh",         "experience_years": 2,  "remaining_off_days": 0, "personal_off_adjustment": 0 }
-        ];
-
         async function submitRequest() {
             const wantedInput = document.getElementById('wanted-input').value;
             const resultContainer = document.getElementById('result-container');
@@ -57,8 +55,9 @@
             }
 
             const payload = {
-                request: wantedInput,
-                schema: nurseSchema
+                request: wantedInput
+                // The backend will identify the user from the cookie.
+                // No need to send schema.
             };
 
             // Show loader and hide previous result
@@ -91,6 +90,29 @@
                 loader.style.display = 'none';
             }
         }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+    </script>
+    <script>
+        function toggleNav() {
+            const sidebar = document.getElementById("mySidebar");
+            const main = document.getElementById("main");
+            if (sidebar.style.width === "250px") {
+                sidebar.style.width = "0";
+                main.style.marginLeft = "0";
+            } else {
+                sidebar.style.width = "250px";
+                main.style.marginLeft = "250px";
+            }
+        }
+        // Initialize sidebar state
+        document.addEventListener("DOMContentLoaded", function() {
+            document.getElementById("mySidebar").style.width = "250px";
+            document.getElementById("main").style.marginLeft = "250px";
+        });
     </script>
 </body>
 </html> 
