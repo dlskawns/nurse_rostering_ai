@@ -25,7 +25,7 @@ def init_data(state):
 
 class preferenceAnalyzer(BaseModel):
     processor: str
-    id : int
+    id : str
     weight : float
     reason : str
 
@@ -76,9 +76,9 @@ class preferenceAnalyzerPrompt:
                     ```json
                         {{
                         "nurses":[
-                        {{"id":1,"name":"김가희","exp":6,"is_head":false,"is_night_nurse":false}},
-                        {{"id":2,"name":"박수정","exp":3,"is_head":false,"is_night_nurse":true}},
-                        {{"id":3,"name":"이해린","exp":10,"is_head":true,"is_night_nurse":false}}
+                        {{"nurse_id":"slfnam1","name":"김가희","exp":6,"is_head":false,"is_night_nurse":false}},
+                        {{"nurse_id":"mlnwjk2","name":"박수정","exp":3,"is_head":false,"is_night_nurse":true}},
+                        {{"nurse_id":"ooonsjk3","name":"이해린","exp":10,"is_head":true,"is_night_nurse":false}}
                         ],
                         "utterances":[
                         "저 박수정 쌤이랑은 제발 안 겹치게 해주세요…😭",
@@ -90,8 +90,8 @@ class preferenceAnalyzerPrompt:
                     ```json
                         {{
                         "pair_preferences":[
-                        {{"processor": "'박수정 쌤'은 정보상 id가 '2'이고, 강한 기피를 표현하니 가중치는 -2로 줘야할 것 같아.", "id":2,"weight":-2.0,"reason":"강한 기피 표현"}},
-                        {{"processor": "'수썜'은 is_head가 true인 수간호사를 의미하므로 이혜린 간호사이고, id 는 '3'이다. 같이 하고자 하는 느낌이 조금 있다.", "id":3,"weight":+1.5,"reason":"같이 근무 선호"}}
+                        {{"processor": "'박수정 쌤'은 정보상 nurse_id가 'mlnwjk2'이고, 강한 기피를 표현하니 가중치는 -2로 줘야할 것 같아.", "nurse_id":"mlnwjk2","weight":-2.0,"reason":"강한 기피 표현"}},
+                        {{"processor": "'수썜'은 is_head가 true인 수간호사를 의미하므로 이혜린 간호사이고, nurse_id 는 'ooonsjk3'이다. 같이 하고자 하는 느낌이 조금 있다.", "nurse_id":"ooonsjk3","weight":+1.5,"reason":"같이 근무 선호"}}
                         ]
                         }}
                     ```

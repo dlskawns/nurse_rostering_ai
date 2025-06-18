@@ -172,7 +172,7 @@ def parse_preferences(
                 if _id is None or weight is None:
                     continue
                 try:
-                    parsed.append({"id": int(_id), "weight": float(weight)})
+                    parsed.append({"id": str(_id), "weight": float(weight)})
                 except (ValueError, TypeError):
                     # 변환 불가능하면 skip
                     continue
