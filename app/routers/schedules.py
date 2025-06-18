@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, and_
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
@@ -63,6 +63,26 @@ async def request_schedule(
     db.add(new_schedule)
     db.commit()
     return new_schedule
+
+# [Schedules] - 현재 그룹의 활성화된(requested) 모든 스케줄 조회
+@router.get("/schedules/active")
+async def get_active_schedules(
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    schedules_query = db.query(Schedule.year, Schedule.month).filter(
+        and_(
+            Schedule.group_id == current_user.group_id,
+            Schedule.status == 'requested'
+        )
+    ).distinct().order_by(Schedule.year.desc(), Schedule.month.desc()).all()
+    
+    schedules = [{"year": r.year, "month": r.month} for r in schedules_query]
+    
+    return schedules
 
 # [Schedules] - 특정 스케줄의 모든 간호사 제출 현황 확인
 @router.get("/schedules/{year}/{month}/submissions")

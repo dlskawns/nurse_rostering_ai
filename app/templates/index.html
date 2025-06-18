@@ -51,6 +51,33 @@
             font-size: 16px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
+        .content-wrapper {
+            display: flex;
+        }
+        .bookmarks-container {
+            width: 200px;
+            padding-right: 20px;
+        }
+        .bookmark {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            background: #e9ecef;
+            border-left: 5px solid #6c757d;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        .bookmark:hover {
+            background: #dee2e6;
+        }
+        .bookmark.active {
+            background: #fff;
+            border-left-color: #007bff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transform: translateX(-10px);
+        }
+        .main-content {
+            flex: 1;
+        }
     </style>
 </head>
 <body>
@@ -75,19 +102,26 @@
 
             <h1>간호사 근무 희망사항</h1>
 
-            <div id="nurse-view">
-                <div class="form-group">
-                    <label for="wanted-input">희망 근무 내용 (Wanted)</label>
-                    <textarea id="wanted-input" placeholder="예: 주말 출근은 최대한 N으로 하고싶어요."></textarea>
+            <div class="content-wrapper">
+                <div id="bookmarks-container" class="bookmarks-container">
+                    <!-- Bookmarks will be inserted here -->
                 </div>
-                <button onclick="submitRequest()">근무 희망 제출</button>
-            </div>
-
-            <div class="loader" id="loader" style="display: none;"></div>
-
-            <div id="result-container" style="display: none;">
-                <h2>처리 결과</h2>
-                <div id="result-display"></div>
+                <div class="main-content">
+                    <div id="nurse-view">
+                        <div class="form-group">
+                            <label for="wanted-input">희망 근무 내용 (Wanted)</label>
+                            <textarea id="wanted-input" placeholder="예: 주말 출근은 최대한 N으로 하고싶어요."></textarea>
+                        </div>
+                        <button onclick="submitRequest()">근무 희망 초안 저장 및 분석</button>
+                    </div>
+        
+                    <div class="loader" id="loader" style="display: none;"></div>
+        
+                    <div id="result-container" style="display: none;">
+                        <h2>처리 결과</h2>
+                        <div id="result-display"></div>
+                    </div>
+                </div>
             </div>
 
             <div id="submit-section" class="submit-container" style="display: none;">
@@ -98,25 +132,81 @@
 
     <script>
         let fullNurseSchema = [];
+        let activeSchedules = [];
         let activeYear, activeMonth;
 
-        async function initializePage() {
-            // Setup sidebar and listeners
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Setup sidebar and basic listeners
             document.getElementById("mySidebar").style.width = "250px";
             document.getElementById("main").style.marginLeft = "250px";
-            document.getElementById('wanted-input').addEventListener('keydown', function(event) {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    submitRequest();
+            document.getElementById('wanted-input').addEventListener('keydown', handleKeydown);
+            
+            await fetchNurseSchema();
+            await initializeBookmarks();
+        });
+
+        function handleKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submitRequest();
+            }
+        }
+
+        async function initializeBookmarks() {
+            const pageStatusDiv = document.getElementById('page-status');
+            const statusMessage = document.getElementById('status-message');
+            const bookmarksContainer = document.getElementById('bookmarks-container');
+            
+            try {
+                const response = await fetch('/api/schedules/active');
+                if (!response.ok) throw new Error('활성화된 스케줄을 불러올 수 없습니다.');
+                activeSchedules = await response.json();
+
+                if (activeSchedules.length === 0) {
+                    statusMessage.textContent = 'Wanted 작성 전입니다. 수간호사에게 요청해주세요.';
+                    pageStatusDiv.style.display = 'flex';
+                    bookmarksContainer.innerHTML = '';
+                } else {
+                    pageStatusDiv.style.display = 'none';
+                    renderBookmarks();
+                    // Load the first schedule by default
+                    await switchActiveSchedule(activeSchedules[0].year, activeSchedules[0].month);
+                }
+            } catch (error) {
+                console.error(error);
+                statusMessage.textContent = '오류가 발생했습니다: ' + error.message;
+                pageStatusDiv.style.display = 'flex';
+            }
+        }
+
+        function renderBookmarks() {
+            const bookmarksContainer = document.getElementById('bookmarks-container');
+            bookmarksContainer.innerHTML = '';
+            activeSchedules.forEach(schedule => {
+                const bookmark = document.createElement('div');
+                bookmark.className = 'bookmark';
+                bookmark.textContent = `${schedule.year}년 ${schedule.month}월`;
+                bookmark.dataset.year = schedule.year;
+                bookmark.dataset.month = schedule.month;
+                bookmark.onclick = () => switchActiveSchedule(schedule.year, schedule.month);
+                bookmarksContainer.appendChild(bookmark);
+            });
+        }
+
+        async function switchActiveSchedule(year, month) {
+            activeYear = year;
+            activeMonth = month;
+            
+            // Update active class on bookmarks
+            document.querySelectorAll('.bookmark').forEach(bm => {
+                if (bm.dataset.year == year && bm.dataset.month == month) {
+                    bm.classList.add('active');
+                } else {
+                    bm.classList.remove('active');
                 }
             });
 
-            const date = new Date();
-            activeYear = date.getFullYear();
-            activeMonth = date.getMonth() + 1;
-
             await checkScheduleStatus();
-            await fetchNurseSchema();
         }
 
         async function checkScheduleStatus() {
@@ -126,25 +216,18 @@
                 const statusData = await response.json();
 
                 const isSubmitted = statusData.preference_is_submitted;
-                const pageStatusDiv = document.getElementById('page-status');
-                const statusMessage = document.getElementById('status-message');
-                const nurseView = document.getElementById('nurse-view');
-                const submitSection = document.getElementById('submit-section');
+                const scheduleStatus = statusData.schedule_status;
 
-                if (statusData.schedule_status === 'issued') {
-                    statusMessage.textContent = '근무표가 발행됐습니다.';
-                    pageStatusDiv.style.display = 'flex';
-                } else if (statusData.schedule_status !== 'requested') {
-                    statusMessage.textContent = 'Wanted 작성 전입니다.';
-                    pageStatusDiv.style.display = 'flex';
+                // If schedule is no longer 'requested', refresh bookmarks and show message
+                if (scheduleStatus !== 'requested') {
+                    await initializeBookmarks();
+                    return;
+                }
+
+                if (isSubmitted) {
+                    setSubmittedState(statusData.preference_data);
                 } else {
-                    // It's 'requested', so enable the page
-                    pageStatusDiv.style.display = 'none';
-                    if (isSubmitted) {
-                        setSubmittedState(statusData.preference_data);
-                    } else {
-                        setDraftState();
-                    }
+                    setDraftState(statusData.preference_data);
                 }
             } catch (error) {
                 console.error(error);
@@ -155,23 +238,38 @@
         function setSubmittedState(preferenceData) {
             document.getElementById('wanted-input').disabled = true;
             document.querySelector('#nurse-view button').disabled = true;
+            document.getElementById('result-container').style.display = 'block';
+            
             const submitBtn = document.getElementById('final-submit-btn');
             submitBtn.textContent = '수정';
             submitBtn.onclick = retractSubmission;
             document.getElementById('submit-section').style.display = 'block';
+            
             if (preferenceData) {
+                document.getElementById('wanted-input').value = preferenceData.request || '';
                 displayResults(preferenceData);
+            } else {
+                displayResults(null);
             }
         }
 
-        function setDraftState() {
+        function setDraftState(preferenceData) {
             document.getElementById('wanted-input').disabled = false;
             document.querySelector('#nurse-view button').disabled = false;
+
             const submitBtn = document.getElementById('final-submit-btn');
             submitBtn.textContent = '최종 제출';
             submitBtn.onclick = finalSubmit;
-            // 항상 최종 제출 버튼이 보이도록 수정
             document.getElementById('submit-section').style.display = 'block';
+
+            if (preferenceData) {
+                document.getElementById('wanted-input').value = preferenceData.request || '';
+                displayResults(preferenceData);
+                document.getElementById('result-container').style.display = 'block';
+            } else {
+                document.getElementById('wanted-input').value = '';
+                document.getElementById('result-container').style.display = 'none';
+            }
         }
 
         async function fetchNurseSchema() {
@@ -192,6 +290,7 @@
             const wantedInput = document.getElementById('wanted-input').value;
             const loader = document.getElementById('loader');
             const resultContainer = document.getElementById('result-container');
+            
             if (!wantedInput) {
                 alert('희망 근무 내용을 입력해주세요.');
                 return;
@@ -202,7 +301,6 @@
             resultContainer.style.display = 'none';
 
             try {
-                // 1. Get graph analysis
                 const response = await fetch('/roster/invoke', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -211,15 +309,20 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.detail || 'API 요청에 실패했습니다.');
 
-                // 2. Save draft to DB
+                const preferencePayload = {
+                    year: activeYear,
+                    month: activeMonth,
+                    data: { ...data.response, request: wantedInput } // Save the original text request as well
+                };
+
                 await fetch('/api/preferences', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ year: activeYear, month: activeMonth, data: data.response })
+                    body: JSON.stringify(preferencePayload)
                 });
 
-                displayResults(data.response);
-                document.getElementById('submit-section').style.display = 'block';
+                displayResults(preferencePayload.data);
+                resultContainer.style.display = 'block';
 
             } catch (error) {
                 console.error('Error:', error);
@@ -232,14 +335,20 @@
 
         function displayResults(data) {
             const resultDisplay = document.getElementById('result-display');
-            const resultContainer = document.getElementById('result-container');
-            resultDisplay.innerHTML = ''; // Clear previous results
+            resultDisplay.innerHTML = '';
 
+            if (!data) {
+                resultDisplay.innerHTML = '표시할 결과가 없습니다.';
+                return;
+            }
+            
             let shiftHtml = '<div><h3>희망 근무</h3><table class="result-table"><tr><th>Shift</th><th>날짜</th></tr>';
             if (data.shift && Object.keys(data.shift).length > 0) {
                 for (const [shift, dates] of Object.entries(data.shift)) {
-                    for (const date of Object.keys(dates)) {
-                        shiftHtml += `<tr><td>${shift}</td><td>${date}</td></tr>`;
+                    // Dates can be an object or an array from different versions
+                    const dateKeys = Array.isArray(dates) ? dates : Object.keys(dates);
+                    for (const date of dateKeys) {
+                         shiftHtml += `<tr><td>${shift}</td><td>${date}</td></tr>`;
                     }
                 }
             } else {
@@ -260,20 +369,17 @@
             prefHtml += '</table></div>';
 
             resultDisplay.innerHTML = shiftHtml + prefHtml;
-            resultContainer.style.display = 'block';
         }
 
         async function finalSubmit() {
             if (!confirm('최종 제출하시겠습니까? 제출 후에는 수정할 수 없습니다.')) return;
             
-            // 먼저 preference 데이터가 있는지 확인
             const statusResponse = await fetch(`/api/schedules/status?year=${activeYear}&month=${activeMonth}`);
             const statusData = await statusResponse.json();
 
             let endpoint = '/api/preferences/submit';
             let body = JSON.stringify({ year: activeYear, month: activeMonth });
 
-            // 저장된 preference가 없으면 (초안이 없으면) 빈 값으로 제출
             if (!statusData.preference_data) {
                 endpoint = '/api/preferences/submit/empty';
             }
@@ -285,7 +391,7 @@
                     body: body
                 });
                 alert('성공적으로 제출되었습니다.');
-                checkScheduleStatus();
+                await checkScheduleStatus();
             } catch (error) {
                 alert('제출에 실패했습니다: ' + error.message);
             }
@@ -300,7 +406,7 @@
                     body: JSON.stringify({ year: activeYear, month: activeMonth })
                 });
                 alert('제출이 철회되었습니다. 다시 수정할 수 있습니다.');
-                checkScheduleStatus();
+                await checkScheduleStatus();
             } catch (error) {
                 alert('철회에 실패했습니다: ' + error.message);
             }
@@ -310,8 +416,6 @@
             await fetch('/auth/logout', { method: 'POST' });
             window.location.href = '/login';
         }
-
-        document.addEventListener('DOMContentLoaded', initializePage);
     </script>
     <script>
         function toggleNav() {

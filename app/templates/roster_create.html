@@ -80,6 +80,18 @@
         .status-not-submitted {
             background-color: #6c757d;
         }
+        .schedule-status-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .schedule-status-display h4 {
+            margin: 0;
+            color: #495057;
+        }
     </style>
 </head>
 <body>
@@ -116,6 +128,9 @@
                             </table>
                         </div>
                     </div>
+                    <div class="schedule-status-display">
+                        <h4 id="schedule-status-text"></h4>
+                    </div>
                     <button id="request-btn" class="request-button" onclick="requestWantedShifts()">Wanted 작성 요청하기</button>
                 </div>
 
@@ -137,7 +152,6 @@
         async function initializePage() {
             await fetchNursesForRoster();
             await renderCalendar();
-            // Initially, don't show any submission status until a request is made
         }
 
         async function fetchNursesForRoster() {
@@ -154,7 +168,7 @@
             }
         }
 
-        function renderCalendar() {
+        async function renderCalendar() {
             const monthYear = document.getElementById('month-year');
             const calendarBody = document.querySelector('#calendar-table tbody');
             
@@ -182,6 +196,7 @@
                 calendarBody.appendChild(row);
                 if (date > daysInMonth) break;
             }
+            await updatePageForMonth(currentYear, currentMonth + 1);
         }
 
         function prevMonth() {
@@ -196,8 +211,50 @@
             renderCalendar();
         }
 
+        async function updatePageForMonth(year, month) {
+            const statusTextEl = document.getElementById('schedule-status-text');
+            const requestBtn = document.getElementById('request-btn');
+            const grid = document.getElementById('nurse-card-grid');
+
+            statusTextEl.textContent = '상태 확인 중...';
+            grid.innerHTML = ''; // Clear nurse statuses
+            requestBtn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/schedules/status?year=${year}&month=${month}`);
+                if (!response.ok) {
+                    if (response.status === 401) window.location.href = '/login';
+                    throw new Error('스케줄 상태를 확인할 수 없습니다.');
+                }
+                const statusData = await response.json();
+
+                if (statusData.schedule_status === 'requested') {
+                    statusTextEl.textContent = `${year}년 ${month}월 근무표 Wanted 접수중`;
+                    requestBtn.textContent = 'Wanted 새로운 버전 작성 요청하기';
+                    requestBtn.disabled = false;
+                    await updateNurseStatusDisplay(year, month);
+                } else if (statusData.schedule_status === 'issued') {
+                    statusTextEl.textContent = `${year}년 ${month}월 근무표 발행 완료`;
+                    requestBtn.textContent = 'Wanted 새로운 버전 작성 요청하기';
+                    requestBtn.disabled = false;
+                    await updateNurseStatusDisplay(year, month);
+                } else {
+                    statusTextEl.textContent = '해당 월의 근무표 요청이 없습니다.';
+                    requestBtn.textContent = 'Wanted 작성 요청하기';
+                    requestBtn.disabled = false;
+                    grid.innerHTML = '간호사별 제출 현황이 없습니다.';
+                }
+            } catch (error) {
+                console.error(error);
+                statusTextEl.textContent = '스케줄 상태를 불러오는데 실패했습니다.';
+                requestBtn.textContent = 'Wanted 작성 요청하기';
+                requestBtn.disabled = false;
+            }
+        }
+
         async function requestWantedShifts() {
             const btn = document.getElementById('request-btn');
+            const originalText = btn.textContent;
             btn.disabled = true;
             btn.textContent = '요청 중...';
 
@@ -209,27 +266,31 @@
                 });
                 if (!response.ok) throw new Error('근무 희망 요청에 실패했습니다.');
 
-                btn.textContent = '요청 완료';
-                await updateNurseStatusDisplay();
+                alert('요청이 성공적으로 완료되었습니다.');
+                await updatePageForMonth(currentYear, currentMonth + 1);
 
             } catch (error) {
                 console.error(error);
                 alert(error.message);
                 btn.disabled = false;
-                btn.textContent = 'Wanted 작성 요청하기';
+                btn.textContent = originalText;
             }
         }
 
-        async function updateNurseStatusDisplay() {
+        async function updateNurseStatusDisplay(year, month) {
             const grid = document.getElementById('nurse-card-grid');
             grid.innerHTML = '로딩 중...';
             try {
-                const res = await fetch(`/api/schedules/${currentYear}/${currentMonth + 1}/submissions`);
+                const res = await fetch(`/api/schedules/${year}/${month}/submissions`);
                 if(!res.ok) throw new Error('제출 현황을 불러올 수 없습니다.');
                 const data = await res.json();
                 const submittedNurseIds = new Set(data.submitted_nurses);
 
                 grid.innerHTML = '';
+                 if (allNurses.length === 0) {
+                    grid.innerHTML = '간호사 정보가 없습니다.';
+                    return;
+                }
                 allNurses.forEach(nurse => {
                     const isSubmitted = submittedNurseIds.has(nurse.nurse_id);
                     renderNurseCard(nurse, isSubmitted);
