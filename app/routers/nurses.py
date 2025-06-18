@@ -5,15 +5,16 @@ import uuid
 
 from app.db.client import get_db
 from app.db.models import Nurse as NurseModel
-from app.schemas.auth_schema import User as UserSchema
+from app.schemas.roster_schema import NurseProfile
 from app.routers.auth import get_current_user_from_cookie
+from app.schemas.auth_schema import User as UserSchema
 
 router = APIRouter(
     prefix="/api/nurses",
     tags=["nurses"]
 )
 
-@router.get("", response_model=List[UserSchema])
+@router.get("", response_model=List[NurseProfile])
 async def get_nurses_in_group(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
@@ -28,7 +29,7 @@ async def get_nurses_in_group(
 
 @router.post("/bulk-update")
 async def bulk_update_nurses(
-    nurses_data: List[UserSchema],
+    nurses_data: List[NurseProfile],
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):

@@ -43,6 +43,22 @@
     </div>
 
     <script>
+        let fullNurseSchema = [];
+
+        async function fetchNurseSchema() {
+             try {
+                const response = await fetch('/api/nurses');
+                 if (!response.ok) {
+                    if (response.status === 401) window.location.href = '/login';
+                    throw new Error('간호사 정보를 불러오는데 실패했습니다.');
+                }
+                fullNurseSchema = await response.json();
+            } catch(error) {
+                console.error(error);
+                alert(error.message);
+            }
+        }
+
         async function submitRequest() {
             const wantedInput = document.getElementById('wanted-input').value;
             const resultContainer = document.getElementById('result-container');
@@ -55,9 +71,8 @@
             }
 
             const payload = {
-                request: wantedInput
-                // The backend will identify the user from the cookie.
-                // No need to send schema.
+                request: wantedInput,
+                schema: fullNurseSchema
             };
 
             // Show loader and hide previous result
@@ -74,6 +89,7 @@
                 });
 
                 const data = await response.json();
+                console.log('data', data)
 
                 if (!response.ok) {
                     throw new Error(data.detail || 'API 요청에 실패했습니다.');
@@ -112,6 +128,17 @@
         document.addEventListener("DOMContentLoaded", function() {
             document.getElementById("mySidebar").style.width = "250px";
             document.getElementById("main").style.marginLeft = "250px";
+
+            // Fetch the nurse schema for the payload
+            fetchNurseSchema();
+            
+            // Add Enter key listener
+            document.getElementById('wanted-input').addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault(); // Prevent adding a new line
+                    submitRequest();
+                }
+            });
         });
     </script>
 </body>
