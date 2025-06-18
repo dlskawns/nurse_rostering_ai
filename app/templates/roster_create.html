@@ -69,16 +69,17 @@
         .status-badge {
             padding: 5px 10px;
             border-radius: 12px;
-            color: white;
             font-weight: bold;
             text-align: center;
             margin-top: 10px;
         }
         .status-submitted {
             background-color: #28a745;
+            color: white;
         }
         .status-not-submitted {
-            background-color: #6c757d;
+            background-color: #f0f0f0;
+            color: #888;
         }
         .schedule-status-display {
             background: #f8f9fa;
@@ -100,7 +101,7 @@
         <a href="/head-nurse-management">부서원 관리</a>
         <a href="/">Wanted 작성</a>
         <a href="/roster-create" class="active">근무표 생성</a>
-        <a href="#">근무표 보기</a>
+        <a href="/roster-view">근무표 보기</a>
     </div>
 
     <button class="openbtn" onclick="toggleNav()">&#9776;</button>
@@ -139,7 +140,12 @@
                     <div id="nurse-card-grid" class="nurse-card-grid">
                         <!-- Nurse cards will be populated here -->
                     </div>
+                    <button id="generate-roster-btn" class="request-button" style="margin-top: 20px; display: none;" onclick="generateRoster()">현재 버전으로 근무표 만들기</button>
                 </div>
+            </div>
+
+            <div id="roster-output-container" style="margin-top: 30px;">
+                <!-- Generated roster will be displayed here -->
             </div>
         </div>
     </div>
@@ -215,10 +221,12 @@
             const statusTextEl = document.getElementById('schedule-status-text');
             const requestBtn = document.getElementById('request-btn');
             const grid = document.getElementById('nurse-card-grid');
+            const generateBtn = document.getElementById('generate-roster-btn');
 
             statusTextEl.textContent = '상태 확인 중...';
             grid.innerHTML = ''; // Clear nurse statuses
             requestBtn.disabled = true;
+            generateBtn.style.display = 'none';
 
             try {
                 const response = await fetch(`/api/schedules/status?year=${year}&month=${month}`);
@@ -232,12 +240,16 @@
                     statusTextEl.textContent = `${year}년 ${month}월 근무표 Wanted 접수중`;
                     requestBtn.textContent = 'Wanted 새로운 버전 작성 요청하기';
                     requestBtn.disabled = false;
+                    generateBtn.style.display = 'block'; // Show generate button
                     await updateNurseStatusDisplay(year, month);
                 } else if (statusData.schedule_status === 'issued') {
                     statusTextEl.textContent = `${year}년 ${month}월 근무표 발행 완료`;
                     requestBtn.textContent = 'Wanted 새로운 버전 작성 요청하기';
                     requestBtn.disabled = false;
+                    generateBtn.style.display = 'block'; // Show generate button
                     await updateNurseStatusDisplay(year, month);
+                    // Also show the generated roster
+                    await displayGeneratedRoster(year, month);
                 } else {
                     statusTextEl.textContent = '해당 월의 근무표 요청이 없습니다.';
                     requestBtn.textContent = 'Wanted 작성 요청하기';
@@ -274,6 +286,54 @@
                 alert(error.message);
                 btn.disabled = false;
                 btn.textContent = originalText;
+            }
+        }
+
+        async function generateRoster() {
+            const btn = document.getElementById('generate-roster-btn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '근무표 생성 중...';
+
+            try {
+                const response = await fetch('/api/roster/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ year: currentYear, month: currentMonth + 1 })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '근무표 생성에 실패했습니다.');
+                }
+                
+                const rosterData = await response.json();
+                alert('근무표가 성공적으로 생성되었습니다.');
+                renderRosterTable(rosterData, document.getElementById('roster-output-container'));
+                // Refresh the main status display
+                await updatePageForMonth(currentYear, currentMonth + 1);
+
+
+            } catch (error) {
+                console.error('Error generating roster:', error);
+                alert(error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        async function displayGeneratedRoster(year, month) {
+            const container = document.getElementById('roster-output-container');
+            container.innerHTML = '발행된 근무표 불러오는 중...';
+            try {
+                const response = await fetch(`/api/roster/${year}/${month}`);
+                if (!response.ok) throw new Error('발행된 근무표를 불러올 수 없습니다.');
+                const rosterData = await response.json();
+                renderRosterTable(rosterData, container);
+            } catch (error) {
+                console.error(error);
+                container.innerHTML = `<p style="color: red;">${error.message}</p>`;
             }
         }
 
@@ -314,6 +374,59 @@
                 </div>
             `;
             document.getElementById('nurse-card-grid').appendChild(card);
+        }
+
+        function renderRosterTable(data, container) {
+            container.innerHTML = '';
+            
+            if (!data || !data.nurses || data.nurses.length === 0) {
+                container.innerHTML = '<h3>생성된 근무표 정보가 없습니다.</h3>';
+                return;
+            }
+
+            const { year, month, days_in_month, shift_colors, nurses } = data;
+            
+            let tableHtml = `
+                <h3>${year}년 ${month}월 근무표</h3>
+                <table class="roster-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>이름</th>
+                            <th>경력</th>
+                            ${[...Array(days_in_month).keys()].map(d => `<th>${d + 1}</th>`).join('')}
+                            <th>D</th><th>E</th><th>N</th><th>O</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            nurses.forEach(nurse => {
+                tableHtml += `
+                    <tr>
+                        <td>${nurse.id.substring(0,8)}</td>
+                        <td>${nurse.name}</td>
+                        <td>${nurse.experience}</td>
+                        ${nurse.schedule.map(shift => `<td style="background-color: ${shift_colors[shift] || '#fff'}; color: ${shift === 'N' ? '#fff' : '#000'}">${shift}</td>`).join('')}
+                        <td>${nurse.counts['D'] || 0}</td>
+                        <td>${nurse.counts['E'] || 0}</td>
+                        <td>${nurse.counts['N'] || 0}</td>
+                        <td>${nurse.counts['O'] || 0}</td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `</tbody></table>`;
+            container.innerHTML = tableHtml;
+
+            // Add some basic styling for the new table
+            const style = document.createElement('style');
+            style.innerHTML = `
+                .roster-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                .roster-table th, .roster-table td { border: 1px solid #ddd; padding: 4px; text-align: center; }
+                .roster-table thead th { background-color: #f2f2f2; }
+            `;
+            container.appendChild(style);
         }
         
         document.addEventListener('DOMContentLoaded', initializePage);

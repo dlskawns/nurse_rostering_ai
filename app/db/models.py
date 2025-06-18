@@ -48,6 +48,20 @@ class Schedule(Base):
     updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
     status = Column(VARCHAR(10)) # e.g., 'requested', 'issued'
 
+class ScheduleEntry(Base):
+    __tablename__ = "schedule_entries"
+    entry_id = Column(VARCHAR(16), primary_key=True)
+    schedule_id = Column(CHAR(12), ForeignKey("schedules.schedule_id"))
+    nurse_id = Column(VARCHAR(50), ForeignKey("nurses.nurse_id"))
+    work_date = Column(DATETIME, nullable=False)
+    shift_id = Column(VARCHAR(10), ForeignKey("shifts.shift_id")) # D, E, N, O, etc.
+
+class Shift(Base):
+    __tablename__ = "shifts"
+    shift_id = Column(VARCHAR(10), primary_key=True)
+    name = Column(VARCHAR(20), nullable=False)
+    color = Column(VARCHAR(10), nullable=False)
+
 class ShiftPreference(Base):
     __tablename__ = "shift_preferences"
     nurse_id = Column(VARCHAR(50), ForeignKey("nurses.nurse_id"), primary_key=True)

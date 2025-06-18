@@ -61,6 +61,13 @@ async def roster_create(
         {"request": request, "user": current_user},
     )
 
+@router.get("/roster-view", response_class=HTMLResponse)
+async def roster_view_page(request: Request, user: User = Depends(get_current_user_from_cookie)):
+    if not user:
+        # 일반 간호사도 접근 가능해야 하므로 head_nurse 체크는 제거
+        return templates.TemplateResponse("unauthorized.html", {"request": request}, status_code=403)
+    return templates.TemplateResponse("roster_view.html", {"request": request, "user": user})
+
 # ───────────────────────── API Endpoints ───────────────────────── #
 
 @router.post("/roster/invoke", response_model=RosterResponse)

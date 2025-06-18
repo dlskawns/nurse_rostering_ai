@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>근무표 보기</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        :root {
+            --sidebar-width: 250px;
+            --color-day: #E0F7FA;
+            --color-evening: #FFF9C4;
+            --color-night: #3949AB;
+            --color-off: #F5F5F5;
+            --color-night-text: #FFFFFF;
+            --color-text: #333333;
+        }
+        #main {
+            transition: margin-left .5s;
+            padding: 20px;
+            width: 100%;
+        }
+        .roster-view-wrapper {
+            display: flex;
+            gap: 20px;
+        }
+        .bookmarks-container {
+            width: 200px;
+            flex-shrink: 0;
+        }
+        .bookmark {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            background: #e9ecef;
+            border-left: 5px solid #6c757d;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            border-radius: 0 5px 5px 0;
+        }
+        .bookmark.active {
+            background: #fff;
+            border-left-color: #007bff;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+            transform: translateX(-5px);
+        }
+        .roster-main-content {
+            flex-grow: 1;
+            overflow-x: auto;
+        }
+        .roster-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .zoom-controls button {
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+        }
+        .shift-legend { display: flex; gap: 20px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-color { width: 20px; height: 20px; border-radius: 4px; }
+        #roster-container {
+            transform-origin: top left;
+            transition: transform 0.3s ease;
+            width: 100%;
+        }
+        .roster-table-container {
+            background: #FFFFFF;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .roster-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 14px;
+        }
+        .roster-table th, .roster-table td {
+            border: 1px solid #E0E0E0;
+            padding: 12px 8px;
+            text-align: center;
+            min-width: 45px;
+        }
+        .roster-table thead th {
+            background-color: #F8F9FA;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        .roster-table th:first-child, .roster-table td:first-child,
+        .roster-table th:nth-child(2), .roster-table td:nth-child(2),
+        .roster-table th:nth-child(3), .roster-table td:nth-child(3) {
+            position: sticky;
+            left: 0;
+            background-color: #F8F9FA;
+            z-index: 1;
+        }
+        .roster-table td:nth-child(1), .roster-table td:nth-child(2), .roster-table td:nth-child(3) {
+             background-color: #fff;
+        }
+        .roster-table th:first-child { left: 0; }
+        .roster-table th:nth-child(2) { left: 80px; }
+        .roster-table th:nth-child(3) { left: 160px; }
+        .roster-table td:first-child { left: 0; }
+        .roster-table td:nth-child(2) { left: 80px; }
+        .roster-table td:nth-child(3) { left: 160px; }
+        .roster-table .summary-col { background-color: #F1F8E9; font-weight: bold; }
+        .roster-table tfoot td { background-color: #FFFDE7; font-weight: bold; }
+        .page-status-overlay {
+            width: 100%;
+            height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="mySidebar" class="sidebar">
+        <a href="javascript:void(0)" class="closebtn" onclick="toggleNav()">&times;</a>
+        <a href="/head-nurse-management">부서원 관리</a>
+        <a href="/">Wanted 작성</a>
+        {% if user.is_head_nurse %}
+        <a href="/roster-create">근무표 생성</a>
+        <a href="/roster-view" class="active">근무표 보기</a>
+        {% endif %}
+        <a href="javascript:void(0);" onclick="logout()">로그아웃</a>
+    </div>
+
+    <button class="openbtn" onclick="toggleNav()">&#9776;</button>
+
+    <div id="main">
+        <h1>근무표 보기</h1>
+        <div class="roster-view-wrapper">
+            <div id="bookmarks-container" class="bookmarks-container">
+                <!-- Bookmarks for issued schedules -->
+            </div>
+            <div class="roster-main-content">
+                <div class="roster-controls">
+                    <div class="shift-legend">
+                         <div class="legend-item"><div class="legend-color" style="background:var(--color-day)"></div>Day</div>
+                         <div class="legend-item"><div class="legend-color" style="background:var(--color-evening)"></div>Evening</div>
+                         <div class="legend-item"><div class="legend-color" style="background:var(--color-night)"></div>Night</div>
+                         <div class="legend-item"><div class="legend-color" style="background:var(--color-off)"></div>Off</div>
+                    </div>
+                    <div class="zoom-controls">
+                        <button id="zoom-out">-</button>
+                        <button id="zoom-in">+</button>
+                    </div>
+                </div>
+                <div id="roster-table-container" class="roster-table-container">
+                    <!-- Roster table will be rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let currentZoom = 1.0;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            setupSidebar();
+            setupZoomControls();
+            await initializeBookmarks();
+        });
+
+        function setupSidebar() {
+            document.getElementById("mySidebar").style.width = "250px";
+            document.getElementById("main").style.marginLeft = "var(--sidebar-width)";
+        }
+        
+        function setupZoomControls() {
+            const container = document.getElementById('roster-container');
+            document.getElementById('zoom-in').addEventListener('click', () => {
+                currentZoom = Math.min(2.0, currentZoom + 0.1);
+                document.getElementById('roster-table-container').style.transform = `scale(${currentZoom})`;
+            });
+            document.getElementById('zoom-out').addEventListener('click', () => {
+                currentZoom = Math.max(0.5, currentZoom - 0.1);
+                document.getElementById('roster-table-container').style.transform = `scale(${currentZoom})`;
+            });
+        }
+
+        async function initializeBookmarks() {
+            const bookmarksContainer = document.getElementById('bookmarks-container');
+            const tableContainer = document.getElementById('roster-table-container');
+            try {
+                const response = await fetch('/api/schedules/issued');
+                if (!response.ok) throw new Error('발행된 스케줄 목록을 불러올 수 없습니다.');
+                const issuedSchedules = await response.json();
+
+                if (issuedSchedules.length === 0) {
+                    tableContainer.innerHTML = `<div class="page-status-overlay"><h2>발행된 근무표가 없습니다.</h2></div>`;
+                    bookmarksContainer.innerHTML = '';
+                } else {
+                    renderBookmarks(issuedSchedules);
+                    // Load the first (most recent) schedule by default
+                    await switchActiveSchedule(issuedSchedules[0].year, issuedSchedules[0].month);
+                }
+            } catch (error) {
+                console.error(error);
+                tableContainer.innerHTML = `<div class="page-status-overlay"><h2>오류: ${error.message}</h2></div>`;
+            }
+        }
+        
+        function renderBookmarks(schedules) {
+            const bookmarksContainer = document.getElementById('bookmarks-container');
+            bookmarksContainer.innerHTML = '';
+            schedules.forEach(schedule => {
+                const bookmark = document.createElement('div');
+                bookmark.className = 'bookmark';
+                bookmark.textContent = `${schedule.year}년 ${schedule.month}월`;
+                bookmark.dataset.year = schedule.year;
+                bookmark.dataset.month = schedule.month;
+                bookmark.onclick = () => switchActiveSchedule(schedule.year, schedule.month);
+                bookmarksContainer.appendChild(bookmark);
+            });
+        }
+
+        async function switchActiveSchedule(year, month) {
+            // Update active class on bookmarks
+            document.querySelectorAll('.bookmark').forEach(bm => {
+                bm.classList.toggle('active', bm.dataset.year == year && bm.dataset.month == month);
+            });
+            await loadRoster(year, month);
+        }
+
+        async function loadRoster(year, month) {
+            const container = document.getElementById('roster-table-container');
+            container.innerHTML = `<div class="page-status-overlay"><h2>${year}년 ${month}월 근무표 로딩 중...</h2></div>`;
+
+            try {
+                const response = await fetch(`/api/roster/${year}/${month}`);
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || '근무표 데이터 로드 실패');
+                }
+                const data = await response.json();
+                renderRosterTable(data, container);
+
+            } catch (error) {
+                 container.innerHTML = `<div class="page-status-overlay"><h2>오류: ${error.message}</h2></div>`;
+            }
+        }
+        
+        function renderRosterTable(data, container) {
+            container.innerHTML = '';
+            if (!data || !data.nurses || data.nurses.length === 0) return;
+
+            const { days_in_month, shift_colors, nurses } = data;
+            
+            // Calculate daily totals
+            const dailyTotals = Array(days_in_month).fill(null).map(() => ({ D: 0, E: 0, N: 0, O: 0 }));
+            nurses.forEach(nurse => {
+                nurse.schedule.forEach((shift, index) => {
+                    if (dailyTotals[index][shift] !== undefined) {
+                        dailyTotals[index][shift]++;
+                    }
+                });
+            });
+
+            let tableHtml = `<table class="roster-table"><thead><tr>
+                <th style="min-width: 80px;">ID</th><th style="min-width: 80px;">이름</th><th style="min-width: 80px;">경력</th>
+                ${[...Array(days_in_month).keys()].map(d => `<th>${d + 1}</th>`).join('')}
+                <th class="summary-col">D</th><th class="summary-col">E</th><th class="summary-col">N</th><th class="summary-col">Off</th>
+                <th class="summary-col" style="min-width: 50px;">연차</th><th class="summary-col" style="min-width: 50px;">병가</th>
+                </tr></thead><tbody>`;
+
+            nurses.forEach(nurse => {
+                tableHtml += `<tr>
+                    <td>${nurse.id.substring(0, 8)}</td><td>${nurse.name}</td><td>${nurse.experience}</td>
+                    ${nurse.schedule.map(shift => {
+                        const bgColor = shift_colors[shift] || '#fff';
+                        const color = shift === 'N' ? 'var(--color-night-text)' : 'var(--color-text)';
+                        return `<td style="background-color: ${bgColor}; color: ${color}">${shift}</td>`;
+                    }).join('')}
+                    <td class="summary-col">${nurse.counts['D'] || 0}</td>
+                    <td class="summary-col">${nurse.counts['E'] || 0}</td>
+                    <td class="summary-col">${nurse.counts['N'] || 0}</td>
+                    <td class="summary-col">${nurse.counts['O'] || 0}</td>
+                    <td class="summary-col">0</td>
+                    <td class="summary-col">0</td>
+                </tr>`;
+            });
+            
+            tableHtml += `</tbody><tfoot><tr><td colspan="3"><b>일별 합계</b></td>`;
+            Object.keys(dailyTotals[0]).forEach(shift => {
+                tableHtml += `<tr><td colspan="3"><b>${shift}</b></td>`;
+                dailyTotals.forEach(day => {
+                    tableHtml += `<td>${day[shift]}</td>`;
+                });
+                tableHtml += `<td colspan="6"></td></tr>`;
+            });
+            tableHtml += `</tfoot></table>`;
+            
+            container.innerHTML = tableHtml;
+        }
+
+    </script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html> 
