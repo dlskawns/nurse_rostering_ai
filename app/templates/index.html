@@ -5,6 +5,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>간호사 근무 희망사항 제출</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .page-status-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        .page-status-overlay h2 {
+            padding: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+        }
+        #result-display {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .result-table {
+            flex: 1;
+            border-collapse: collapse;
+        }
+        .result-table th, .result-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .result-table th {
+            background-color: #f2f2f2;
+        }
+        .submit-container {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+        }
+        .submit-container button {
+            width: auto;
+            padding: 15px 25px;
+            font-size: 16px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+    </style>
 </head>
 <body>
     <div id="mySidebar" class="sidebar">
@@ -21,11 +68,14 @@
     <button class="openbtn" onclick="toggleNav()">&#9776;</button>
 
     <div id="main">
-        <div class="container">
+        <div class="container" style="position: relative;">
+            <div id="page-status" class="page-status-overlay" style="display: none;">
+                <h2 id="status-message"></h2>
+            </div>
+
             <h1>간호사 근무 희망사항</h1>
 
             <div id="nurse-view">
-                <h2>간호사 설정</h2>
                 <div class="form-group">
                     <label for="wanted-input">희망 근무 내용 (Wanted)</label>
                     <textarea id="wanted-input" placeholder="예: 주말 출근은 최대한 N으로 하고싶어요."></textarea>
@@ -33,17 +83,96 @@
                 <button onclick="submitRequest()">근무 희망 제출</button>
             </div>
 
-            <div class="loader" id="loader"></div>
+            <div class="loader" id="loader" style="display: none;"></div>
 
-            <div id="result-container">
+            <div id="result-container" style="display: none;">
                 <h2>처리 결과</h2>
-                <pre id="result-json"></pre>
+                <div id="result-display"></div>
+            </div>
+
+            <div id="submit-section" class="submit-container" style="display: none;">
+                 <button id="final-submit-btn" onclick="finalSubmit()">최종 제출</button>
             </div>
         </div>
     </div>
 
     <script>
         let fullNurseSchema = [];
+        let activeYear, activeMonth;
+
+        async function initializePage() {
+            // Setup sidebar and listeners
+            document.getElementById("mySidebar").style.width = "250px";
+            document.getElementById("main").style.marginLeft = "250px";
+            document.getElementById('wanted-input').addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    submitRequest();
+                }
+            });
+
+            const date = new Date();
+            activeYear = date.getFullYear();
+            activeMonth = date.getMonth() + 1;
+
+            await checkScheduleStatus();
+            await fetchNurseSchema();
+        }
+
+        async function checkScheduleStatus() {
+            try {
+                const response = await fetch(`/api/schedules/status?year=${activeYear}&month=${activeMonth}`);
+                if (!response.ok) throw new Error('스케줄 상태를 확인할 수 없습니다.');
+                const statusData = await response.json();
+
+                const isSubmitted = statusData.preference_is_submitted;
+                const pageStatusDiv = document.getElementById('page-status');
+                const statusMessage = document.getElementById('status-message');
+                const nurseView = document.getElementById('nurse-view');
+                const submitSection = document.getElementById('submit-section');
+
+                if (statusData.schedule_status === 'issued') {
+                    statusMessage.textContent = '근무표가 발행됐습니다.';
+                    pageStatusDiv.style.display = 'flex';
+                } else if (statusData.schedule_status !== 'requested') {
+                    statusMessage.textContent = 'Wanted 작성 전입니다.';
+                    pageStatusDiv.style.display = 'flex';
+                } else {
+                    // It's 'requested', so enable the page
+                    pageStatusDiv.style.display = 'none';
+                    if (isSubmitted) {
+                        setSubmittedState(statusData.preference_data);
+                    } else {
+                        setDraftState();
+                    }
+                }
+            } catch (error) {
+                console.error(error);
+                alert(error.message);
+            }
+        }
+
+        function setSubmittedState(preferenceData) {
+            document.getElementById('wanted-input').disabled = true;
+            document.querySelector('#nurse-view button').disabled = true;
+            const submitBtn = document.getElementById('final-submit-btn');
+            submitBtn.textContent = '수정';
+            submitBtn.onclick = retractSubmission;
+            document.getElementById('submit-section').style.display = 'block';
+            if (preferenceData) {
+                displayResults(preferenceData);
+            }
+        }
+
+        function setDraftState() {
+            document.getElementById('wanted-input').disabled = false;
+            document.querySelector('#nurse-view button').disabled = false;
+            const submitBtn = document.getElementById('final-submit-btn');
+            submitBtn.textContent = '최종 제출';
+            submitBtn.onclick = finalSubmit;
+            // 항상 최종 제출 버튼이 보이도록 수정
+            document.getElementById('submit-section').style.display = 'block';
+        }
 
         async function fetchNurseSchema() {
              try {
@@ -61,49 +190,119 @@
 
         async function submitRequest() {
             const wantedInput = document.getElementById('wanted-input').value;
-            const resultContainer = document.getElementById('result-container');
-            const resultJson = document.getElementById('result-json');
             const loader = document.getElementById('loader');
-
+            const resultContainer = document.getElementById('result-container');
             if (!wantedInput) {
                 alert('희망 근무 내용을 입력해주세요.');
                 return;
             }
 
-            const payload = {
-                request: wantedInput,
-                schema: fullNurseSchema
-            };
-
-            // Show loader and hide previous result
+            const payload = { request: wantedInput, schema: fullNurseSchema };
             loader.style.display = 'block';
             resultContainer.style.display = 'none';
 
             try {
+                // 1. Get graph analysis
                 const response = await fetch('/roster/invoke', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'API 요청에 실패했습니다.');
+
+                // 2. Save draft to DB
+                await fetch('/api/preferences', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ year: activeYear, month: activeMonth, data: data.response })
                 });
 
-                const data = await response.json();
-                console.log('data', data)
-
-                if (!response.ok) {
-                    throw new Error(data.detail || 'API 요청에 실패했습니다.');
-                }
-
-                resultJson.textContent = JSON.stringify(data, null, 2);
-                resultContainer.style.display = 'block';
+                displayResults(data.response);
+                document.getElementById('submit-section').style.display = 'block';
 
             } catch (error) {
                 console.error('Error:', error);
-                resultJson.textContent = `오류가 발생했습니다: ${error.message}`;
+                document.getElementById('result-display').textContent = `오류가 발생했습니다: ${error.message}`;
                 resultContainer.style.display = 'block';
             } finally {
                 loader.style.display = 'none';
+            }
+        }
+
+        function displayResults(data) {
+            const resultDisplay = document.getElementById('result-display');
+            const resultContainer = document.getElementById('result-container');
+            resultDisplay.innerHTML = ''; // Clear previous results
+
+            let shiftHtml = '<div><h3>희망 근무</h3><table class="result-table"><tr><th>Shift</th><th>날짜</th></tr>';
+            if (data.shift && Object.keys(data.shift).length > 0) {
+                for (const [shift, dates] of Object.entries(data.shift)) {
+                    for (const date of Object.keys(dates)) {
+                        shiftHtml += `<tr><td>${shift}</td><td>${date}</td></tr>`;
+                    }
+                }
+            } else {
+                shiftHtml += '<tr><td colspan="2">없음</td></tr>';
+            }
+            shiftHtml += '</table></div>';
+
+            let prefHtml = '<div><h3>동료 선호</h3><table class="result-table"><tr><th>간호사</th><th>선호도</th></tr>';
+            if (data.preference && data.preference.length > 0) {
+                 data.preference.forEach(p => {
+                    const nurseName = fullNurseSchema.find(n => n.nurse_id === p.id)?.name || p.id.substring(0,8);
+                    const preference = p.weight > 0 ? '선호' : '비선호';
+                    prefHtml += `<tr><td>${nurseName}</td><td>${preference}</td></tr>`;
+                });
+            } else {
+                prefHtml += '<tr><td colspan="2">없음</td></tr>';
+            }
+            prefHtml += '</table></div>';
+
+            resultDisplay.innerHTML = shiftHtml + prefHtml;
+            resultContainer.style.display = 'block';
+        }
+
+        async function finalSubmit() {
+            if (!confirm('최종 제출하시겠습니까? 제출 후에는 수정할 수 없습니다.')) return;
+            
+            // 먼저 preference 데이터가 있는지 확인
+            const statusResponse = await fetch(`/api/schedules/status?year=${activeYear}&month=${activeMonth}`);
+            const statusData = await statusResponse.json();
+
+            let endpoint = '/api/preferences/submit';
+            let body = JSON.stringify({ year: activeYear, month: activeMonth });
+
+            // 저장된 preference가 없으면 (초안이 없으면) 빈 값으로 제출
+            if (!statusData.preference_data) {
+                endpoint = '/api/preferences/submit/empty';
+            }
+
+            try {
+                await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+                alert('성공적으로 제출되었습니다.');
+                checkScheduleStatus();
+            } catch (error) {
+                alert('제출에 실패했습니다: ' + error.message);
+            }
+        }
+
+        async function retractSubmission() {
+            if (!confirm('제출을 철회하고 수정하시겠습니까?')) return;
+            try {
+                await fetch('/api/preferences/retract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ year: activeYear, month: activeMonth })
+                });
+                alert('제출이 철회되었습니다. 다시 수정할 수 있습니다.');
+                checkScheduleStatus();
+            } catch (error) {
+                alert('철회에 실패했습니다: ' + error.message);
             }
         }
 
@@ -111,6 +310,8 @@
             await fetch('/auth/logout', { method: 'POST' });
             window.location.href = '/login';
         }
+
+        document.addEventListener('DOMContentLoaded', initializePage);
     </script>
     <script>
         function toggleNav() {
@@ -124,22 +325,6 @@
                 main.style.marginLeft = "250px";
             }
         }
-        // Initialize sidebar state
-        document.addEventListener("DOMContentLoaded", function() {
-            document.getElementById("mySidebar").style.width = "250px";
-            document.getElementById("main").style.marginLeft = "250px";
-
-            // Fetch the nurse schema for the payload
-            fetchNurseSchema();
-            
-            // Add Enter key listener
-            document.getElementById('wanted-input').addEventListener('keydown', function(event) {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault(); // Prevent adding a new line
-                    submitRequest();
-                }
-            });
-        });
     </script>
 </body>
 </html> 
