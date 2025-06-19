@@ -301,9 +301,9 @@ class RosterSystem:
         return violations
    
 
-    def get_roster_matrix(self) -> np.ndarray:
-        """Return the current roster matrix."""
-        return self.roster
+    # def get_roster_matrix(self) -> np.ndarray:
+    #     """Return the current roster matrix."""
+    #     return self.roster
         
     def print_roster(self):
         """Print current roster in readable format."""
@@ -416,17 +416,17 @@ class RosterSystem:
         """Check if given day is weekend."""
         return day % 7 >= 5
 
-    def _initialize_roster(self):
-        """Initialize roster with zeros."""
-        self.roster = np.zeros((len(self.nurses), self.num_days, self.config.num_shifts))
+    # def _initialize_roster(self):
+    #     """Initialize roster with zeros."""
+    #     self.roster = np.zeros((len(self.nurses), self.num_days, self.config.num_shifts))
 
-    def _assign_shift(self, nurse_idx: int, day: int, shift: str):
-        """Assign a shift to a nurse, clearing any existing assignments."""
-        # Clear all shifts for this day first
-        self.roster[nurse_idx, day] = 0
-        # Then assign the new shift
-        shift_idx = self.config.shift_types.index(shift)
-        self.roster[nurse_idx, day, shift_idx] = 1 
+    # def _assign_shift(self, nurse_idx: int, day: int, shift: str):
+    #     """Assign a shift to a nurse, clearing any existing assignments."""
+    #     # Clear all shifts for this day first
+    #     self.roster[nurse_idx, day] = 0
+    #     # Then assign the new shift
+    #     shift_idx = self.config.shift_types.index(shift)
+    #     self.roster[nurse_idx, day, shift_idx] = 1 
 
     def calculate_detailed_metrics(self) -> Dict:
         """Calculate detailed metrics for roster evaluation."""
@@ -1435,69 +1435,69 @@ class RosterSystem:
             print("Neighborhood optimization failed.")
             return False
 
-    def generate_roster(self, num_days: int) -> np.ndarray:
-        """근무표를 생성합니다.
+    # def generate_roster(self, num_days: int) -> np.ndarray:
+    #     """근무표를 생성합니다.
         
-        Args:
-            num_days: 근무표를 생성할 일수
+    #     Args:
+    #         num_days: 근무표를 생성할 일수
             
-        Returns:
-            생성된 근무표 (numpy array)
-        """
-        start_time = time.time()
-        self.logger.info(f"근무표 생성 시작: {len(self.nurses)}명의 간호사, {num_days}일")
+    #     Returns:
+    #         생성된 근무표 (numpy array)
+    #     """
+    #     start_time = time.time()
+    #     self.logger.info(f"근무표 생성 시작: {len(self.nurses)}명의 간호사, {num_days}일")
         
-        # 근무표 초기화
-        self.roster = np.full((len(self.nurses), num_days), 'OFF', dtype='U3')
+    #     # 근무표 초기화
+    #     self.roster = np.full((len(self.nurses), num_days), 'OFF', dtype='U3')
         
-        # 각 날짜에 대해 근무 배정
-        for day in range(num_days):
-            self._assign_shifts_for_day(day)
+    #     # 각 날짜에 대해 근무 배정
+    #     for day in range(num_days):
+    #         self._assign_shifts_for_day(day)
             
-            # 진행 상황 로깅
-            if (day + 1) % 7 == 0:
-                self.logger.info(f"{day + 1}일 완료 ({((day + 1) / num_days * 100):.1f}%)")
+    #         # 진행 상황 로깅
+    #         if (day + 1) % 7 == 0:
+    #             self.logger.info(f"{day + 1}일 완료 ({((day + 1) / num_days * 100):.1f}%)")
                 
-        # 만족도 지표 계산
-        self._calculate_satisfaction_metrics()
+    #     # 만족도 지표 계산
+    #     self._calculate_satisfaction_metrics()
         
-        end_time = time.time()
-        self.logger.info(f"근무표 생성 완료. 소요 시간: {end_time - start_time:.2f}초")
+    #     end_time = time.time()
+    #     self.logger.info(f"근무표 생성 완료. 소요 시간: {end_time - start_time:.2f}초")
         
-        return self.roster
+    #     return self.roster
         
-    def _assign_shifts_for_day(self, day: int):
-        """특정 날짜의 근무를 배정합니다.
+    # def _assign_shifts_for_day(self, day: int):
+    #     """특정 날짜의 근무를 배정합니다.
         
-        Args:
-            day: 근무를 배정할 날짜 인덱스
-        """
-        # 각 교대 유형별로 필요한 인원 수만큼 배정
-        for shift_type, required_nurses in self.config.daily_shift_requirements.items():
-            assigned_count = 0
+    #     Args:
+    #         day: 근무를 배정할 날짜 인덱스
+    #     """
+    #     # 각 교대 유형별로 필요한 인원 수만큼 배정
+    #     for shift_type, required_nurses in self.config.daily_shift_requirements.items():
+    #         assigned_count = 0
             
-            # 선호도에 따라 간호사 정렬
-            nurse_preferences = []
-            for idx, nurse in enumerate(self.nurses):
-                if self.roster[idx, day] == 'OFF':  # 아직 배정되지 않은 간호사만 고려
-                    preference = nurse.get_shift_preference(shift_type, self.config)
-                    nurse_preferences.append((preference, idx))
+    #         # 선호도에 따라 간호사 정렬
+    #         nurse_preferences = []
+    #         for idx, nurse in enumerate(self.nurses):
+    #             if self.roster[idx, day] == 'OFF':  # 아직 배정되지 않은 간호사만 고려
+    #                 preference = nurse.get_shift_preference(shift_type, self.config)
+    #                 nurse_preferences.append((preference, idx))
             
-            # 선호도 순으로 정렬
-            nurse_preferences.sort(reverse=True)
+    #         # 선호도 순으로 정렬
+    #         nurse_preferences.sort(reverse=True)
             
-            # 필요한 인원만큼 배정
-            for _, nurse_idx in nurse_preferences:
-                if assigned_count >= required_nurses:
-                    break
+    #         # 필요한 인원만큼 배정
+    #         for _, nurse_idx in nurse_preferences:
+    #             if assigned_count >= required_nurses:
+    #                 break
                     
-                nurse = self.nurses[nurse_idx]
-                self.roster[nurse_idx, day] = shift_type
-                nurse.update_shift_history(shift_type, day)
-                assigned_count += 1
+    #             nurse = self.nurses[nurse_idx]
+    #             self.roster[nurse_idx, day] = shift_type
+    #             nurse.update_shift_history(shift_type, day)
+    #             assigned_count += 1
                 
-            if assigned_count < required_nurses:
-                self.logger.warning(f"일자 {day + 1}: {shift_type} 교대에 필요한 인원을 배정하지 못했습니다 ({assigned_count}/{required_nurses})")
+    #         if assigned_count < required_nurses:
+    #             self.logger.warning(f"일자 {day + 1}: {shift_type} 교대에 필요한 인원을 배정하지 못했습니다 ({assigned_count}/{required_nurses})")
 
 #### 평가용 로직 
     def _analyze_consecutive_shifts(self) -> Dict:

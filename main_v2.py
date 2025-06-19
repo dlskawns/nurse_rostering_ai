@@ -372,112 +372,112 @@ class RosterGenerator:
         shift_idx = self.config.shift_types.index(shift)
         return self.roster_system.preference_matrix[nurse_idx, day, shift_idx]
         
-    def generate_roster(self):
-        """Generate roster with improved constraints handling."""
-        print("\nGenerating roster with prioritized constraints...")
+    # def generate_roster(self):
+    #     """Generate roster with improved constraints handling."""
+    #     print("\nGenerating roster with prioritized constraints...")
         
-        # Step 1: Pre-assign OFF days
-        self._assign_off_days()
+    #     # Step 1: Pre-assign OFF days
+    #     self._assign_off_days()
         
-        # Step 2: Pre-assign night shifts to night nurses
-        self._assign_night_shifts()
+    #     # Step 2: Pre-assign night shifts to night nurses
+    #     self._assign_night_shifts()
         
-        # Step 3: Assign remaining shifts (D and E) with better balancing
-        for week in range((self.num_days + 6) // 7):
-            start_day = week * 7
-            end_day = min(start_day + 7, self.num_days)
-            self._assign_day_evening_shifts_for_week(start_day, end_day)
+    #     # Step 3: Assign remaining shifts (D and E) with better balancing
+    #     for week in range((self.num_days + 6) // 7):
+    #         start_day = week * 7
+    #         end_day = min(start_day + 7, self.num_days)
+    #         self._assign_day_evening_shifts_for_week(start_day, end_day)
         
-        # Step 4: Fill any remaining gaps
-        self._fill_gaps()
+    #     # Step 4: Fill any remaining gaps
+    #     self._fill_gaps()
         
-    def _assign_off_days(self):
-        """Pre-assign OFF days based on patterns and requests."""
-        print("Assigning OFF days...")
-        off_idx = self.config.shift_types.index('OFF')
+    # def _assign_off_days(self):
+    #     """Pre-assign OFF days based on patterns and requests."""
+    #     print("Assigning OFF days...")
+    #     off_idx = self.config.shift_types.index('OFF')
         
-        for n_idx, nurse in enumerate(self.nurses):
-            # Handle head nurse weekend pattern
-            if nurse.is_head_nurse:
-                for day in range(self.num_days):
-                    if self._is_weekend(day):
-                        if nurse.head_nurse_off_pattern == 'weekend':
-                            self.roster_system.roster[n_idx, day, off_idx] = 1
-                        elif nurse.head_nurse_off_pattern == 'mixed' and day % 14 >= 7:
-                            self.roster_system.roster[n_idx, day, off_idx] = 1
+    #     for n_idx, nurse in enumerate(self.nurses):
+    #         # Handle head nurse weekend pattern
+    #         if nurse.is_head_nurse:
+    #             for day in range(self.num_days):
+    #                 if self._is_weekend(day):
+    #                     if nurse.head_nurse_off_pattern == 'weekend':
+    #                         self.roster_system.roster[n_idx, day, off_idx] = 1
+    #                     elif nurse.head_nurse_off_pattern == 'mixed' and day % 14 >= 7:
+    #                         self.roster_system.roster[n_idx, day, off_idx] = 1
                             
-            # Handle resignation dates
-            if nurse.resignation_date:
-                resignation_day = (nurse.resignation_date - self.roster_system.target_month).days
-                if 0 <= resignation_day < self.num_days:
-                    for day in range(resignation_day, self.num_days):
-                        self.roster_system.roster[n_idx, day, off_idx] = 1
+    #         # Handle resignation dates
+    #         if nurse.resignation_date:
+    #             resignation_day = (nurse.resignation_date - self.roster_system.target_month).days
+    #             if 0 <= resignation_day < self.num_days:
+    #                 for day in range(resignation_day, self.num_days):
+    #                     self.roster_system.roster[n_idx, day, off_idx] = 1
                         
-    def _assign_night_shifts(self):
-        """Assign night shifts prioritizing night nurses."""
-        print("Assigning night shifts...")
+    # def _assign_night_shifts(self):
+    #     """Assign night shifts prioritizing night nurses."""
+    #     print("Assigning night shifts...")
         
-        # Sort nurses by night shift preference
-        night_nurses = [(n_idx, nurse) for n_idx, nurse in enumerate(self.nurses) 
-                       if nurse.is_night_nurse]
-        other_nurses = [(n_idx, nurse) for n_idx, nurse in enumerate(self.nurses) 
-                       if not nurse.is_night_nurse]
+    #     # Sort nurses by night shift preference
+    #     night_nurses = [(n_idx, nurse) for n_idx, nurse in enumerate(self.nurses) 
+    #                    if nurse.is_night_nurse]
+    #     other_nurses = [(n_idx, nurse) for n_idx, nurse in enumerate(self.nurses) 
+    #                    if not nurse.is_night_nurse]
         
-        for day in range(self.num_days):
-            required = self.config.daily_shift_requirements['N']
-            assigned = 0
+    #     for day in range(self.num_days):
+    #         required = self.config.daily_shift_requirements['N']
+    #         assigned = 0
             
-            # First try to assign night nurses
-            for n_idx, nurse in night_nurses:
-                if assigned >= required:
-                    break
+    #         # First try to assign night nurses
+    #         for n_idx, nurse in night_nurses:
+    #             if assigned >= required:
+    #                 break
                     
-                if self._can_assign_shift(n_idx, day, 'N'):
-                    self._assign_shift(n_idx, day, 'N')
-                    assigned += 1
+    #             if self._can_assign_shift(n_idx, day, 'N'):
+    #                 self._assign_shift(n_idx, day, 'N')
+    #                 assigned += 1
                     
-            # If still need more, use other nurses
-            if assigned < required:
-                available = [
-                    n_idx for n_idx, _ in other_nurses
-                    if self._can_assign_shift(n_idx, day, 'N')
-                ]
+    #         # If still need more, use other nurses
+    #         if assigned < required:
+    #             available = [
+    #                 n_idx for n_idx, _ in other_nurses
+    #                 if self._can_assign_shift(n_idx, day, 'N')
+    #             ]
                 
-                for n_idx in available:
-                    if assigned >= required:
-                        break
-                    self._assign_shift(n_idx, day, 'N')
-                    assigned += 1
+    #             for n_idx in available:
+    #                 if assigned >= required:
+    #                     break
+    #                 self._assign_shift(n_idx, day, 'N')
+    #                 assigned += 1
 
-    def _check_staffing_requirements(self, day):
-        """Check if staffing requirements are met for a given day."""
-        requirements_met = True
-        messages = []
+    # def _check_staffing_requirements(self, day):
+    #     """Check if staffing requirements are met for a given day."""
+    #     requirements_met = True
+    #     messages = []
         
-        for shift in ['D', 'E', 'N']:
-            shift_idx = self.config.shift_types.index(shift)
-            required = self.config.daily_shift_requirements[shift]
-            assigned = np.sum(self.roster_system.roster[:, day, shift_idx])
+    #     for shift in ['D', 'E', 'N']:
+    #         shift_idx = self.config.shift_types.index(shift)
+    #         required = self.config.daily_shift_requirements[shift]
+    #         assigned = np.sum(self.roster_system.roster[:, day, shift_idx])
             
-            if assigned < required:
-                requirements_met = False
-                messages.append(f"Need {required - assigned} more nurses for {shift} shift")
+    #         if assigned < required:
+    #             requirements_met = False
+    #             messages.append(f"Need {required - assigned} more nurses for {shift} shift")
                 
-            # Check experienced nurse requirement
-            exp_nurses = sum(
-                1 for n_idx, nurse in enumerate(self.nurses)
-                if (nurse.experience_years >= self.config.min_experience_per_shift and
-                    self.roster_system.roster[n_idx, day, shift_idx] == 1)
-            )
+    #         # Check experienced nurse requirement
+    #         exp_nurses = sum(
+    #             1 for n_idx, nurse in enumerate(self.nurses)
+    #             if (nurse.experience_years >= self.config.min_experience_per_shift and
+    #                 self.roster_system.roster[n_idx, day, shift_idx] == 1)
+    #         )
             
-            if exp_nurses < self.config.required_experienced_nurses:
-                requirements_met = False
-                messages.append(
-                    f"Need {self.config.required_experienced_nurses - exp_nurses} "
-                    f"more experienced nurses for {shift} shift"
-                )
+    #         if exp_nurses < self.config.required_experienced_nurses:
+    #             requirements_met = False
+    #             messages.append(
+    #                 f"Need {self.config.required_experienced_nurses - exp_nurses} "
+    #                 f"more experienced nurses for {shift} shift"
+    #             )
                 
-        return requirements_met, messages
+    #     return requirements_met, messages
 
     def _calculate_fatigue_score(self, nurse_idx: int, day: int) -> float:
         """Calculate fatigue score for a nurse based on recent work history."""
@@ -519,134 +519,134 @@ class RosterGenerator:
             
         return score
 
-    def _assign_nurses_to_shift(self, day: int, shift: str, required: int) -> List[int]:
-        """Assign nurses to a shift using improved scoring system."""
-        assigned = []
-        available = self._get_available_nurses(day)
+    # def _assign_nurses_to_shift(self, day: int, shift: str, required: int) -> List[int]:
+    #     """Assign nurses to a shift using improved scoring system."""
+    #     assigned = []
+    #     available = self._get_available_nurses(day)
         
-        if not available:
-            return assigned
+    #     if not available:
+    #         return assigned
             
-        # Calculate scores for all available nurses
-        scores = []
-        for n_idx in available:
-            if not self._can_assign_shift(n_idx, day, shift):
-                continue
-            score = self._calculate_assignment_score(n_idx, self.nurses[n_idx], day, shift)
-            scores.append((n_idx, score))
+    #     # Calculate scores for all available nurses
+    #     scores = []
+    #     for n_idx in available:
+    #         if not self._can_assign_shift(n_idx, day, shift):
+    #             continue
+    #         score = self._calculate_assignment_score(n_idx, self.nurses[n_idx], day, shift)
+    #         scores.append((n_idx, score))
             
-        # Sort by score and assign best matches
-        scores.sort(key=lambda x: x[1], reverse=True)
-        for n_idx, _ in scores[:required]:
-            self._assign_shift(n_idx, day, shift)
-            assigned.append(n_idx)
+    #     # Sort by score and assign best matches
+    #     scores.sort(key=lambda x: x[1], reverse=True)
+    #     for n_idx, _ in scores[:required]:
+    #         self._assign_shift(n_idx, day, shift)
+    #         assigned.append(n_idx)
             
-        return assigned
+    #     return assigned
 
-    def _assign_day_evening_shifts_for_week(self, start_day: int, end_day: int):
-        """Assign day and evening shifts for a week with improved balancing."""
-        shifts = ['D', 'E']
-        days = range(start_day, end_day)
+    # def _assign_day_evening_shifts_for_week(self, start_day: int, end_day: int):
+    #     """Assign day and evening shifts for a week with improved balancing."""
+    #     shifts = ['D', 'E']
+    #     days = range(start_day, end_day)
         
-        # First pass: assign based on preferences and scores
-        for day in days:
-            for shift in shifts:
-                required = self.config.daily_shift_requirements[shift]
-                self._assign_nurses_to_shift(day, shift, required)
+    #     # First pass: assign based on preferences and scores
+    #     for day in days:
+    #         for shift in shifts:
+    #             required = self.config.daily_shift_requirements[shift]
+    #             self._assign_nurses_to_shift(day, shift, required)
                 
-        # Second pass: balance workload within the week
-        self._balance_weekly_workload(start_day, end_day)
+    #     # Second pass: balance workload within the week
+    #     self._balance_weekly_workload(start_day, end_day)
         
-    def _balance_weekly_workload(self, start_day: int, end_day: int):
-        """Balance workload within a week to avoid overwork."""
-        shifts = ['D', 'E']
+    # def _balance_weekly_workload(self, start_day: int, end_day: int):
+    #     """Balance workload within a week to avoid overwork."""
+    #     shifts = ['D', 'E']
         
-        # Calculate weekly workload for each nurse
-        workloads = {}
-        for n_idx, nurse in enumerate(self.nurses):
-            work_days = 0
-            for day in range(start_day, end_day):
-                if np.any(self.roster_system.roster[n_idx, day, :-1]):  # Exclude OFF
-                    work_days += 1
-            workloads[n_idx] = work_days
+    #     # Calculate weekly workload for each nurse
+    #     workloads = {}
+    #     for n_idx, nurse in enumerate(self.nurses):
+    #         work_days = 0
+    #         for day in range(start_day, end_day):
+    #             if np.any(self.roster_system.roster[n_idx, day, :-1]):  # Exclude OFF
+    #                 work_days += 1
+    #         workloads[n_idx] = work_days
             
-        # Identify overworked nurses (more than 5 days in the week)
-        overworked = [n_idx for n_idx, days in workloads.items() if days > 5]
+    #     # Identify overworked nurses (more than 5 days in the week)
+    #     overworked = [n_idx for n_idx, days in workloads.items() if days > 5]
         
-        # Try to redistribute some shifts
-        for n_idx in overworked:
-            for day in range(start_day, end_day):
-                for shift in shifts:
-                    shift_idx = self.config.shift_types.index(shift)
-                    if self.roster_system.roster[n_idx, day, shift_idx] == 1:
-                        # Try to find a replacement
-                        replacement = self._find_replacement(n_idx, day, shift)
-                        if replacement is not None:
-                            # Swap assignments
-                            self._assign_shift(replacement, day, shift)
-                            self.roster_system.roster[n_idx, day] = 0
-                            break
+    #     # Try to redistribute some shifts
+    #     for n_idx in overworked:
+    #         for day in range(start_day, end_day):
+    #             for shift in shifts:
+    #                 shift_idx = self.config.shift_types.index(shift)
+    #                 if self.roster_system.roster[n_idx, day, shift_idx] == 1:
+    #                     # Try to find a replacement
+    #                     replacement = self._find_replacement(n_idx, day, shift)
+    #                     if replacement is not None:
+    #                         # Swap assignments
+    #                         self._assign_shift(replacement, day, shift)
+    #                         self.roster_system.roster[n_idx, day] = 0
+    #                         break
                             
-    def _find_replacement(self, current_nurse_idx: int, day: int, shift: str) -> Optional[int]:
-        """Find a replacement nurse for a shift assignment."""
-        available = self._get_available_nurses(day, {current_nurse_idx})
+    # def _find_replacement(self, current_nurse_idx: int, day: int, shift: str) -> Optional[int]:
+    #     """Find a replacement nurse for a shift assignment."""
+    #     available = self._get_available_nurses(day, {current_nurse_idx})
         
-        best_score = -1
-        best_nurse = None
+    #     best_score = -1
+    #     best_nurse = None
         
-        for n_idx in available:
-            if not self._can_assign_shift(n_idx, day, shift):
-                continue
+    #     for n_idx in available:
+    #         if not self._can_assign_shift(n_idx, day, shift):
+    #             continue
                 
-            score = self._calculate_assignment_score(n_idx, self.nurses[n_idx], day, shift)
-            if score > best_score:
-                best_score = score
-                best_nurse = n_idx
+    #         score = self._calculate_assignment_score(n_idx, self.nurses[n_idx], day, shift)
+    #         if score > best_score:
+    #             best_score = score
+    #             best_nurse = n_idx
                 
-        return best_nurse
+    #     return best_nurse
 
-    def _fill_gaps(self):
-        """Fill any remaining gaps in the roster."""
-        print("Filling remaining gaps in roster...")
+    # def _fill_gaps(self):
+    #     """Fill any remaining gaps in the roster."""
+    #     print("Filling remaining gaps in roster...")
         
-        for day in range(self.num_days):
-            # Find unassigned nurses
-            unassigned = [
-                idx for idx in range(len(self.nurses))
-                if not np.any(self.roster_system.roster[idx, day])
-            ]
+    #     for day in range(self.num_days):
+    #         # Find unassigned nurses
+    #         unassigned = [
+    #             idx for idx in range(len(self.nurses))
+    #             if not np.any(self.roster_system.roster[idx, day])
+    #         ]
             
-            # Set them to OFF
-            off_idx = self.config.shift_types.index('OFF')
-            for idx in unassigned:
-                self.roster_system.roster[idx, day, off_idx] = 1
+    #         # Set them to OFF
+    #         off_idx = self.config.shift_types.index('OFF')
+    #         for idx in unassigned:
+    #             self.roster_system.roster[idx, day, off_idx] = 1
 
-    def _can_assign_shift(self, nurse_idx, day, shift):
-        """Check if a nurse can be assigned to a shift."""
-        # Check if already assigned
-        if np.any(self.roster_system.roster[nurse_idx, day]):
-            return False
+    # def _can_assign_shift(self, nurse_idx, day, shift):
+    #     """Check if a nurse can be assigned to a shift."""
+    #     # Check if already assigned
+    #     if np.any(self.roster_system.roster[nurse_idx, day]):
+    #         return False
         
-        nurse = self.nurses[nurse_idx]
+    #     nurse = self.nurses[nurse_idx]
         
-        # Night nurse restrictions
-        if nurse.is_night_nurse and shift in ['D', 'E']:
-            return False
+    #     # Night nurse restrictions
+    #     if nurse.is_night_nurse and shift in ['D', 'E']:
+    #         return False
         
-        # Check consecutive work days
-        if not self.roster_system._check_consecutive_work_days(nurse_idx, day):
-            return False
+    #     # Check consecutive work days
+    #     if not self.roster_system._check_consecutive_work_days(nurse_idx, day):
+    #         return False
         
-        # Check night shift constraints
-        if shift == 'N' and not self.roster_system._check_night_constraints(nurse_idx, day):
-            return False
+    #     # Check night shift constraints
+    #     if shift == 'N' and not self.roster_system._check_night_constraints(nurse_idx, day):
+    #         return False
         
-        # Check head nurse weekend pattern
-        if (nurse.is_head_nurse and nurse.head_nurse_off_pattern == 'weekend' and
-            self._is_weekend(day)):
-            return False
+    #     # Check head nurse weekend pattern
+    #     if (nurse.is_head_nurse and nurse.head_nurse_off_pattern == 'weekend' and
+    #         self._is_weekend(day)):
+    #         return False
         
-        return True
+    #     return True
 
 def main():
     """메인 함수: 테스트 데이터 로드, 근무표 시스템 생성, 최적화."""
