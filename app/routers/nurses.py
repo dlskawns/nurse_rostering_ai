@@ -21,8 +21,6 @@ async def get_nurses_in_group(
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    if not current_user.is_head_nurse:
-        raise HTTPException(status_code=403, detail="Permission denied")
     
     nurses = db.query(NurseModel).filter(NurseModel.group_id == current_user.group_id).all()
     return nurses

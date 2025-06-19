@@ -61,6 +61,20 @@ async def roster_create(
         {"request": request, "user": current_user},
     )
 
+@router.get("/roster-configure", response_class=HTMLResponse)
+async def roster_configure(
+    request: Request,
+    current_user: Optional[User] = Depends(get_current_user_from_cookie),
+):
+    if current_user is None:
+        return RedirectResponse(url="/login", status_code=302)
+    if not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return templates.TemplateResponse(
+        "roster_configure.html",
+        {"request": request, "user": current_user},
+    )
+
 @router.get("/roster-view", response_class=HTMLResponse)
 async def roster_view_page(request: Request, user: User = Depends(get_current_user_from_cookie)):
     if not user:

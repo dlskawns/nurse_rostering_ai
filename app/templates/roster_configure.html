@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>근무표 설정</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <style>
+        .config-container {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+        .config-section {
+            background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        .config-section h2 {
+            margin-top: 0;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+        .config-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid #f2f2f2;
+        }
+        .config-item:last-child {
+            border-bottom: none;
+        }
+        .config-item .label {
+            font-size: 16px;
+            color: #333;
+        }
+        .config-item .sub-label {
+            font-size: 14px;
+            color: #777;
+            padding-left: 20px;
+        }
+        .config-item .control {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .toggle-switch input { display: none; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #2196F3; }
+        input:disabled + .slider { background-color: #e0e0e0; cursor: not-allowed; }
+        input:checked + .slider:before { transform: translateX(26px); }
+
+        /* Input Number */
+        input[type="number"], input[type="text"] {
+            width: 80px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            text-align: right;
+        }
+        .save-btn-container {
+            margin-top: 30px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .save-btn-container button {
+            width: 150px;
+        }
+    </style>
+</head>
+<body>
+    <div id="mySidebar" class="sidebar">
+        <button class="sidebar-toggle-btn" onclick="toggleNav()"><i class="fa-solid fa-angles-left"></i></button>
+        <a href="/">Wanted 작성</a>
+        <a href="/roster-view">근무표 보기</a>
+        {% if user.is_head_nurse %}
+        <a href="/head-nurse-management">부서원 관리</a>
+        <a href="/roster-create">근무표 생성</a>
+        <a href="/roster-configure" class="active">근무표 설정</a>
+        {% endif %}
+        <a href="javascript:void(0);" onclick="logout()">로그아웃</a>
+    </div>
+
+    <div id="main">
+        <div class="container">
+            <h1>근무표 환경설정</h1>
+            <div class="config-container">
+                <!-- 기능 관리 -->
+                <section class="config-section">
+                    <h2>기능 관리 (수리계획)</h2>
+                    <div class="config-item">
+                        <span class="label">OFF 주 2회</span>
+                        <div class="control">
+                            <select><option>주 기준</option><option>7일 기준</option></select>
+                            <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">N 3회 허용</span>
+                         <label class="toggle-switch"><input type="checkbox" id="n3-allow" checked onchange="toggleN3Off()"><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label sub-label">N 3회 후 OFF 2회</span>
+                         <label class="toggle-switch"><input type="checkbox" id="n3-off" checked><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">N 2회 후 OFF 2회</span>
+                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">N 월 최대 15일 제한</span>
+                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">주에 OFF 2회</span>
+                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">E → D 근무 금지</span>
+                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
+                    </div>
+                </section>
+
+                <!-- 복지 기능 관리 -->
+                <section class="config-section">
+                    <h2>복지 기능 관리</h2>
+                    <div class="config-item">
+                        <span class="label">3-4일 근무 후 OFF 1회 제공</span>
+                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">OFF 연달아 제공</span>
+                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                    </div>
+                </section>
+
+                <!-- Shift 설정 -->
+                <section class="config-section">
+                    <h2>Shift 설정</h2>
+                    <div class="config-item">
+                        <span class="label">주말 비중 (%)</span>
+                        <div class="control"><input type="number" value="100"><span>%</span></div>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">일별 필수 D 수</span>
+                        <input type="number" value="3">
+                    </div>
+                    <div class="config-item">
+                        <span class="label">일별 필수 E 수</span>
+                        <input type="number" value="3">
+                    </div>
+                    <div class="config-item">
+                        <span class="label">일별 필수 N 수</span>
+                        <input type="number" value="2">
+                    </div>
+                    <div class="config-item">
+                        <span class="label">월 OFF 수</span>
+                        <input type="number" value="8">
+                    </div>
+                    <div class="config-item">
+                        <span class="label">타 병동 근무표 관리 가능 여부</span>
+                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                    </div>
+                </section>
+            </div>
+             <div class="save-btn-container">
+                <button onclick="alert('설정이 저장되었습니다.')">저장하기</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            document.getElementById("mySidebar").style.width = "250px";
+            document.getElementById("main").style.marginLeft = "250px";
+            toggleN3Off();
+        });
+
+        function toggleN3Off() {
+            const n3Allow = document.getElementById('n3-allow');
+            const n3Off = document.getElementById('n3-off');
+            n3Off.disabled = !n3Allow.checked;
+        }
+
+        function toggleNav() {
+            const sidebar = document.getElementById("mySidebar");
+            const main = document.getElementById("main");
+            const toggleBtn = document.querySelector(".sidebar-toggle-btn i");
+
+            const isOpen = sidebar.style.width === "250px";
+            if (isOpen) {
+                sidebar.style.width = "0";
+                main.style.marginLeft = "0";
+                toggleBtn.classList.remove('fa-angles-left');
+                toggleBtn.classList.add('fa-angles-right');
+            } else {
+                sidebar.style.width = "250px";
+                main.style.marginLeft = "250px";
+                toggleBtn.classList.remove('fa-angles-right');
+                toggleBtn.classList.add('fa-angles-left');
+            }
+        }
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html> 
