@@ -46,6 +46,12 @@ class NurseRosterConfig:
     # 페어링 가중치
     pair_preference_weight: float = 3.0  # 페어링 선호도 반영 가중치
     
+    # --- 신규 Hard Constraint 제어 파라미터 ---
+    enforce_seniority_pairing: bool = True # 시니어-주니어 동반 근무 규칙 강제 여부
+    junior_pairing_max_experience: int = 2 # 주니어로 간주할 최대 연차
+    senior_pairing_min_experience: int = 6 # 시니어로 간주할 최소 연차
+    enforce_E_after_D_constraint: bool = True # E -> D 근무 금지 규칙 강제 여부
+    
     # 소프트맥스 샘플링 온도
     sampling_temperature: float = 2.0
     

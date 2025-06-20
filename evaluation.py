@@ -6,6 +6,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from datetime import datetime, timedelta
+import calendar
+
+# --- 신규 Import ---
+import optuna
+from scipy.stats import zscore
+from scipy.special import expit as sigmoid
+# ---
+
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.utils import get_column_letter
@@ -17,11 +25,13 @@ try:
         load_test_data,
         create_nurses_from_data,
         NurseRosterConfig,
-        RosterSystem,
         Timer
     )
-except ImportError:
-    print("main_v2.py를 찾을 수 없습니다. evaluation.py와 같은 디렉토리에 있는지 확인하세요.")
+    # RosterSystem은 이제 roster_system.py에서 가져옵니다.
+    from roster_system import RosterSystem
+except ImportError as e:
+    print(f"필요한 모듈을 가져오는 데 실패했습니다: {e}")
+    print("main_v2.py와 roster_system.py가 evaluation.py와 같은 디렉토리에 있는지 확인하세요.")
     exit(1)
 
 
@@ -349,34 +359,32 @@ class RosterEvaluator:
         return violations, details
 
 
-def run_single_generation(data, time_limit=30, use_lns=True):
+def run_single_generation(data, time_limit=30, use_lns=False, preference_matrix=None):
     """단일 근무표 생성을 실행하고 RosterSystem 객체를 반환합니다."""
     config_data = data.get('config', {})
     config = NurseRosterConfig(
         daily_shift_requirements=config_data.get('daily_shift_requirements', {"D": 3, "E": 3, "N": 2}),
-        min_experience_per_shift=config_data.get('min_experience_per_shift', 3),
-        required_experienced_nurses=config_data.get('required_experienced_nurses', 1),
         max_consecutive_work_days=config_data.get('max_consecutive_work_days', 6),
         global_monthly_off_days=config_data.get('global_monthly_off_days', 3),
         standard_personal_off_days=config_data.get('standard_personal_off_days', 8),
-        enforce_two_offs_per_week=config_data.get('enforce_two_offs_per_week', False),
+        enforce_two_offs_per_week=config_data.get('enforce_two_offs_per_week', True),
         max_night_shifts_per_month=config_data.get('max_night_shifts_per_month', 15),
         max_consecutive_nights=config_data.get('max_consecutive_nights', 2),
     )
     
     target_month = datetime.strptime(data['target_month'], '%Y-%m-%d').date()
     nurses = create_nurses_from_data(data['nurses'])
-    for nurse in nurses:
-        nurse.initialize_off_days(config)
     
-    roster_system = RosterSystem(nurses, target_month, config)
+    # RosterSystem 초기화 시 선호도 행렬 전달
+    roster_system = RosterSystem(nurses, target_month, config, preference_matrix=preference_matrix)
     
-    if 'off_requests' in data:
-        off_requests = {int(k): v for k, v in data['off_requests'].items()}
-        roster_system.apply_off_requests(off_requests)
-    
-    if 'shift_preferences' in data:
-        roster_system.apply_shift_preferences(data['shift_preferences'])
+    # 선호도 행렬이 외부에서 주입되므로, 기존 apply 함수 호출은 필요 없음
+    # (단, Optuna 최적화 과정이 아닌 최종 실행에서는 호출될 수 있으나,
+    #  여기서는 build_scaled_preference_matrix에서 처리하므로 주석 처리)
+    # if 'off_requests' in data:
+    #     roster_system.apply_off_requests(data['off_requests'])
+    # if 'shift_preferences' in data:
+    #     roster_system.apply_shift_preferences(data['shift_preferences'])
         
     roster_system.optimize_roster_with_cp_sat(time_limit_seconds=time_limit)
     
@@ -384,6 +392,120 @@ def run_single_generation(data, time_limit=30, use_lns=True):
         roster_system.optimize_with_lns(max_iterations=5, time_limit_per_iteration=10)
         
     return roster_system
+
+def build_scaled_preference_matrix(thetas, test_data, nurses, config):
+    """Z-score와 Sigmoid를 사용하여 선호도 행렬을 동적으로 스케일링합니다."""
+    num_nurses = len(nurses)
+    num_days = calendar.monthrange(
+        datetime.strptime(test_data['target_month'], '%Y-%m-%d').year,
+        datetime.strptime(test_data['target_month'], '%Y-%m-%d').month
+    )[1]
+    
+    # 1. 기본 선호도 행렬 생성
+    base_prefs = np.zeros((num_nurses, num_days, config.num_shifts))
+    nurse_id_map = {nurse.id: i for i, nurse in enumerate(nurses)}
+    
+    # OFF 요청 적용
+    off_requests = test_data.get('off_requests', {})
+    off_idx = config.shift_types.index('OFF')
+    for nurse_id, days in off_requests.items():
+        n_idx = nurse_id_map.get(int(nurse_id))
+        if n_idx is None: continue
+        for day, score in days.items():
+            base_prefs[n_idx, int(day) - 1, off_idx] = score
+
+    # Shift 요청 적용
+    shift_preferences = test_data.get('shift_preferences', {})
+    for nurse_id, prefs in shift_preferences.items():
+        n_idx = nurse_id_map.get(int(nurse_id))
+        if n_idx is None: continue
+        for shift, dates in prefs.items():
+            if shift not in config.shift_types: continue
+            s_idx = config.shift_types.index(shift)
+            for day, score in dates.items():
+                base_prefs[n_idx, int(day) - 1, s_idx] = score
+    
+    # 2. 스케일링 적용
+    # 0이 아닌 값들만 추출하여 스케일링
+    non_zero_indices = base_prefs > 0
+    if np.any(non_zero_indices):
+        non_zero_values = base_prefs[non_zero_indices]
+        
+        # Z-score 정규화 (표준편차가 0일 경우 대비)
+        if np.std(non_zero_values) > 1e-6:
+            scaled_values = zscore(non_zero_values)
+        else:
+            scaled_values = non_zero_values - np.mean(non_zero_values)
+            
+        # Sigmoid 압축
+        sigmoid_values = sigmoid(scaled_values)
+        
+        # 스케일링된 값을 다시 원래 위치에 넣기
+        base_prefs[non_zero_indices] = sigmoid_values
+
+    # 3. Theta 가중치 적용
+    scaled_matrix = np.zeros_like(base_prefs)
+    
+    # OFF 가중치 적용
+    scaled_matrix[:, :, off_idx] = base_prefs[:, :, off_idx] * thetas['theta_off']
+    
+    # D, E, N 가중치 적용
+    for shift_name in ['D', 'E', 'N']:
+        s_idx = config.shift_types.index(shift_name)
+        scaled_matrix[:, :, s_idx] = base_prefs[:, :, s_idx] * thetas['theta_shift']
+        
+    return scaled_matrix
+
+def optimize_thetas(test_data, nurses, config, n_trials=30):
+    """Optuna를 사용하여 최적의 theta 값을 찾습니다."""
+    
+    print("\n===== 선호도 가중치(theta) 최적화 시작 =====")
+    
+    def objective(trial):
+        # 1. Theta 값 제안
+        thetas = {
+            'theta_off': trial.suggest_float("theta_off", 100, 2000, log=True),
+            'theta_shift': trial.suggest_float("theta_shift", 10, 500, log=True),
+        }
+        
+        # 2. 제안된 Theta로 선호도 행렬 생성
+        preference_matrix = build_scaled_preference_matrix(thetas, test_data, nurses, config)
+        
+        # 3. 짧은 시간으로 근무표 생성
+        rs = run_single_generation(
+            test_data, 
+            time_limit=10, # Optuna trial은 짧게
+            use_lns=False,
+            preference_matrix=preference_matrix
+        )
+        
+        # 4. 결과 평가 및 점수 계산
+        evaluator = RosterEvaluator(rs, test_data)
+        results, _ = evaluator.evaluate_all()
+        
+        satisfaction_rate = results['preference_satisfaction']['satisfaction_rate']
+        total_violations = sum(results['constraint_violations'].values())
+        
+        # Hard constraint 위반 시 매우 큰 페널티 부여
+        # RosterSystem이 Hard Constraint를 사용하므로, 해를 찾지 못한 경우를 위반으로 간주
+        if rs.roster.sum() == 0: # 해를 못찾으면 roster가 비어있음
+             return -1_000_000
+
+        # 점수 = 만족도 - (위반 * 페널티)
+        # 현재 모든 제약이 Hard이므로, violation은 0이 되어야 함.
+        # 따라서 만족도 자체가 점수가 됨
+        score = satisfaction_rate
+        
+        return score
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials)
+    
+    print(f"Theta 최적화 완료: {n_trials}회 시도")
+    print(f"최적 점수: {study.best_value:.2f}")
+    print(f"최적 파라미터: {study.best_params}")
+    
+    return study.best_params
 
 def format_roster_to_dataframe(roster_system):
     """
@@ -468,6 +590,19 @@ def plot_results(run_data, output_dir):
 def main(args):
     """메인 평가 로직"""
     test_data = load_test_data(args.data_file)
+    
+    # --- Optuna 최적화 단계 추가 ---
+    # 평가에 사용할 config, nurses 객체 미리 생성
+    eval_config = NurseRosterConfig()
+    eval_nurses = create_nurses_from_data(test_data['nurses'])
+    
+    best_thetas = optimize_thetas(test_data, eval_nurses, eval_config, n_trials=args.optuna_trials)
+    
+    print("\n===== 최적 Theta로 최종 평가 실행 =====")
+    # 최적화된 Theta로 최종 선호도 행렬 생성
+    optimized_pref_matrix = build_scaled_preference_matrix(best_thetas, test_data, eval_nurses, eval_config)
+    
+    # --- 기존 평가 로직 ---
     all_run_data = []
     all_details = {"preference": [], "constraint": []}
     all_rosters = []
@@ -482,7 +617,12 @@ def main(args):
         
         start_time = time.time()
         with Timer(f"Generation Run {i+1}"):
-            rs = run_single_generation(test_data, time_limit=args.time_limit, use_lns=True)
+            rs = run_single_generation(
+                test_data, 
+                time_limit=args.time_limit, 
+                use_lns=False, # Hard constraint에서는 LNS 의미가 적음
+                preference_matrix=optimized_pref_matrix
+            )
         end_time = time.time()
         
         all_rosters.append(rs)
@@ -592,7 +732,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_runs",
         type=int,
-        default=5,
+        default=1,
         help="Number of times to run the roster generation for evaluation."
     )
     parser.add_argument(
@@ -604,8 +744,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--time_limit",
         type=int,
-        default=30,
+        default=60, # Hard Constraint는 더 오래 걸릴 수 있으므로 시간 증가
         help="Time limit in seconds for the CP-SAT solver."
+    )
+    parser.add_argument(
+        "--optuna_trials",
+        type=int,
+        default=5, # Optuna 시도 횟수
+        help="Number of trials for Optuna to find best thetas."
     )
     args = parser.parse_args()
     main(args) 
