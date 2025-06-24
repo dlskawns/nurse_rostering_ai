@@ -16,7 +16,7 @@ from app.routers.utils import Timer
 from roster_system import RosterSystem
 from nurse import Nurse as NurseEngine
 from config import NurseRosterConfig
-
+from app.routers.utils import parse_prefs_to_dict
 
 router = APIRouter(
     prefix="/api",
@@ -391,16 +391,18 @@ async def generate_roster_endpoint(
             target_month=target_month_date,
             config=roster_config_for_engine
         )
-    print('\n\n\n\n\nnurses_for_engine', nurses_for_engine, '\n\n\n\n\n')
-    print('\n\n\n\n\nprefs_dict', prefs_dict, '\n\n\n\n\n')
-    print('\n\n\n\n\npreferences', preferences, '\n\n\n\n\n')
+
+    shift_preferences, off_requests, pair_preferences = parse_prefs_to_dict(prefs_dict)
+    print('\n\n\n\n\npair_preferences', pair_preferences, '\n\n\n\n\n')
+    print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
+    print('\n\n\n\n\nshift_preferences', shift_preferences, '\n\n\n\n\n')
     with Timer("휴무 요청 적용"):
-        off_requests = {} # Placeholder
+        # off_requests = {} # Placeholder
         # Example: off_requests = {"1": {"5": 10.0, "12": 10.0}}
         roster_system.apply_off_requests(off_requests)
 
     with Timer("선호 근무 유형 적용"):
-        shift_preferences = {} # Placeholder
+        # shift_preferences = {} # Placeholder
         # Example: shift_preferences = {"1": {"D": {"4": 1.0, "5": 3.2}}}
         roster_system.apply_shift_preferences(shift_preferences)
 

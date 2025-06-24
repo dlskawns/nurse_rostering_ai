@@ -139,11 +139,9 @@ class RosterSystem:
         off_idx     = self.config.shift_types.index("OFF")
         base_weight = self.config.shift_preference_weights.get("OFF", 10.0)
         print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
-        for nurse_id_str, day_map in off_requests.items():
-            nurse_id  = int(nurse_id_str)
-            nurse_idx = next((i for i,n in enumerate(self.nurses) if n.id == nurse_id), None)
-            if nurse_idx is None:
-                print(f"[OFF] 경고: ID {nurse_id} 간호사 없음");  continue
+        for target_nurse_id, day_map in off_requests.items():
+            if target_nurse_id is None:
+                print(f"[OFF] 경고: ID {target_nurse_id} 간호사 없음");  continue
 
             valid_days = []
             for day_str, delta in day_map.items():
@@ -153,20 +151,20 @@ class RosterSystem:
             
             if not valid_days:
                 continue
-            
-            nurse = self.nurses[nurse_idx]
-            if not nurse.can_take_off(len(valid_days)):
-                print(f"[OFF] 경고: {nurse.name} – 잔여 휴무 부족 "
-                    f"(요청 {len(valid_days)}, 가능 {nurse.remaining_off_days})")
-                continue
+            nurse = next((n for n in self.nurses if n.db_id == target_nurse_id), None)
+
+            # if not nurse.can_take_off(len(valid_days)):
+            #     print(f"[OFF] 경고: {nurse.name} – 잔여 휴무 부족 "
+            #         f"(요청 {len(valid_days)}, 가능 {nurse.remaining_off_days})")
+            #     continue
 
             # ★ 가중치 반영
             for d in valid_days:
                 day_idx = d-1
                 delta   = day_map[str(d)]
-                self.preference_matrix[nurse_idx, day_idx, off_idx] = base_weight + delta
+                self.preference_matrix[nurse.id, day_idx, off_idx] = base_weight + delta
         
-        nurse.update_off_days(len(valid_days))
+        # nurse.update_off_days(len(valid_days))
             
     def apply_shift_preferences(self, shift_preferences: Dict[str, Dict[str, Dict[str, float]]]):
         """
@@ -181,12 +179,10 @@ class RosterSystem:
         }
         """
         print("근무 유형 선호도 적용 중...")
-        for nurse_id_str, shifts in shift_preferences.items():
-            nurse_id = int(nurse_id_str)
-            nurse_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_id), None)
+        for target_nurse_id, shifts in shift_preferences.items():
             
-            if nurse_idx is None:
-                print(f"경고: ID {nurse_id}인 간호사를 찾을 수 없습니다.")
+            if target_nurse_id is None:
+                print(f"경고: ID {target_nurse_id}인 간호사를 찾을 수 없습니다.")
                 continue
             
             for shift_type, day_weight_map in shifts.items():
@@ -196,12 +192,12 @@ class RosterSystem:
                 
                 shift_idx = self.config.shift_types.index(shift_type)
                 default_weight = self.config.shift_preference_weights.get(shift_type, 5.0)
-
+                nurse = next((n for n in self.nurses if n.db_id == target_nurse_id), None)
                 for day_str, delta in day_weight_map.items():
                     day = int(day_str)
                     if 1 <= day <= self.num_days:
                         day_idx = day - 1
-                        self.preference_matrix[nurse_idx, day_idx, shift_idx] = default_weight + delta
+                        self.preference_matrix[nurse.id, day_idx, shift_idx] = default_weight + delta
                         
         print("근무 유형 선호도 적용 완료")
         
@@ -229,9 +225,10 @@ class RosterSystem:
                 nurse_1_id = pair["nurse_1"]
                 nurse_2_id = pair["nurse_2"]
                 weight = pair.get("weight", self.config.pair_preference_weight)
-                
-                nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
-                nurse_2_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_2_id), None)
+                nurse_1_idx = next((n.id for n in self.nurses if n.db_id == nurse_1_id), None)
+                nurse_2_idx = next((n.id for n in self.nurses if n.db_id == nurse_2_id), None)
+                # nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
+                # nurse_2_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_2_id), None)
                 
                 if nurse_1_idx is not None and nurse_2_idx is not None:
                     self.pair_matrix["together"][nurse_1_idx, nurse_2_idx] = weight
@@ -248,9 +245,10 @@ class RosterSystem:
                 nurse_1_id = pair["nurse_1"]
                 nurse_2_id = pair["nurse_2"]
                 weight = pair.get("weight", self.config.pair_preference_weight)
-                
-                nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
-                nurse_2_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_2_id), None)
+                nurse_1_idx = next((n.id for n in self.nurses if n.db_id == nurse_1_id), None)
+                nurse_2_idx = next((n.id for n in self.nurses if n.db_id == nurse_2_id), None)
+                # nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
+                # nurse_2_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_2_id), None)
                 
                 if nurse_1_idx is not None and nurse_2_idx is not None:
                     self.pair_matrix["apart"][nurse_1_idx, nurse_2_idx] = weight
