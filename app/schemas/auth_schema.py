@@ -7,6 +7,7 @@ class TokenData(BaseModel):
 class User(BaseModel):
     nurse_id: str
     account_id: str
+    office_id: Optional[str] = None
     group_id: str
     is_head_nurse: bool
 

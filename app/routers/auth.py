@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
 
 from app.db.client import get_db
-from app.db.models import Nurse as NurseModel
+from app.db.models import Nurse, Group, Office
 from app.schemas.auth_schema import User as UserSchema, TokenData
 
 # Configuration
@@ -33,7 +33,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 def get_user(db: Session, account_id: str):
-    return db.query(NurseModel).filter(NurseModel.account_id == account_id).first()
+
+    return db.query(Nurse).filter(Nurse.account_id == account_id).first()
 
 @router.post("/login")
 async def login_for_access_token(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -83,5 +84,5 @@ async def get_current_user_from_cookie(token: Optional[str] = Cookie(None, alias
     user = get_user(db, token_data.account_id)
     if user is None:
         return None
-        
+    print('user', user)
     return UserSchema.from_orm(user) 

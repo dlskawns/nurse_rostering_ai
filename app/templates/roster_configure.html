@@ -18,6 +18,10 @@
             border-radius: 10px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.05);
         }
+        .config-section.disabled {
+            opacity: 0.6;
+            pointer-events: none;
+        }
         .config-section h2 {
             margin-top: 0;
             padding-bottom: 15px;
@@ -77,12 +81,21 @@
         input:checked + .slider:before { transform: translateX(26px); }
 
         /* Input Number */
-        input[type="number"], input[type="text"] {
+        input[type="number"], input[type="text"], input[type="range"] {
             width: 80px;
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 5px;
             text-align: right;
+        }
+        input[type="range"] {
+            width: 150px;
+            text-align: left;
+        }
+        .range-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .save-btn-container {
             margin-top: 30px;
@@ -110,88 +123,105 @@
     <div id="main">
         <div class="container">
             <h1>근무표 환경설정</h1>
+            <form id="configForm">
             <div class="config-container">
-                <!-- 기능 관리 -->
-                <section class="config-section">
-                    <h2>기능 관리 (수리계획)</h2>
-                    <div class="config-item">
-                        <span class="label">OFF 주 2회</span>
-                        <div class="control">
-                            <select><option>주 기준</option><option>7일 기준</option></select>
-                            <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">N 3회 허용</span>
-                         <label class="toggle-switch"><input type="checkbox" id="n3-allow" checked onchange="toggleN3Off()"><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label sub-label">N 3회 후 OFF 2회</span>
-                         <label class="toggle-switch"><input type="checkbox" id="n3-off" checked><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">N 2회 후 OFF 2회</span>
-                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">N 월 최대 15일 제한</span>
-                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">주에 OFF 2회</span>
-                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">E → D 근무 금지</span>
-                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider"></span></label>
-                    </div>
-                </section>
-
-                <!-- 복지 기능 관리 -->
-                <section class="config-section">
-                    <h2>복지 기능 관리</h2>
-                    <div class="config-item">
-                        <span class="label">3-4일 근무 후 OFF 1회 제공</span>
-                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">OFF 연달아 제공</span>
-                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
-                    </div>
-                </section>
-
                 <!-- Shift 설정 -->
                 <section class="config-section">
                     <h2>Shift 설정</h2>
                     <div class="config-item">
-                        <span class="label">주말 비중 (%)</span>
-                        <div class="control"><input type="number" value="100"><span>%</span></div>
-                    </div>
-                    <div class="config-item">
                         <span class="label">일별 필수 D 수</span>
-                        <input type="number" value="3">
+                        <input type="number" name="day_req" value="3">
                     </div>
                     <div class="config-item">
                         <span class="label">일별 필수 E 수</span>
-                        <input type="number" value="3">
+                        <input type="number" name="eve_req" value="3">
                     </div>
                     <div class="config-item">
                         <span class="label">일별 필수 N 수</span>
-                        <input type="number" value="2">
+                        <input type="number" name="nig_req" value="2">
                     </div>
                     <div class="config-item">
+                        <span class="label">Shift 내 책임 최소 경력 (년차)</span>
+                        <input type="number" name="min_exp_per_shift" value="3">
+                    </div>
+                    <div class="config-item">
+                        <span class="label">책임 간호 인원 (명)</span>
+                        <input type="number" name="req_exp_nurses" value="1">
+                    </div>
+                    <div class="config-item">
+                        <span class="label">병동 환자수</span>
+                        <input type="number" name="patient_amount" value="40">
+                    </div>
+                     <div class="config-item">
                         <span class="label">월 OFF 수</span>
-                        <input type="number" value="8">
+                        <input type="number" name="off_days" value="8">
                     </div>
                     <div class="config-item">
-                        <span class="label">타 병동 근무표 관리 가능 여부</span>
-                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                        <span class="label">주말 비중</span>
+                        <div class="control"><input type="number" name="weekend_shift_ratio" value="1.0" step="0.1"></div>
                     </div>
+                </section>
+                <!-- 기능 관리 -->
+                <section class="config-section">
+                    <h2>기능 관리</h2>
+                    <div class="config-item">
+                        <span class="label">최대 연속 근무일 수</span>
+                        <input type="number" name="max_conseq_work" value="5">
+                    </div>
+                    <div class="config-item">
+                        <span class="label">근무 요구사항 우선순위 지수</span>
+                        <div class="range-container">
+                            <input type="range" id="shift_priority" name="shift_priority" min="0" max="1" value="0.5" step="0.1" oninput="this.nextElementSibling.value = this.value">
+                            <output>0.5</output>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">OFF 주 2회</span>
+                        <div class="control">
+                            <label class="toggle-switch"><input type="checkbox" name="two_offs_per_week" checked><span class="slider"></span></label>
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">N 3회 허용</span>
+                        <label class="toggle-switch"><input type="checkbox" id="n3-allow" name="three_seq_nig" checked onchange="toggleN3Off()"><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label sub-label">N 3회 후 OFF 2회</span>
+                        <label class="toggle-switch"><input type="checkbox" id="n3-off" name="two_offs_after_three_nig" checked><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">N 2회 후 OFF 2회</span>
+                        <label class="toggle-switch"><input type="checkbox" name="two_offs_after_two_nig" checked><span class="slider"></span></label>
+                    </div>
+                    <div class="config-item">
+                        <span class="label">월 최대 Night 근무 수</span>
+                        <input type="number" name="max_nig_per_month" value="15">
+                    </div>
+                    <div class="config-item">
+                        <span class="label">E → D 근무 금지</span>
+                        <label class="toggle-switch"><input type="checkbox" name="banned_day_after_eve" checked><span class="slider"></span></label>
+                    </div>
+                </section>
+
+                <!-- 복지 기능 관리 -->
+                <section class="config-section disabled">
+                    <h2>복지 기능 관리</h2>
+                    <fieldset disabled>
+                        <div class="config-item">
+                            <span class="label">3-4일 근무 후 OFF 1회 제공</span>
+                            <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                        </div>
+                        <div class="config-item">
+                            <span class="label">OFF 연달아 제공</span>
+                            <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                        </div>
+                    </fieldset>
                 </section>
             </div>
              <div class="save-btn-container">
-                <button onclick="alert('설정이 저장되었습니다.')">저장하기</button>
+                <button type="submit">저장하기</button>
             </div>
+            </form>
         </div>
     </div>
     <script>
@@ -204,7 +234,15 @@
         function toggleN3Off() {
             const n3Allow = document.getElementById('n3-allow');
             const n3Off = document.getElementById('n3-off');
-            n3Off.disabled = !n3Allow.checked;
+            const n3OffSwitch = n3Off.closest('.toggle-switch');
+            if (n3Allow.checked) {
+                n3Off.disabled = false;
+                if (n3OffSwitch) n3OffSwitch.classList.remove('disabled');
+            } else {
+                n3Off.disabled = true;
+                n3Off.checked = false;
+                 if (n3OffSwitch) n3OffSwitch.classList.add('disabled');
+            }
         }
 
         function toggleNav() {
@@ -229,6 +267,40 @@
             await fetch('/auth/logout', { method: 'POST' });
             window.location.href = '/login';
         }
+
+        document.getElementById('configForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                if (value === 'on') { // Handle checkboxes
+                    data[key] = true;
+                } else {
+                    data[key] = value;
+                }
+            }
+            // Add unchecked checkboxes
+            this.querySelectorAll('input[type="checkbox"]:not(:checked)').forEach(el => {
+                data[el.name] = false;
+            });
+
+
+            const response = await fetch('/roster/config/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                alert('설정이 저장되었습니다.');
+                window.location.reload();
+            } else {
+                alert('저장에 실패했습니다.');
+            }
+        });
     </script>
 </body>
+</html> 
 </html> 

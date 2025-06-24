@@ -2,11 +2,15 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, List, Dict, Any
+from sqlalchemy.orm import Session
+from datetime import datetime
 
-from app.schemas.roster_schema import RosterRequest, RosterResponse
+from app.schemas.roster_schema import RosterRequest, RosterResponse, RosterConfigCreate, RosterConfig
 from app.services.graph_service import graph_service
 from app.routers.auth import get_current_user_from_cookie
 from app.schemas.auth_schema import User
+from app.db.client import get_db
+from app.db.models import RosterConfig as RosterConfigModel
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -198,4 +202,23 @@ def parse_preferences(
                     # 변환 불가능하면 skip
                     continue
 
-    return parsed 
+    return parsed
+
+@router.post("/roster/config/save")
+async def save_roster_config(
+    config_data: RosterConfigCreate,
+    user: User = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db),
+):
+    if not user or not user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    print('user11', user)
+    db_config = RosterConfigModel(
+        **config_data.model_dump(),
+        office_id=user.office_id,
+        group_id=user.group_id
+    )
+    db.add(db_config)
+    db.commit()
+    db.refresh(db_config)
+    return {"message": "Configuration saved successfully"} 

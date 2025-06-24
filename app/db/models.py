@@ -1,4 +1,4 @@
-from sqlalchemy import Column, VARCHAR, SMALLINT, BOOLEAN, DATETIME, func, ForeignKey, JSON, CHAR
+from sqlalchemy import Column, VARCHAR, SMALLINT, BOOLEAN, DATETIME, func, ForeignKey, JSON, CHAR, INTEGER, FLOAT
 from sqlalchemy.dialects.mysql import TINYINT 
 from sqlalchemy.orm import relationship
 from app.db.client import Base
@@ -8,14 +8,14 @@ class Group(Base):
     group_id = Column(VARCHAR(50), primary_key=True)
     office_id = Column(VARCHAR(50), ForeignKey('offices.office_id'))
     name = Column(VARCHAR(50), nullable=False)
-
+    office = relationship("Office", back_populates="groups")
 class Office(Base):
     __tablename__ = 'offices'
     office_id = Column(VARCHAR(50), primary_key=True)
     name = Column(VARCHAR(100), nullable=False)
     address = Column(VARCHAR(255))
     contact_number = Column(VARCHAR(30))
-
+    groups = relationship("Group", back_populates="office") 
 class Nurse(Base):
     __tablename__ = "nurses"
 
@@ -33,8 +33,11 @@ class Nurse(Base):
     created_at = Column(DATETIME, default=func.now())
     updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
 
-    group = relationship("Group")
 
+    group = relationship("Group")
+    @property
+    def office_id(self) -> str | None:
+        return self.group.office_id if self.group else None
 class Schedule(Base):
     __tablename__ = "schedules"
     schedule_id = Column(CHAR(12), primary_key=True)
@@ -70,4 +73,30 @@ class ShiftPreference(Base):
     data = Column(JSON, nullable=False)
     is_submitted = Column(BOOLEAN, nullable=False, default=False)
     created_at = Column(DATETIME, nullable=False, default=func.now())
-    submitted_at = Column(DATETIME, nullable=True) 
+    submitted_at = Column(DATETIME, nullable=True)
+
+class RosterConfig(Base):
+    __tablename__ = 'roster_config'
+    config_id = Column(INTEGER, primary_key=True, autoincrement=True)
+    office_id = Column(VARCHAR(50), ForeignKey('offices.office_id'))
+    group_id = Column(VARCHAR(50), ForeignKey('groups.group_id'))
+    day_req = Column(INTEGER)
+    eve_req = Column(INTEGER)
+    nig_req = Column(INTEGER)
+    min_exp_per_shift = Column(INTEGER)
+    req_exp_nurses = Column(INTEGER)
+    two_offs_per_week = Column(BOOLEAN)
+    max_nig_per_month = Column(INTEGER)
+    three_seq_nig = Column(BOOLEAN)
+    two_offs_after_three_nig = Column(BOOLEAN)
+    two_offs_after_two_nig = Column(BOOLEAN)
+    banned_day_after_eve = Column(BOOLEAN)
+    max_conseq_work = Column(INTEGER)
+    off_days = Column(INTEGER)
+    shift_priority = Column(FLOAT)
+    weekend_shift_ratio = Column(FLOAT)
+    patient_amount = Column(INTEGER)
+    created_at = Column(DATETIME, default=func.now())
+
+    office = relationship("Office")
+    group = relationship("Group") 
