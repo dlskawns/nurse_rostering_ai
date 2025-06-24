@@ -12,7 +12,8 @@ def collector(state):
     """
     information collector
     """
-
+    # print('-------collector-------')
+    # print('state', state)
 class ContextAnalyticsState(TypedDict):
     request: str                         # Query - 유저 input
     schema: object

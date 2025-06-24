@@ -416,37 +416,59 @@ async def generate_roster_endpoint(
     with Timer("CP-SAT으로 최적화"):
         roster_system.optimize_roster_with_cp_sat_v2(time_limit_seconds=60)
 
-    with Timer("최적화 결과 출력"):
-        print("--- 최적화된 근무표 지표 ---")
-        metrics = roster_system.calculate_detailed_metrics()
-        for key, value in metrics.items():
-            if isinstance(value, dict):
-                print(f"  {key}:")
-                for sub_key, sub_value in value.items():
-                    print(f"    {sub_key}: {sub_value}")
-            else:
-                print(f"  {key}: {value}")
+    # with Timer("최적화 결과 출력"):
+    #     print("--- 최적화된 근무표 지표 ---")
+    #     metrics = roster_system.calculate_detailed_metrics()
+    #     for key, value in metrics.items():
+    #         if isinstance(value, dict):
+    #             print(f"  {key}:")
+    #             for sub_key, sub_value in value.items():
+    #                 print(f"    {sub_key}: {sub_value}")
+    #         else:
+    #             print(f"  {key}: {value}")
+
+    # # 4. Clear old entries and save new roster to DB
+    # db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
+    
+    # shift_map = {i: s for i, s in enumerate(roster_system.config.shift_types)}
+
+    # for n_idx, nurse_schedule in enumerate(roster_system.roster):
+    #     nurse_db_id = roster_system.nurses[n_idx].db_id
+    #     for day_idx, shift_vector in enumerate(nurse_schedule):
+    #         shift_idx = np.where(shift_vector == 1)[0]
+    #         if len(shift_idx) > 0:
+    #             shift_id = shift_map[shift_idx[0]]
+    #             work_date = date(req.year, req.month, day_idx + 1)
+    #             entry = ScheduleEntry(
+    #                 entry_id=str(uuid.uuid4().hex)[:16],
+    #                 schedule_id=schedule.schedule_id,
+    #                 nurse_id=nurse_db_id,
+    #                 work_date=work_date,
+    #                 shift_id=shift_id.upper()
+    #             )
+    #             db.add(entry)
+    ###############
+    
+    nurses_dict = [n.__dict__ for n in nurses_in_group]
+    prefs_dict = [p.__dict__ for p in preferences]
+
+    # 3. Call the roster generation logic
+    generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
 
     # 4. Clear old entries and save new roster to DB
     db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
     
-    shift_map = {i: s for i, s in enumerate(roster_system.config.shift_types)}
-
-    for n_idx, nurse_schedule in enumerate(roster_system.roster):
-        nurse_db_id = roster_system.nurses[n_idx].db_id
-        for day_idx, shift_vector in enumerate(nurse_schedule):
-            shift_idx = np.where(shift_vector == 1)[0]
-            if len(shift_idx) > 0:
-                shift_id = shift_map[shift_idx[0]]
-                work_date = date(req.year, req.month, day_idx + 1)
-                entry = ScheduleEntry(
-                    entry_id=str(uuid.uuid4().hex)[:16],
-                    schedule_id=schedule.schedule_id,
-                    nurse_id=nurse_db_id,
-                    work_date=work_date,
-                    shift_id=shift_id.upper()
-                )
-                db.add(entry)
+    for nurse_id, shifts in generated.items():
+        for day_index, shift_id in enumerate(shifts):
+            work_date = date(req.year, req.month, day_index + 1)
+            entry = ScheduleEntry(
+                entry_id=str(uuid.uuid4().hex)[:16],
+                schedule_id=schedule.schedule_id,
+                nurse_id=nurse_id,
+                work_date=work_date,
+                shift_id=shift_id.upper()
+            )
+            db.add(entry)
 
     # 5. Update schedule status to 'issued'
     schedule.status = 'issued'

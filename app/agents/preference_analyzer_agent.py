@@ -141,7 +141,7 @@ async def create_preference_analyzer(parent_state):
     client = parent_state['model']
     n_requests = len(requests)
     if n_requests == 0:
-        print('왔다감')
+        print('preference_analyzer 답변 없음')
         return {"preference_results": []}
     graph = StateGraph(PreferenceSubgraph)
     
@@ -162,6 +162,6 @@ async def create_preference_analyzer(parent_state):
     graph_app = graph.compile()
 
     result = await graph_app.ainvoke({"requests": requests, "schema": schema, "model": client})
-    
+    print('preference_analyzer 답변: ', result)
     return {"preference_results": [result]}
 

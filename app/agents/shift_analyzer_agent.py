@@ -8,6 +8,7 @@ from langgraph.graph import StateGraph, END
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
 import os
 from langchain_core.messages import SystemMessage, HumanMessage
             # * 답변 시 알 수 없는 정보를 요구한다면, 아래 도구 목록을 참고해, 필요하다면 한 번에 하나의 tool 을 호출할 수 있습니다. 
@@ -163,6 +164,10 @@ class shiftAnalyzerPrompt:
 async def shift_analyzer(state):
     print('여기_shift')
     client = state['model']
+    client = ChatAnthropic(
+        model="claude-3-7-sonnet-20250219",
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+    )
     phase = state['phase']
     context = state['requests'][phase]
     # context = "일단 문선생님이랑은 무조건 따로 하고싶고, 천간호사랑 계속 같이 있고싶어요.. 진짜 많이 도와줘서 행복해요.. 그리고 웬만하면 D는 안하고 싶어요 ㅠ"
@@ -217,6 +222,7 @@ async def create_shift_analyzer(parent_state):
     print('툴즈~~~', tools)
     n_requests = len(requests)
     if n_requests == 0:
+        print('shift_analyzer 답변 없음')
         return {"shift_results": []}
     graph = StateGraph(ShiftSubgraph)
     graph.add_node("init_data", init_data)
@@ -235,4 +241,5 @@ async def create_shift_analyzer(parent_state):
     graph_app = graph.compile()
 
     result = await graph_app.ainvoke({"requests": requests, "model": llm, "mcp_tools": tools})
+    print('shift_analyzer 답변: ', result)
     return {"shift_results": [result]}
