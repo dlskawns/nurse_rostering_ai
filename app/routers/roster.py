@@ -98,7 +98,19 @@ async def roster_view_page(request: Request, user: User = Depends(get_current_us
     return templates.TemplateResponse("roster_view.html", {"request": request, "user": user})
 
 # ───────────────────────── API Endpoints ───────────────────────── #
+# 아래와 같이 JSON List 데이터가 있을 때, 각 데이터에서 "shift 데이터가 있으면 OFF를 제외한 나머지는       {nurse_id1:  { "D": { "4": 1.0, "5": 3.2, "10": 2.5, "20": 1.5 },
+#                "E": { "15":1.0, "16":1.2, "25":1.0, "26":1.0 },
+#                "N": { "11":0.8, "12":0.8 } },       
+# nurse_id2:  { "N": { "8":1.0, "9":1.0, "15":1.0, "16":1.0, "22":1.0, "23":1.0 } }}
+# 과 같이 표기해서  각 간호사 별 shift 선호점수를 parsing해서 shift_preferences에 넣고,
+# OFF의 경우는 
+# off_requests변수에 {
+#        nurse_id1:  { "6":  5.0, "7":  5.0 },                     
+#       nurse_id2:  { "1":  3.0, "2":  3.0, "3":  3.0 },           
+#       nurse_id3:  { "15": 4.0, "16": 4.0 }}
+# 이런식으로 넣어줘.
 
+# 그리고 preference 키의 경우, 
 @router.post("/roster/invoke", response_model=RosterResponse)
 async def invoke_graph(request: RosterRequest):
     """
@@ -106,8 +118,11 @@ async def invoke_graph(request: RosterRequest):
     """
     try:
         result = {}
+        print('요청', request.request)
+        print('스키마', request.schema)
         response =  await graph_service.invoke(request.request, request.schema)
-        print('여기여기여기', response)
+        print('우라질레이션', response)
+        print('1기여기여기111', response)
         print('\n\n\n\n\n\n응답1:', parse_shift_results(response), '\n\n\n\n\n\n')
         print('\n\n\n\n\n\n응답2:', parse_preferences(response), '\n\n\n\n\n\n')
         if len(response[0]) > 0:

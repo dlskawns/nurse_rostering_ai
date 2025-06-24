@@ -4,7 +4,7 @@ class GraphService:
     def __init__(self):
         self._graph = GraphGenerate()
 
-    async def invoke(self, request: str, schema: list):
+    async def invoke(self, request: str, schema: str):
         """
         주어진 요청과 스키마로 그래프를 실행합니다.
 
@@ -15,9 +15,14 @@ class GraphService:
         Returns:
             dict: 그래프 실행 결과
         """
-        response = await self._graph.ainvoke({"request": request, "schema": schema})
-        response = [response['shift_results'], response['preference_results']]
-        print('\n\n\n\n\n\n응답:', response, '\n\n\n\n\n\n')
-        return response
+        print('\n\n\n\n\nrequest 이건???', request)
+        print('\n\n\n\n\nschema 이건???', schema)
+        try:
+            response = await self._graph.ainvoke({"request": request, "schema": schema})
+        except Exception as e:
+            print('\n\n\n\n\n안온거지 씨발?? \n\n\n\n\n\n', response)
+            response = [response['shift_results'], response['preference_results']]
+            print('\n\n\n\n\n\n응답:', response, '\n\n\n\n\n\n')
+            return response
 
 graph_service = GraphService() 

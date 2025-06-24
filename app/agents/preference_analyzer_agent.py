@@ -131,7 +131,7 @@ async def preference_analyzer(state):
     parts = response.candidates[0].content.parts
     print('----------------preference;;;;;;;;;;;;;;;',json.loads(parts[0].text))
     json_answer = json.loads(parts[0].text)
-
+    print('여기여기여기', json_answer)
     return {'preference_result': [json_answer]}
 
 
@@ -162,5 +162,6 @@ async def create_preference_analyzer(parent_state):
     graph_app = graph.compile()
 
     result = await graph_app.ainvoke({"requests": requests, "schema": schema, "model": client})
+    
     return {"preference_results": [result]}
 

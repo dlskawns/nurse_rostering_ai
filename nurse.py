@@ -6,9 +6,10 @@ import numpy as np
 @dataclass
 class Nurse:
     """간호사의 속성과 제약 조건을 나타내는 클래스."""
-    id: int
+    id: int # RosterSystem 내부에서 사용하는 index
     name: str
     experience_years: float
+    db_id: str # 데이터베이스의 원래 ID
     is_night_nurse: bool = False
     is_head_nurse: bool = False
     remaining_off_days: int = 0
@@ -16,6 +17,19 @@ class Nurse:
     resignation_date: Optional[date] = None
     head_nurse_off_pattern: Optional[str] = None  # 'weekend', 'mixed', 'normal'
     
+    @classmethod
+    def from_db_model(cls, db_nurse, index: int):
+        return cls(
+            id=index,
+            db_id=db_nurse.nurse_id,
+            name=db_nurse.name,
+            experience_years=db_nurse.experience,
+            is_night_nurse=db_nurse.is_night_nurse,
+            is_head_nurse=db_nurse.is_head_nurse,
+            personal_off_adjustment=db_nurse.personal_off_adjustment,
+            resignation_date=db_nurse.resignation_date.date() if db_nurse.resignation_date else None
+        )
+
     def __post_init__(self):
         if self.is_head_nurse and not self.head_nurse_off_pattern:
             self.head_nurse_off_pattern = 'weekend'  # 수간호사의 기본 패턴

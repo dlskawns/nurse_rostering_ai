@@ -5,12 +5,18 @@ from pydantic import BaseModel
 import uuid
 from datetime import datetime, date
 from fastapi.responses import RedirectResponse
+import numpy as np
 
 from app.db.client import get_db
 from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig
 from app.schemas.auth_schema import User as UserSchema
 from app.routers.auth import get_current_user_from_cookie
 from app.roster_engine import generate_roster, get_days_in_month
+from app.routers.utils import Timer
+from roster_system import RosterSystem
+from nurse import Nurse as NurseEngine
+from config import NurseRosterConfig
+
 
 router = APIRouter(
     prefix="/api",
@@ -337,6 +343,7 @@ async def generate_roster_endpoint(
 
     # 2. Fetch all nurses and their preferences
     nurses_in_group = db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
+    print('\n\n\n\n\nnurses_in_group', nurses_in_group)
     nurse_ids = [n.nurse_id for n in nurses_in_group]
     
     preferences = db.query(ShiftPreference).filter(
@@ -347,24 +354,97 @@ async def generate_roster_endpoint(
     
     nurses_dict = [n.__dict__ for n in nurses_in_group]
     prefs_dict = [p.__dict__ for p in preferences]
-
+    print('\n\n\n\n\nnurses_dict', nurses_dict)
+    print('\n\n\n\n\nprefs_dict', prefs_dict)
     # 3. Call the roster generation logic
-    generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
+    latest_config = db.query(RosterConfig).filter(
+        RosterConfig.group_id == current_user.group_id
+    ).order_by(RosterConfig.created_at.desc()).first()
+
+    with Timer("RosterSystem 초기화"):
+        # `RosterSystem`에 맞는 데이터 구조로 변환
+        nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(nurses_in_group)]
+        
+        # target_month를 date 객체로 생성
+        target_month_date = date(req.year, req.month, 1)
+
+        # DB에서 불러온 config를 NurseRosterConfig 객체로 변환
+        roster_config_for_engine = NurseRosterConfig(
+            daily_shift_requirements={
+                'D': latest_config.day_req,
+                'E': latest_config.eve_req,
+                'N': latest_config.nig_req
+            },
+            min_experience_per_shift=latest_config.min_exp_per_shift,
+            required_experienced_nurses=latest_config.req_exp_nurses,
+            max_consecutive_work_days=latest_config.max_conseq_work,
+            max_night_shifts_per_month=latest_config.max_nig_per_month,
+            enforce_two_offs_per_week=latest_config.two_offs_per_week,
+            shift_requirement_priority=latest_config.shift_priority,
+            max_consecutive_nights=3 if latest_config.three_seq_nig else 2,
+            global_monthly_off_days=2, # 하드코딩 필요
+            standard_personal_off_days=latest_config.off_days - 2 if latest_config.off_days > 2 else 0 # 하드코딩 필요
+        )
+
+        roster_system = RosterSystem(
+            nurses=nurses_for_engine,
+            target_month=target_month_date,
+            config=roster_config_for_engine
+        )
+    print('\n\n\n\n\nnurses_for_engine', nurses_for_engine, '\n\n\n\n\n')
+    print('\n\n\n\n\nprefs_dict', prefs_dict, '\n\n\n\n\n')
+    print('\n\n\n\n\npreferences', preferences, '\n\n\n\n\n')
+    with Timer("휴무 요청 적용"):
+        off_requests = {} # Placeholder
+        # Example: off_requests = {"1": {"5": 10.0, "12": 10.0}}
+        roster_system.apply_off_requests(off_requests)
+
+    with Timer("선호 근무 유형 적용"):
+        shift_preferences = {} # Placeholder
+        # Example: shift_preferences = {"1": {"D": {"4": 1.0, "5": 3.2}}}
+        roster_system.apply_shift_preferences(shift_preferences)
+
+    with Timer("페어링 선호도 적용"):
+        pair_preferences = {
+            "work_together": [], # e.g., [{"nurse_1": 1, "nurse_2": 5, "weight": 3.0}]
+            "work_apart": []     # e.g., [{"nurse_1": 1, "nurse_2": 6, "weight": 3.0}]
+        }
+        roster_system.apply_pair_preferences(pair_preferences)
+
+    with Timer("CP-SAT으로 최적화"):
+        roster_system.optimize_roster_with_cp_sat_v2(time_limit_seconds=60)
+
+    with Timer("최적화 결과 출력"):
+        print("--- 최적화된 근무표 지표 ---")
+        metrics = roster_system.calculate_detailed_metrics()
+        for key, value in metrics.items():
+            if isinstance(value, dict):
+                print(f"  {key}:")
+                for sub_key, sub_value in value.items():
+                    print(f"    {sub_key}: {sub_value}")
+            else:
+                print(f"  {key}: {value}")
 
     # 4. Clear old entries and save new roster to DB
     db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
     
-    for nurse_id, shifts in generated.items():
-        for day_index, shift_id in enumerate(shifts):
-            work_date = date(req.year, req.month, day_index + 1)
-            entry = ScheduleEntry(
-                entry_id=str(uuid.uuid4().hex)[:16],
-                schedule_id=schedule.schedule_id,
-                nurse_id=nurse_id,
-                work_date=work_date,
-                shift_id=shift_id.upper()
-            )
-            db.add(entry)
+    shift_map = {i: s for i, s in enumerate(roster_system.config.shift_types)}
+
+    for n_idx, nurse_schedule in enumerate(roster_system.roster):
+        nurse_db_id = roster_system.nurses[n_idx].db_id
+        for day_idx, shift_vector in enumerate(nurse_schedule):
+            shift_idx = np.where(shift_vector == 1)[0]
+            if len(shift_idx) > 0:
+                shift_id = shift_map[shift_idx[0]]
+                work_date = date(req.year, req.month, day_idx + 1)
+                entry = ScheduleEntry(
+                    entry_id=str(uuid.uuid4().hex)[:16],
+                    schedule_id=schedule.schedule_id,
+                    nurse_id=nurse_db_id,
+                    work_date=work_date,
+                    shift_id=shift_id.upper()
+                )
+                db.add(entry)
 
     # 5. Update schedule status to 'issued'
     schedule.status = 'issued'

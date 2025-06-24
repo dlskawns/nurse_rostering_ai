@@ -138,7 +138,7 @@ class RosterSystem:
         """
         off_idx     = self.config.shift_types.index("OFF")
         base_weight = self.config.shift_preference_weights.get("OFF", 10.0)
-
+        print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
         for nurse_id_str, day_map in off_requests.items():
             nurse_id  = int(nurse_id_str)
             nurse_idx = next((i for i,n in enumerate(self.nurses) if n.id == nurse_id), None)
@@ -165,7 +165,7 @@ class RosterSystem:
                 day_idx = d-1
                 delta   = day_map[str(d)]
                 self.preference_matrix[nurse_idx, day_idx, off_idx] = base_weight + delta
-
+        
         nurse.update_off_days(len(valid_days))
             
     def apply_shift_preferences(self, shift_preferences: Dict[str, Dict[str, Dict[str, float]]]):

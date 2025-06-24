@@ -32,7 +32,7 @@ class Nurse(Base):
     preceptor_id = Column(VARCHAR(50), ForeignKey("nurses.nurse_id"))
     created_at = Column(DATETIME, default=func.now())
     updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
-
+    resignation_date = Column(DATETIME, nullable=True)
 
     group = relationship("Group")
     @property
