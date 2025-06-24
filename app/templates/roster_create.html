@@ -278,7 +278,16 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ year: currentYear, month: currentMonth + 1 })
                 });
-                if (!response.ok) throw new Error('근무 희망 요청에 실패했습니다.');
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    if (errorData.detail === '설정값을 입력해주세요') {
+                        alert('근무표 설정을 먼저 완료해주세요.');
+                        window.location.href = '/roster-configure';
+                        return;
+                    }
+                    throw new Error(errorData.detail || '근무 희망 요청에 실패했습니다.');
+                }
 
                 alert('요청이 성공적으로 완료되었습니다.');
                 await updatePageForMonth(currentYear, currentMonth + 1);
@@ -286,6 +295,7 @@
             } catch (error) {
                 console.error(error);
                 alert(error.message);
+            } finally {
                 btn.disabled = false;
                 btn.textContent = originalText;
             }

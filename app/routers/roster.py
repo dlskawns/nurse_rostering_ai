@@ -53,9 +53,13 @@ async def head_nurse_management(
 
 @router.get("/roster-create", response_class=HTMLResponse)
 async def roster_create(
+    
     request: Request,
     current_user: Optional[User] = Depends(get_current_user_from_cookie),
 ):
+    """
+    근무표 생성 페이지 호출
+    """
     if current_user is None:
         return RedirectResponse(url="/login", status_code=302)
     if not current_user.is_head_nurse:

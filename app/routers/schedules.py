@@ -4,9 +4,10 @@ from sqlalchemy import func, and_
 from pydantic import BaseModel
 import uuid
 from datetime import datetime, date
+from fastapi.responses import RedirectResponse
 
 from app.db.client import get_db
-from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group
+from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig
 from app.schemas.auth_schema import User as UserSchema
 from app.routers.auth import get_current_user_from_cookie
 from app.roster_engine import generate_roster, get_days_in_month
@@ -44,6 +45,15 @@ async def request_schedule(
     if not nurse or not nurse.group:
         raise HTTPException(status_code=404, detail="User group information not found")
 
+    # Check for roster configuration
+    latest_config = db.query(RosterConfig).filter(
+        RosterConfig.office_id == nurse.group.office_id,
+        RosterConfig.group_id == nurse.group_id
+    ).order_by(RosterConfig.created_at.desc()).first()
+
+    if not latest_config:
+        raise HTTPException(status_code=400, detail="설정값을 입력해주세요")
+
     # Find the latest version for the same year and month
     latest_version = db.query(func.max(Schedule.version)).filter(
         Schedule.group_id == current_user.group_id,
@@ -58,6 +68,7 @@ async def request_schedule(
         year=req.year,
         month=req.month,
         version=latest_version + 1,
+        config_id=latest_config.config_id,
         created_by=current_user.account_id,
         status='requested'
     )

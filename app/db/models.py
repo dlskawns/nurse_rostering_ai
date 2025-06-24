@@ -46,10 +46,13 @@ class Schedule(Base):
     year = Column(SMALLINT, nullable=False)
     month = Column(TINYINT, nullable=False)
     version = Column(TINYINT, nullable=False)
+    config_id = Column(INTEGER, ForeignKey("roster_config.config_id"))
     created_by = Column(VARCHAR(50), ForeignKey("nurses.account_id"))
     created_at = Column(DATETIME, default=func.now())
     updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
     status = Column(VARCHAR(10)) # e.g., 'requested', 'issued'
+
+    roster_config = relationship("RosterConfig")
 
 class ScheduleEntry(Base):
     __tablename__ = "schedule_entries"
