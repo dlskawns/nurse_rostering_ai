@@ -69,14 +69,21 @@ async def roster_create(
 async def roster_configure(
     request: Request,
     current_user: Optional[User] = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
 ):
     if current_user is None:
         return RedirectResponse(url="/login", status_code=302)
     if not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
+
+    latest_config = db.query(RosterConfigModel).filter(
+        RosterConfigModel.office_id == current_user.office_id,
+        RosterConfigModel.group_id == current_user.group_id
+    ).order_by(RosterConfigModel.created_at.desc()).first()
+
     return templates.TemplateResponse(
         "roster_configure.html",
-        {"request": request, "user": current_user},
+        {"request": request, "user": current_user, "config": latest_config},
     )
 
 @router.get("/roster-view", response_class=HTMLResponse)
