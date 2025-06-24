@@ -45,7 +45,8 @@
         }
         .roster-main-content {
             flex-grow: 1;
-            overflow-x: auto;
+            display: flex;
+            gap: 20px;
         }
         .roster-controls {
             display: flex;
@@ -122,6 +123,31 @@
             background: #f8f9fa;
             border-radius: 12px;
         }
+        .violations-container {
+            flex: 0 0 300px; /* Do not grow, do not shrink, base width 300px */
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            height: fit-content;
+        }
+        .violations-container h3 {
+            margin-top: 0;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .violations-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .violations-list li {
+            color: #D32F2F; /* Red text */
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -158,6 +184,12 @@
                 </div>
                 <div id="roster-table-container" class="roster-table-container">
                     <!-- Roster table will be rendered here -->
+                </div>
+                <div id="violations-container" class="violations-container" style="display: none;">
+                    <h3>위반 사항</h3>
+                    <ul id="violations-list" class="violations-list">
+                        <!-- Violations will be rendered here -->
+                    </ul>
                 </div>
             </div>
         </div>
@@ -234,23 +266,35 @@
 
         async function loadRoster(year, month) {
             const container = document.getElementById('roster-table-container');
+            const violationsContainer = document.getElementById('violations-container');
+            const violationsList = document.getElementById('violations-list');
             container.innerHTML = `<div class="page-status-overlay"><h2>${year}년 ${month}월 근무표 로딩 중...</h2></div>`;
 
             try {
                 const response = await fetch(`/api/roster/${year}/${month}`);
                 if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || '근무표 데이터 로드 실패');
+                    throw new Error('근무표 데이터를 불러올 수 없습니다.');
                 }
                 const data = await response.json();
-                renderRosterTable(data, container);
+                
+                renderRosterTable(data);
+                
+                if (data.violations && data.violations.length > 0) {
+                    violationsList.innerHTML = data.violations.map(v => `<li>${v}</li>`).join('');
+                    violationsContainer.style.display = 'block';
+                } else {
+                    violationsList.innerHTML = '<li>발견된 위반사항이 없습니다.</li>';
+                    violationsContainer.style.display = 'block'; // Show even if no violations
+                }
 
             } catch (error) {
-                 container.innerHTML = `<div class="page-status-overlay"><h2>오류: ${error.message}</h2></div>`;
+                console.error(error);
+                container.innerHTML = `<div class="page-status-overlay"><h2>오류: ${error.message}</h2></div>`;
             }
         }
         
-        function renderRosterTable(data, container) {
+        function renderRosterTable(data) {
+            const container = document.getElementById('roster-table-container');
             container.innerHTML = '';
             if (!data || !data.nurses || data.nurses.length === 0) return;
 
