@@ -85,4 +85,13 @@ async def get_current_user_from_cookie(token: Optional[str] = Cookie(None, alias
     if user is None:
         return None
     print('user', user)
-    return UserSchema.from_orm(user) 
+    return UserSchema.from_orm(user)
+
+@router.get("/me", response_model=UserSchema)
+async def read_users_me(current_user: UserSchema = Depends(get_current_user_from_cookie)):
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    return current_user 

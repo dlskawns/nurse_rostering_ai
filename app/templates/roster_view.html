@@ -46,6 +46,7 @@
         .roster-main-content {
             flex-grow: 1;
             display: flex;
+            flex-direction: column;
             gap: 20px;
         }
         .roster-controls {
@@ -63,7 +64,15 @@
             height: 40px;
             font-size: 20px;
         }
-        .shift-legend { display: flex; gap: 20px; }
+        .shift-legend {
+            display: flex;
+            gap: 20px;
+            padding: 10px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            align-self: flex-start;
+        }
         .legend-item { display: flex; align-items: center; gap: 5px; }
         .legend-color { width: 20px; height: 20px; border-radius: 4px; }
         #roster-container {
@@ -148,6 +157,16 @@
             margin-bottom: 8px;
             font-size: 14px;
         }
+        .highlight-row td {
+            border-top: 2px solid #D32F2F !important;
+            border-bottom: 2px solid #D32F2F !important;
+        }
+        .highlight-row td:first-child {
+            border-left: 2px solid #D32F2F !important;
+        }
+        .highlight-row td:last-child {
+            border-right: 2px solid #D32F2F !important;
+        }
     </style>
 </head>
 <body>
@@ -164,42 +183,38 @@
     </div>
 
     <div id="main">
-        <h1>근무표 보기</h1>
+        <h1 id="roster-title">근무표 보기</h1>
         <div class="roster-view-wrapper">
             <div id="bookmarks-container" class="bookmarks-container">
                 <!-- Bookmarks for issued schedules -->
             </div>
             <div class="roster-main-content">
-                <div class="roster-controls">
-                    <div class="shift-legend">
-                         <div class="legend-item"><div class="legend-color" style="background:var(--color-day)"></div>Day</div>
-                         <div class="legend-item"><div class="legend-color" style="background:var(--color-evening)"></div>Evening</div>
-                         <div class="legend-item"><div class="legend-color" style="background:var(--color-night)"></div>Night</div>
-                         <div class="legend-item"><div class="legend-color" style="background:var(--color-off)"></div>Off</div>
-                    </div>
-                    <div class="zoom-controls">
-                        <button id="zoom-out">-</button>
-                        <button id="zoom-in">+</button>
-                    </div>
+                <div class="shift-legend">
+                     <div class="legend-item"><div class="legend-color" style="background:var(--color-day)"></div>Day</div>
+                     <div class="legend-item"><div class="legend-color" style="background:var(--color-evening)"></div>Evening</div>
+                     <div class="legend-item"><div class="legend-color" style="background:var(--color-night)"></div>Night</div>
+                     <div class="legend-item"><div class="legend-color" style="background:var(--color-off)"></div>Off</div>
                 </div>
-                <div id="roster-table-container" class="roster-table-container">
-                    <!-- Roster table will be rendered here -->
-                </div>
-                <div id="violations-container" class="violations-container" style="display: none;">
-                    <h3>위반 사항</h3>
-                    <ul id="violations-list" class="violations-list">
-                        <!-- Violations will be rendered here -->
-                    </ul>
+                <div style="display: flex; gap: 20px; width: 100%;">
+                    <div id="roster-table-container" class="roster-table-container" style="flex-grow: 1;">
+                        <!-- Roster table will be rendered here -->
+                    </div>
+                    <div id="violations-container" class="violations-container" style="display: none;">
+                        <h3>위반 사항</h3>
+                        <ul id="violations-list" class="violations-list">
+                            <!-- Violations will be rendered here -->
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     <script>
-        let currentZoom = 1.0;
+        let currentUser = null;
 
         document.addEventListener('DOMContentLoaded', async () => {
             setupSidebar();
-            setupZoomControls();
+            await fetchCurrentUser();
             await initializeBookmarks();
         });
 
@@ -208,16 +223,17 @@
             document.getElementById("main").style.marginLeft = "var(--sidebar-width)";
         }
         
-        function setupZoomControls() {
-            const container = document.getElementById('roster-container');
-            document.getElementById('zoom-in').addEventListener('click', () => {
-                currentZoom = Math.min(2.0, currentZoom + 0.1);
-                document.getElementById('roster-table-container').style.transform = `scale(${currentZoom})`;
-            });
-            document.getElementById('zoom-out').addEventListener('click', () => {
-                currentZoom = Math.max(0.5, currentZoom - 0.1);
-                document.getElementById('roster-table-container').style.transform = `scale(${currentZoom})`;
-            });
+        async function fetchCurrentUser() {
+            try {
+                const response = await fetch('/api/auth/me');
+                if (response.ok) {
+                    currentUser = await response.json();
+                } else {
+                    console.error("Could not fetch user data");
+                }
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+            }
         }
 
         async function initializeBookmarks() {
@@ -261,6 +277,7 @@
             document.querySelectorAll('.bookmark').forEach(bm => {
                 bm.classList.toggle('active', bm.dataset.year == year && bm.dataset.month == month);
             });
+            document.getElementById('roster-title').textContent = `근무표 보기 - ${year}년 ${month}월`;
             await loadRoster(year, month);
         }
 
@@ -318,7 +335,8 @@
                 </tr></thead><tbody>`;
 
             nurses.forEach(nurse => {
-                tableHtml += `<tr>
+                const isCurrentUser = currentUser && nurse.id === currentUser.nurse_id;
+                tableHtml += `<tr class="${isCurrentUser ? 'highlight-row' : ''}">
                     <td>${nurse.id.substring(0, 8)}</td><td>${nurse.name}</td><td>${nurse.experience}</td>
                     ${nurse.schedule.map(shift => {
                         const bgColor = shift_colors[shift] || '#fff';
