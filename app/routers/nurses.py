@@ -55,7 +55,10 @@ async def bulk_update_nurses(
                 setattr(db_nurse, key, value)
         
         else: # Add new nurse
-            new_nurse = NurseModel(**nurse_data.dict(), group_id=current_user.group_id)
+            # 보안을 위해 클라이언트의 group_id는 무시하고 현재 사용자의 group_id를 강제로 설정
+            nurse_dict = nurse_data.dict()
+            nurse_dict.pop('group_id', None)  # 기존 group_id 제거
+            new_nurse = NurseModel(**nurse_dict, group_id=current_user.group_id)
             db.add(new_nurse)
 
     # Handle deletions

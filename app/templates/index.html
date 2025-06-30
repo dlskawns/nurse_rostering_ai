@@ -169,14 +169,11 @@
                     pageStatusDiv.style.display = 'none';
                     renderBookmarks();
                     
-                    // Show a message to select a schedule instead of auto-loading
-                    if (activeSchedules.length > 1) {
-                        statusMessage.textContent = '왼쪽에서 작성할 근무표를 선택해주세요.';
-                        pageStatusDiv.style.display = 'flex';
-                    } else {
-                        // If only one schedule, load it automatically
+                    // If only one schedule, load it automatically
+                    if (activeSchedules.length === 1) {
                         await switchActiveSchedule(activeSchedules[0].year, activeSchedules[0].month);
                     }
+                    // If multiple schedules, just show bookmarks without disabling the page
                 }
             } catch (error) {
                 console.error(error);
@@ -224,28 +221,7 @@
                 const isSubmitted = statusData.preference_is_submitted;
                 const scheduleStatus = statusData.schedule_status;
 
-                // If schedule is no longer 'requested', show appropriate message
-                if (scheduleStatus !== 'requested') {
-                    const pageStatusDiv = document.getElementById('page-status');
-                    const statusMessage = document.getElementById('status-message');
-                    
-                    if (scheduleStatus === 'completed') {
-                        statusMessage.textContent = `${activeYear}년 ${activeMonth}월 근무표가 이미 완료되었습니다.`;
-                    } else if (scheduleStatus === 'in_progress') {
-                        statusMessage.textContent = `${activeYear}년 ${activeMonth}월 근무표를 생성 중입니다.`;
-                    } else {
-                        statusMessage.textContent = `${activeYear}년 ${activeMonth}월 근무표 상태: ${scheduleStatus}`;
-                    }
-                    
-                    pageStatusDiv.style.display = 'flex';
-                    
-                    // Hide result container and submit section
-                    document.getElementById('result-container').style.display = 'none';
-                    document.getElementById('submit-section').style.display = 'none';
-                    return;
-                }
-
-                // Hide status overlay for active schedules
+                // Hide status overlay for all requested schedules (since they are fetched by /api/schedules/active)
                 document.getElementById('page-status').style.display = 'none';
 
                 if (isSubmitted) {

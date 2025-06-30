@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 class RosterRequest(BaseModel):
     request: str
@@ -45,11 +46,13 @@ class NurseProfile(BaseModel):
     name: str
     experience: Optional[int] = None
     role: Optional[str] = None
-    level: Optional[str] = None
+    level_: Optional[str] = None
     is_head_nurse: bool = Field(default=False)
     is_night_nurse: bool = Field(default=False)
     personal_off_adjustment: int = Field(default=0)
     preceptor_id: Optional[str] = None
+    joining_date: Optional[datetime] = None
+    resignation_date: Optional[datetime] = None
 
     class Config:
         from_attributes = True

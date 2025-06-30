@@ -30,6 +30,7 @@ class Nurse(Base):
     is_night_nurse = Column(BOOLEAN, default=False)
     personal_off_adjustment = Column(TINYINT, default=0)
     preceptor_id = Column(VARCHAR(50), ForeignKey("nurses.nurse_id"))
+    joining_date = Column(DATETIME, nullable=True)
     created_at = Column(DATETIME, default=func.now())
     updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
     resignation_date = Column(DATETIME, nullable=True)

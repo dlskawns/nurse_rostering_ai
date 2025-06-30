@@ -8,6 +8,12 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 1500px;
+        }
         .table-container {
             overflow-x: auto;
             margin-top: 20px;
@@ -15,28 +21,37 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 800px;
+            min-width: 1200px;
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 10px;
+            padding: 8px;
             text-align: center;
             vertical-align: middle;
+            font-size: 13px;
         }
         th {
             background-color: #f2f2f2;
             color: #333;
+            font-weight: bold;
         }
         .action-cell {
             white-space: nowrap;
         }
         .action-cell button {
             display: inline-block;
-            width: 30px;
-            padding: 5px;
-            margin: 0 2px;
-            font-size: 14px;
+            width: 25px;
+            height: 25px;
+            padding: 0;
+            margin: 0 1px;
+            font-size: 12px;
             line-height: 1;
+            border: 1px solid #ccc;
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+        .action-cell button:hover {
+            background: #e9ecef;
         }
         .toggle-switch {
             position: relative;
@@ -106,12 +121,42 @@
         }
         input[type="text"], select {
             width: 100%;
-            padding: 8px;
+            padding: 6px;
             box-sizing: border-box;
+            font-size: 12px;
         }
         .scrollable-table {
-            max-height: 500px;
+            max-height: 600px;
             overflow-y: auto;
+        }
+        .date-cell {
+            position: relative;
+            cursor: pointer;
+            padding: 6px;
+            min-width: 100px;
+        }
+        .date-display {
+            background: transparent;
+            border: none;
+            width: 100%;
+            text-align: center;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .date-display:disabled {
+            cursor: not-allowed;
+        }
+        .required-field {
+            border: 2px solid #ff6b6b !important;
+        }
+        .required-field:focus {
+            border-color: #ff5252 !important;
+            box-shadow: 0 0 0 0.2rem rgba(255, 107, 107, 0.25);
+        }
+        .field-label {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 2px;
         }
     </style>
 </head>
@@ -152,12 +197,17 @@
                         <tr>
                             <th>병동</th>
                             <th>ID</th>
+                            <th>계정 ID</th>
                             <th>이름</th>
                             <th>경력 (년)</th>
+                            <th>직함</th>
+                            <th>직책</th>
                             <th>수간호사</th>
                             <th>Keep 간호사</th>
                             <th>이월 Off</th>
                             <th>프리셉터</th>
+                            <th>입사일</th>
+                            <th>퇴사일</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -251,12 +301,15 @@
                 row.innerHTML = `
                     <td>A</td>
                     <td>${nurse.nurse_id.substring(0, 8)}</td>
+                    <td><input type="text" value="${nurse.account_id || ''}" class="nurse-field required-field" data-field="account_id" placeholder="계정 ID 입력" disabled></td>
                     <td><input type="text" value="${nurse.name}" class="nurse-field" data-field="name" disabled></td>
                     <td class="action-cell">
                         <button class="nurse-field" data-action="decrease" data-field="experience" disabled>-</button>
                         <span class="experience-value">${nurse.experience}</span>
                         <button class="nurse-field" data-action="increase" data-field="experience" disabled>+</button>
                     </td>
+                    <td><input type="text" value="${nurse.role || ''}" class="nurse-field" data-field="role" placeholder="직함" disabled></td>
+                    <td><input type="text" value="${nurse.level_ || ''}" class="nurse-field" data-field="level_" placeholder="직책" disabled></td>
                     <td>
                         <label class="toggle-switch">
                             <input type="checkbox" class="nurse-field" data-field="is_head_nurse" ${nurse.is_head_nurse ? 'checked' : ''} disabled>
@@ -279,6 +332,12 @@
                             <option value="">-</option>
                             ${preceptorOptions}
                         </select>
+                    </td>
+                    <td class="date-cell">
+                        <input type="date" value="${nurse.joining_date ? nurse.joining_date.split('T')[0] : ''}" class="nurse-field date-display" data-field="joining_date" disabled>
+                    </td>
+                    <td class="date-cell">
+                        <input type="date" value="${nurse.resignation_date ? nurse.resignation_date.split('T')[0] : ''}" class="nurse-field date-display" data-field="resignation_date" disabled>
                     </td>
                     <td class="action-cell">
                         ${isNewRow 
@@ -322,13 +381,17 @@
             const newNurse = {
                 nurse_id: uuid.v4(),
                 group_id: "{{ user.group_id }}", // Will be set on the backend
-                account_id: 'new_user_' + new Date().getTime(), // temp id
+                account_id: '', // 필수 입력 사항
                 name: "New Nurse",
-                experience: 1,
+                experience: 1, // 최소 1년
+                role: '', // 직함
+                level_: '', // 직책
                 is_head_nurse: false,
                 is_night_nurse: false,
                 personal_off_adjustment: 0,
                 preceptor_id: null,
+                joining_date: null, // 입사일
+                resignation_date: null, // 퇴사일
                 is_new: true
             };
             nurses.push(newNurse);
@@ -358,6 +421,13 @@
         async function saveChanges() {
             if (!nurses.some(n => n.is_head_nurse)) {
                 alert("적어도 한 명의 수간호사가 지정되어야 합니다.");
+                return;
+            }
+
+            // account_id 필수 입력 검사
+            const missingAccountIds = nurses.filter(n => !n.account_id || n.account_id.trim() === '');
+            if (missingAccountIds.length > 0) {
+                alert("모든 간호사의 계정 ID를 입력해주세요.");
                 return;
             }
 
@@ -405,6 +475,9 @@
                     if (action === 'increase') {
                         nurse[field]++;
                     } else if (action === 'decrease') {
+                        if (field === 'experience' && nurse[field] <= 1) {
+                            return; // 경력은 최소 1년
+                        }
                         nurse[field]--;
                     }
                     
@@ -416,7 +489,7 @@
                 });
             });
 
-            document.querySelectorAll('input.nurse-field[type="text"], select.nurse-field').forEach(input => {
+            document.querySelectorAll('input.nurse-field[type="text"], input.nurse-field[type="date"], select.nurse-field').forEach(input => {
                 input.addEventListener('change', (e) => {
                     if (input.disabled) return;
                     pushToHistory();
@@ -429,6 +502,9 @@
                         nurse.is_night_nurse = e.target.value === 'true';
                     } else if (field === 'preceptor_id') {
                          nurse.preceptor_id = e.target.value || null;
+                    } else if (field === 'joining_date' || field === 'resignation_date') {
+                        // 날짜 필드는 ISO 형식으로 저장
+                        nurse[field] = e.target.value ? new Date(e.target.value).toISOString() : null;
                     } else {
                         nurse[field] = e.target.value;
                     }
