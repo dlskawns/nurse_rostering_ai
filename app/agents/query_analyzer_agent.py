@@ -8,8 +8,11 @@ from langgraph.prebuilt import create_react_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
 import pprint
 from langchain_anthropic import ChatAnthropic
-import os
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
+import os
+
 dotenv.load_dotenv()
 
 print(dotenv.load_dotenv())
@@ -83,12 +86,8 @@ class queryAnalyzerPrompt:
 
 async def query_analyzer(state):
     # client = genai.Client()
-
     # context = state['request']
-
-
     # query_analyzer_prompt = queryAnalyzerPrompt(context)
-    
     # response = client.models.generate_content(
     #     model="gemini-2.0-flash",
     #     contents=[query_analyzer_prompt.human],                       # or [pil_img, information]
@@ -107,36 +106,80 @@ async def query_analyzer(state):
     # preference = json_answer['Preference']
     # others = json_answer['Others']
     # print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_others: {others}")
-    jj = {
-    "Chat": [],
-    "Shift": [
-        "5일에는 OFF로 줘요",
-        "금요일마다 D로 줘요"
-    ],
-    "Preference": ['이지연 간호사와는 하고싶지 않아요'],
-    "Others": []
-    }
-    client = ChatAnthropic(
-    model="claude-3-7-sonnet-20250219",
-    anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-    )
+    
     context = state['request']
     query_analyzer_prompt = queryAnalyzerPrompt(context)
+    
+    # 백업 모델들 순서대로 시도
+    models_to_try = [
+        # 1차: OpenAI (기본)
+        ChatOpenAI(
+            model="gpt-4o",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+        ),
+        # 2차: Anthropic (백업)
+        ChatAnthropic(
+            model="claude-3-7-sonnet-20250219",
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        ),
+        # 3차: Google Gemini (최종 백업)
+        ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+        )
+    ]
+    
     messages = [
         SystemMessage(content=query_analyzer_prompt.system),
         HumanMessage(content=query_analyzer_prompt.human)
     ]
-    llm = client.with_structured_output(queryAnalyzer)
+    
+    chat = []
+    shift = []
+    preference = []
+    others = []
+    
+    for i, client in enumerate(models_to_try):
+        try:
+            print(f"Query Analyzer: {i+1}차 모델 시도 중...")
+            
+            llm = client.with_structured_output(queryAnalyzer)
+            response = await llm.ainvoke(messages)
+            
+            # 성공 시 데이터 추출
+            chat = response.Chat
+            shift = response.Shift
+            preference = response.Preference
+            others = response.Others
+            
+            print(f"Query Analyzer: {i+1}차 모델 성공!")
+            break
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            print(f"Query Analyzer: {i+1}차 모델 오류 - {e}")
+            
+            # 429 (Rate limit) 또는 529 (Service unavailable) 에러인지 확인
+            if ("429" in error_msg or "rate" in error_msg or 
+                "529" in error_msg or "service unavailable" in error_msg or
+                "quota" in error_msg or "limit" in error_msg):
+                
+                if i < len(models_to_try) - 1:
+                    print(f"Query Analyzer: {i+2}차 백업 모델로 재시도...")
+                    continue
+                else:
+                    print("Query Analyzer: 모든 백업 모델 실패, 기본값 사용")
+                    break
+            else:
+                # 다른 에러는 즉시 백업 모델로 시도
+                if i < len(models_to_try) - 1:
+                    print(f"Query Analyzer: 예상치 못한 오류, {i+2}차 백업 모델로 재시도...")
+                    continue
+                else:
+                    print("Query Analyzer: 모든 모델 실패, 기본값 사용")
+                    break
 
-    response = await llm.ainvoke(messages)
-    chat = response.Chat
-    shift = response.Shift
-    preference = response.Preference
-    others = response.Others
-    print('chat', chat)
-    print('shift', shift)
-    print('preference', preference)
-    print('others', others)
-    return {"query_chat": chat, 'query_shift': shift, 'query_preference': preference, 'query_others': others, 'model': client}
+    print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_others: {others}")
+    return {"query_chat": chat, 'query_shift': shift, 'query_preference': preference, 'query_others': others, 'model': models_to_try[0]}
 
 

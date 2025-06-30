@@ -5,6 +5,8 @@ from google import genai
 from google.genai import types
 from langgraph.graph import StateGraph, END
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 import os
 import dotenv
@@ -139,29 +141,85 @@ async def preference_analyzer(state):
     # json_answer = json.loads(parts[0].text)
     # print('여기여기여기', json_answer)
     
-    client = ChatAnthropic(
-        model="claude-3-7-sonnet-20250219",
-        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-    )
     phase = state['phase']
     query = state['requests'][phase]
     data = state['schema']
     
     preference_analyzer_prompt = preferenceAnalyzerPrompt(data, query)
     
+    # 백업 모델들 순서대로 시도
+    models_to_try = [
+        # 1차: OpenAI (기본)
+        ChatOpenAI(
+            model="gpt-4o",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+        ),
+        # 2차: Anthropic (백업)
+        ChatAnthropic(
+            model="claude-3-7-sonnet-20250219",
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        ),
+        # 3차: Google Gemini (최종 백업)
+        ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+        )
+    ]
+    
     messages = [
         SystemMessage(content=preference_analyzer_prompt.system),
         HumanMessage(content=preference_analyzer_prompt.human)
     ]
-    llm = client.with_structured_output(preferenceAnalyzer)
-
-    response = await llm.ainvoke(messages)
+    
     json_answer = {
-        "processor": response.processor,
-        "id": response.id,
-        "weight": response.weight,
-        "reason": response.reason
+        "processor": "기본값 설정",
+        "id": "",
+        "weight": 0.0,
+        "reason": "처리 실패"
     }
+    
+    for i, client in enumerate(models_to_try):
+        try:
+            print(f"Preference Analyzer: {i+1}차 모델 시도 중...")
+            
+            llm = client.with_structured_output(preferenceAnalyzer)
+            response = await llm.ainvoke(messages)
+            
+            # 성공 시 데이터 추출
+            json_answer = {
+                "processor": response.processor,
+                "id": response.id,
+                "weight": response.weight,
+                "reason": response.reason
+            }
+            
+            print(f"Preference Analyzer: {i+1}차 모델 성공!")
+            break
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            print(f"Preference Analyzer: {i+1}차 모델 오류 - {e}")
+            
+            # 429 (Rate limit) 또는 529 (Service unavailable) 에러인지 확인
+            if ("429" in error_msg or "rate" in error_msg or 
+                "529" in error_msg or "service unavailable" in error_msg or
+                "quota" in error_msg or "limit" in error_msg):
+                
+                if i < len(models_to_try) - 1:
+                    print(f"Preference Analyzer: {i+2}차 백업 모델로 재시도...")
+                    continue
+                else:
+                    print("Preference Analyzer: 모든 백업 모델 실패, 기본값 사용")
+                    break
+            else:
+                # 다른 에러는 즉시 백업 모델로 시도
+                if i < len(models_to_try) - 1:
+                    print(f"Preference Analyzer: 예상치 못한 오류, {i+2}차 백업 모델로 재시도...")
+                    continue
+                else:
+                    print("Preference Analyzer: 모든 모델 실패, 기본값 사용")
+                    break
+    
     print('preference_analyzer 답변:', json_answer)
     return {'preference_result': [json_answer]}
 

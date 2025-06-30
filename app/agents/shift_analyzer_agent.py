@@ -1,4 +1,3 @@
-
 import json
 from pydantic import BaseModel
 from typing import List, TypedDict, Annotated, operator, Dict
@@ -9,13 +8,16 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 import os
 from langchain_core.messages import SystemMessage, HumanMessage
+import dotenv
             # * 답변 시 알 수 없는 정보를 요구한다면, 아래 도구 목록을 참고해, 필요하다면 한 번에 하나의 tool 을 호출할 수 있습니다. 
             # 도구 호출이 적절치 않을 경우 직접 답변만 작성하세요.  
             # {tools[0]}
             # * 답변 작성을 위한 processor는 도구가 필요함을 캐치하고, 어떤 도구와 어떤 인자가 필요할 지 정확히 명시해야 합니다.
 
+dotenv.load_dotenv()
 
 def collector(state):
     """
@@ -57,7 +59,7 @@ class shiftAnalyzerPrompt:
         """
         self.system = f"""
             # GOAL:
-            당신은 간호사 근무표 시스템의 “희망·비선호 스코어 추출기”입니다.  
+            당신은 간호사 근무표 시스템의 "희망·비선호 스코어 추출기"입니다.  
             입력 문장(자연어) ➜ 구조화 JSON 으로 변환해 주세요.
 
             1. Request Type  (가중치 보정치)
@@ -66,7 +68,7 @@ class shiftAnalyzerPrompt:
             | off     | 강제 OFF (가중치 유지)            | × 1.0 |
             | shift   | 특정 Shift 지정                   | × 0.9 |
             | keep    | 주기 요청(매주 같은 요일 등)      | × 0.8 |
-            | pattern | “DD→N” “ N 후 OFF” 같은 규칙      | × 0.7 |
+            | pattern | "DD→N" " N 후 OFF" 같은 규칙      | × 0.7 |
             | other   | 정책외 항목 (가중치 계산 안함)     | – |
 
             2. Request Importance  (기본 가중치)
@@ -76,13 +78,13 @@ class shiftAnalyzerPrompt:
             | 4 | 생명·건강 위기(가족 중증, 항암, 응급수술)      | off / shift              | 안전·장기결근 예방           |
             | 3 | 사회·가족 의무·직무(결혼·장례·교육·멘토링)    | off / shift / pattern    | 조직도 인지 필수 일정        |
             | 2 | 중요 개인계획(가족 행사, 장거리 통근, 학업)    | off / shift / keep / pattern | 가능 시 배려            |
-            | 1 | 선호·편의(“친한 동료랑”, 막연한 선호)         | keep / pattern           | 효율 < 상위 우선순위         |
+            | 1 | 선호·편의("친한 동료랑", 막연한 선호)         | keep / pattern           | 효율 < 상위 우선순위         |
             | 0 | 정책외/미지원(휴무 초과, 병동 고정 요청 등)    | other                    | 수간호사 직접 조율(Hard 0)   |
 
             최종 가중치 = Importance Score × Type Modifier
 
             3. 필수 매핑 규칙
-            * ‘Day shift’ → "D", ‘Evening’ → "E", ‘Night’ → "N", ‘Off’ → "OFF"
+            * 'Day shift' → "D", 'Evening' → "E", 'Night' → "N", 'Off' → "OFF"
             * weight 범위 : 0 ~ 5 (소수점 허용)
 
             4. 출력 JSON 스키마
@@ -106,13 +108,13 @@ class shiftAnalyzerPrompt:
             * 발화에서 Request 유형과 중요도를 판정하고 이유를 기록.
             * 중요도 점수 × 유형 Modifier 로 최종 weight 계산.
             * 날짜/Shift 구체화 → result 채우기.
-            * (기간형 “5월 둘째 주” 등은 별도 날짜모듈에서 변환되었다고 가정)
+            * (기간형 "5월 둘째 주" 등은 별도 날짜모듈에서 변환되었다고 가정)
             * 해석 불가 문장·모호 표현은 request_type="other" 로.
 
 
 
             ### 입력 예시
-            “5월 12일은 아들 발표회니까 꼭 쉬고 싶어요”
+            "5월 12일은 아들 발표회니까 꼭 쉬고 싶어요"
 
             ### 출력 예시
             {{
@@ -163,40 +165,87 @@ class shiftAnalyzerPrompt:
 
 async def shift_analyzer(state):
     print('여기_shift')
-    client = state['model']
-    client = ChatAnthropic(
-        model="claude-3-7-sonnet-20250219",
-        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-    )
+    # client = state['model']
+    # client = ChatAnthropic(
+    #     model="claude-3-7-sonnet-20250219",
+    #     anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+    # )
     phase = state['phase']
     context = state['requests'][phase]
-    # context = "일단 문선생님이랑은 무조건 따로 하고싶고, 천간호사랑 계속 같이 있고싶어요.. 진짜 많이 도와줘서 행복해요.. 그리고 웬만하면 D는 안하고 싶어요 ㅠ"
-    print('\n\n\n여까진옴\n\n\n')
     tools = state['mcp_tools']
-    # print('\n\n\n\n\n\n',type(tools[0]),'\n\n\n\n\n\n')
+    
     shift_analyzer_prompt = shiftAnalyzerPrompt(context)
-    # print('\n\n\n\n\n\n',shift_analyzer_prompt.human,'\n\n\n\n\n\n')
-    # print('\n\n\n\n\n\n',shift_analyzer_prompt.system,'\n\n\n\n\n\n')
-    agent = create_react_agent(client, tools, response_format=shiftAnalyzer)
-    # response = client.models.generate_content(
-    #     model="gemini-2.0-flash",
-    #     contents=[shift_analyzer_prompt.human],                       # or [pil_img, information]
-    #     config=types.GenerateContentConfig(
-    #         # response_mime_type="application/json",
-    #         # response_schema=shiftAnalyzer,      # ★ 핵심: Root 모델
-    #         system_instruction=shift_analyzer_prompt.system,
-
-    #     ),
-    # )
-    print('\n\n\n\n\n\n완료11\n\n\n\n\n\n')
-    result = await agent.ainvoke({"messages": [SystemMessage(content=shift_analyzer_prompt.system), HumanMessage(content=shift_analyzer_prompt.human)]})
-    # parts = response.candidates[0].content.parts
-    print('\n\n\n\n\n\n완료\n\n\n\n\n\n')
-    sr: shiftAnalyzer = result["structured_response"]
-    print('\n\n\n\n\n\nsr: ',sr.result,'\n\n\n\n\n\n')
-    # print('\n\n\n\n\n\n',parts[0].text,'\n\n\n\n\n\n')
-    # print(json.loads(parts[0].text))
-    # json_answer = json.loads(parts[0].text)
+    
+    # 백업 모델들 순서대로 시도
+    models_to_try = [
+        # 1차: Anthropic (기본)
+        ChatAnthropic(
+            model="claude-3-7-sonnet-20250219",
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        ),
+        # 2차: OpenAI (백업)
+        ChatOpenAI(
+            model="gpt-4o",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+        ),
+        # 3차: Google Gemini (최종 백업)
+        ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+        )
+    ]
+    
+    sr = None
+    
+    for i, client in enumerate(models_to_try):
+        try:
+            print(f"Shift Analyzer: {i+1}차 모델 시도 중...")
+            
+            agent = create_react_agent(client, tools, response_format=shiftAnalyzer)
+            result = await agent.ainvoke({
+                "messages": [
+                    SystemMessage(content=shift_analyzer_prompt.system), 
+                    HumanMessage(content=shift_analyzer_prompt.human)
+                ]
+            })
+            
+            sr = result["structured_response"]
+            print(f"Shift Analyzer: {i+1}차 모델 성공!")
+            print('\n\n\n\n\n\nsr: ',sr.result,'\n\n\n\n\n\n')
+            break
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            print(f"Shift Analyzer: {i+1}차 모델 오류 - {e}")
+            
+            # 429 (Rate limit) 또는 529 (Service unavailable) 에러인지 확인
+            if ("429" in error_msg or "rate" in error_msg or 
+                "529" in error_msg or "service unavailable" in error_msg or
+                "quota" in error_msg or "limit" in error_msg):
+                
+                if i < len(models_to_try) - 1:
+                    print(f"Shift Analyzer: {i+2}차 백업 모델로 재시도...")
+                    continue
+                else:
+                    print("Shift Analyzer: 모든 백업 모델 실패, 기본값 사용")
+                    # 기본값 설정
+                    from types import SimpleNamespace
+                    sr = SimpleNamespace()
+                    sr.result = {"shift": "OFF", "date": [], "score": []}
+                    break
+            else:
+                # 다른 에러는 즉시 백업 모델로 시도
+                if i < len(models_to_try) - 1:
+                    print(f"Shift Analyzer: 예상치 못한 오류, {i+2}차 백업 모델로 재시도...")
+                    continue
+                else:
+                    print("Shift Analyzer: 모든 모델 실패, 기본값 사용")
+                    # 기본값 설정
+                    from types import SimpleNamespace
+                    sr = SimpleNamespace()
+                    sr.result = {"shift": "OFF", "date": [], "score": []}
+                    break
+    
     return {"shift_result": [sr.result]}
 
 
