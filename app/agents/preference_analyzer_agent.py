@@ -193,6 +193,24 @@ async def preference_analyzer(state):
                 "reason": response.reason
             }
             
+            # ID 검증: schema에 존재하는 간호사인지 확인
+            valid_nurse_ids = []
+            if isinstance(data, list):
+                valid_nurse_ids = [nurse.get('nurse_id', '') for nurse in data if isinstance(nurse, dict)]
+            elif isinstance(data, dict) and 'nurses' in data:
+                nurses = data.get('nurses', [])
+                valid_nurse_ids = [nurse.get('nurse_id', '') for nurse in nurses if isinstance(nurse, dict)]
+            
+            # 추출된 id가 유효한 간호사 ID가 아니면 빈 값으로 처리
+            if json_answer["id"] and json_answer["id"] not in valid_nurse_ids:
+                print(f"Preference Analyzer: 무효한 간호사 ID '{json_answer['id']}' - 빈 값으로 처리")
+                json_answer = {
+                    "processor": f"언급된 간호사를 찾을 수 없어 무시됨: {response.processor}",
+                    "id": "",
+                    "weight": 0.0,
+                    "reason": "해당하는 간호사가 스키마에 존재하지 않음"
+                }
+            
             print(f"Preference Analyzer: {i+1}차 모델 성공!")
             break
             

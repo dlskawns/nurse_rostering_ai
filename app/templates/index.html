@@ -78,6 +78,382 @@
         .main-content {
             flex: 1;
         }
+        
+        /* 귀여운 간호사 로딩 화면 */
+        .cute-loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            border-radius: 10px;
+        }
+        
+        .nurse-character {
+            width: 200px;
+            height: 200px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        /* 고양이 몸통 */
+        .cat-body {
+            width: 100px;
+            height: 120px;
+            background: #f8f8f8;
+            border-radius: 50px 50px 30px 30px;
+            position: absolute;
+            left: 50%;
+            top: 60px;
+            transform: translateX(-50%);
+            border: 3px solid #ff6b9d;
+            z-index: 1;
+        }
+        
+        /* 고양이 머리 */
+        .cat-head {
+            width: 90px;
+            height: 80px;
+            background: #ffeaa7;
+            border-radius: 45px;
+            position: absolute;
+            left: 50%;
+            top: 30px;
+            transform: translateX(-50%);
+            border: 3px solid #ff6b9d;
+            z-index: 2;
+        }
+        
+        /* 고양이 귀 */
+        .cat-ear {
+            width: 25px;
+            height: 30px;
+            background: #ffeaa7;
+            border-radius: 15px 15px 0 0;
+            position: absolute;
+            top: 25px;
+            border: 2px solid #ff6b9d;
+            border-bottom: none;
+        }
+        
+        .cat-ear.left {
+            left: 20px;
+            transform: rotate(-15deg);
+        }
+        
+        .cat-ear.right {
+            right: 20px;
+            transform: rotate(15deg);
+        }
+        
+        .cat-ear::after {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 15px;
+            background: #fd79a8;
+            border-radius: 8px 8px 0 0;
+        }
+        
+        /* 간호사 모자 */
+        .nurse-cap {
+            width: 50px;
+            height: 20px;
+            background: white;
+            border-radius: 25px 25px 0 0;
+            position: absolute;
+            left: 50%;
+            top: 20px;
+            transform: translateX(-50%);
+            border: 2px solid #ff6b9d;
+            border-bottom: none;
+            z-index: 3;
+        }
+        
+        .nurse-cap::after {
+            content: '+';
+            position: absolute;
+            top: 3px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #e84393;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
+        /* 고양이 얼굴 */
+        .cat-face {
+            position: absolute;
+            top: 45px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3;
+        }
+        
+        .cat-eyes {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 8px;
+            justify-content: center;
+        }
+        
+        .cat-eye {
+            width: 12px;
+            height: 12px;
+            background: #2d3436;
+            border-radius: 50%;
+            position: relative;
+            animation: cat-blink 3s infinite;
+        }
+        
+        .cat-eye::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+        }
+        
+        .cat-nose {
+            width: 8px;
+            height: 6px;
+            background: #fd79a8;
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            margin: 0 auto 5px;
+        }
+        
+        .cat-mouth {
+            width: 20px;
+            height: 10px;
+            border: 2px solid #2d3436;
+            border-top: none;
+            border-radius: 0 0 15px 15px;
+            margin: 0 auto;
+        }
+        
+        .cat-whiskers {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .whisker {
+            position: absolute;
+            width: 20px;
+            height: 1px;
+            background: #2d3436;
+        }
+        
+        .whisker.left-1 { left: -25px; top: 0; transform: rotate(-10deg); }
+        .whisker.left-2 { left: -25px; top: 5px; transform: rotate(10deg); }
+        .whisker.right-1 { right: -25px; top: 0; transform: rotate(10deg); }
+        .whisker.right-2 { right: -25px; top: 5px; transform: rotate(-10deg); }
+        
+        /* 고양이 팔 */
+        .cat-arms {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2;
+        }
+        
+        .cat-arm {
+            width: 25px;
+            height: 40px;
+            background: #ffeaa7;
+            border-radius: 15px;
+            position: absolute;
+            border: 2px solid #ff6b9d;
+        }
+        
+        .cat-arm.left {
+            left: -20px;
+            transform-origin: center top;
+        }
+        
+        .cat-arm.right {
+            right: -20px;
+            transform-origin: center top;
+        }
+        
+        /* 고양이 꼬리 */
+        .cat-tail {
+            width: 15px;
+            height: 60px;
+            background: #ffeaa7;
+            border-radius: 8px;
+            position: absolute;
+            right: -25px;
+            top: 100px;
+            border: 2px solid #ff6b9d;
+            transform-origin: center top;
+            animation: tail-wag 2s ease-in-out infinite;
+        }
+        
+        /* 조사하는 애니메이션 */
+        .investigating .cat-arm.left {
+            animation: cat-investigate-left 1.5s ease-in-out infinite;
+        }
+        
+        .investigating .cat-arm.right {
+            animation: cat-investigate-right 1.5s ease-in-out infinite;
+        }
+        
+        .investigating .magnifying-glass {
+            position: absolute;
+            top: 95px;
+            right: -35px;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #74b9ff;
+            border-radius: 50%;
+            animation: magnify 1.5s ease-in-out infinite;
+            z-index: 4;
+        }
+        
+        .investigating .magnifying-glass::after {
+            content: '';
+            position: absolute;
+            top: 15px;
+            right: -8px;
+            width: 3px;
+            height: 12px;
+            background: #74b9ff;
+            border-radius: 2px;
+            transform: rotate(45deg);
+        }
+        
+        /* 문서 정리하는 애니메이션 */
+        .organizing .cat-arm.left {
+            animation: cat-organize-left 1.2s ease-in-out infinite;
+        }
+        
+        .organizing .cat-arm.right {
+            animation: cat-organize-right 1.2s ease-in-out infinite;
+        }
+        
+        .organizing .papers {
+            position: absolute;
+            top: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 4;
+        }
+        
+        .paper {
+            width: 12px;
+            height: 16px;
+            background: white;
+            border: 1px solid #ddd;
+            position: absolute;
+            border-radius: 2px;
+        }
+        
+        .paper:nth-child(1) {
+            left: -8px;
+            animation: paper-shuffle-1 1.2s ease-in-out infinite;
+        }
+        
+        .paper:nth-child(2) {
+            left: 0px;
+            animation: paper-shuffle-2 1.2s ease-in-out infinite;
+        }
+        
+        .paper:nth-child(3) {
+            left: 8px;
+            animation: paper-shuffle-3 1.2s ease-in-out infinite;
+        }
+        
+        .loading-message {
+            font-size: 24px;
+            color: #ff6b9d;
+            font-weight: bold;
+            margin-bottom: 10px;
+            animation: pulse-text 1s ease-in-out infinite;
+        }
+        
+        .loading-subtitle {
+            font-size: 16px;
+            color: #666;
+            animation: fade-in-out 2s ease-in-out infinite;
+        }
+        
+        /* 키프레임 애니메이션들 */
+        @keyframes cat-blink {
+            0%, 90%, 100% { height: 12px; }
+            95% { height: 2px; }
+        }
+        
+        @keyframes tail-wag {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(15deg); }
+            75% { transform: rotate(-10deg); }
+        }
+        
+        @keyframes cat-investigate-left {
+            0%, 100% { transform: rotate(-20deg); }
+            50% { transform: rotate(-35deg); }
+        }
+        
+        @keyframes cat-investigate-right {
+            0%, 100% { transform: rotate(45deg); }
+            50% { transform: rotate(25deg); }
+        }
+        
+        @keyframes magnify {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.1) rotate(5deg); }
+        }
+        
+        @keyframes cat-organize-left {
+            0%, 100% { transform: rotate(-10deg) translateY(0); }
+            50% { transform: rotate(-20deg) translateY(-5px); }
+        }
+        
+        @keyframes cat-organize-right {
+            0%, 100% { transform: rotate(10deg) translateY(0); }
+            50% { transform: rotate(20deg) translateY(-5px); }
+        }
+        
+        @keyframes paper-shuffle-1 {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-5px) rotate(-5deg); }
+        }
+        
+        @keyframes paper-shuffle-2 {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            25% { transform: translateY(-3px) rotate(2deg); }
+            75% { transform: translateY(-3px) rotate(-2deg); }
+        }
+        
+        @keyframes paper-shuffle-3 {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-4px) rotate(3deg); }
+        }
+        
+        @keyframes pulse-text {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        @keyframes fade-in-out {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -114,9 +490,40 @@
                         <button onclick="submitRequest()">근무 희망 초안 저장 및 분석</button>
                     </div>
         
-                    <div class="loader" id="loader" style="display: none;"></div>
+                    <!-- 귀여운 간호사 로딩 화면 -->
+                    <div class="cute-loader" id="cute-loader" style="display: none;">
+                        <div class="nurse-character" id="nurse-character">
+                            <div class="cat-body"></div>
+                            <div class="cat-head">
+                                <div class="cat-ear left"></div>
+                                <div class="cat-ear right"></div>
+                            </div>
+                            <div class="nurse-cap"></div>
+                            <div class="cat-face">
+                                <div class="cat-eyes">
+                                    <div class="cat-eye"></div>
+                                    <div class="cat-eye"></div>
+                                </div>
+                                <div class="cat-nose"></div>
+                                <div class="cat-mouth"></div>
+                            </div>
+                            <div class="cat-whiskers">
+                                <div class="whisker left-1"></div>
+                                <div class="whisker left-2"></div>
+                                <div class="whisker right-1"></div>
+                                <div class="whisker right-2"></div>
+                            </div>
+                            <div class="cat-arms">
+                                <div class="cat-arm left"></div>
+                                <div class="cat-arm right"></div>
+                            </div>
+                            <div class="cat-tail"></div>
+                        </div>
+                        <div class="loading-message" id="loading-message">요청 분석중...</div>
+                        <div class="loading-subtitle" id="loading-subtitle">열심히 분석하고 있어요! 🔍</div>
+                    </div>
         
-                    <div id="result-container" style="display: none;">
+                    <div id="result-container" style="display: none; position: relative;">
                         <h2>처리 결과</h2>
                         <div id="result-display"></div>
                     </div>
@@ -288,8 +695,11 @@
 
         async function submitRequest() {
             const wantedInput = document.getElementById('wanted-input').value;
-            const loader = document.getElementById('loader');
+            const loader = document.getElementById('cute-loader');
             const resultContainer = document.getElementById('result-container');
+            const nurseCharacter = document.getElementById('nurse-character');
+            const loadingMessage = document.getElementById('loading-message');
+            const loadingSubtitle = document.getElementById('loading-subtitle');
             
             if (!wantedInput) {
                 alert('희망 근무 내용을 입력해주세요.');
@@ -297,10 +707,42 @@
             }
 
             const payload = { request: wantedInput, schema: fullNurseSchema };
-            loader.style.display = 'block';
-            resultContainer.style.display = 'none';
+            
+            // result-container를 먼저 표시하고 그 안에 로딩 표시
+            resultContainer.style.display = 'block';
+            loader.style.display = 'flex';
+            
+            // 1단계: 요청 분석중... (조사하는 애니메이션)
+            nurseCharacter.className = 'nurse-character investigating';
+            loadingMessage.textContent = '요청 분석중...';
+            loadingSubtitle.textContent = '고양이 간호사가 꼼꼼히 분석하고 있어요! 🔍';
+            
+            // 돋보기 추가
+            const magnifyingGlass = document.createElement('div');
+            magnifyingGlass.className = 'magnifying-glass';
+            nurseCharacter.appendChild(magnifyingGlass);
 
             try {
+                // 3초 후 2단계로 전환
+                setTimeout(() => {
+                    // 돋보기 제거
+                    const oldMagnifyingGlass = nurseCharacter.querySelector('.magnifying-glass');
+                    if (oldMagnifyingGlass) {
+                        oldMagnifyingGlass.remove();
+                    }
+                    
+                    // 2단계: 요청 정리중... (문서 정리하는 애니메이션)
+                    nurseCharacter.className = 'nurse-character organizing';
+                    loadingMessage.textContent = '요청 정리중...';
+                    loadingSubtitle.textContent = '고양이 간호사가 깔끔하게 정리하고 있어요! 📋';
+                    
+                    // 서류 추가
+                    const papers = document.createElement('div');
+                    papers.className = 'papers';
+                    papers.innerHTML = '<div class="paper"></div><div class="paper"></div><div class="paper"></div>';
+                    nurseCharacter.appendChild(papers);
+                }, 3000);
+
                 const response = await fetch('/roster/invoke', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -309,27 +751,53 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.detail || 'API 요청에 실패했습니다.');
 
+                console.log('activeYear:', activeYear, 'activeMonth:', activeMonth);
+                console.log('API 응답 데이터:', data);
+
+                if (!activeYear || !activeMonth) {
+                    throw new Error('년도와 월 정보가 없습니다. 먼저 스케줄을 선택해주세요.');
+                }
+
                 const preferencePayload = {
                     year: activeYear,
                     month: activeMonth,
                     data: { ...data.response, request: wantedInput } // Save the original text request as well
                 };
 
-                await fetch('/api/preferences', {
+                console.log('전송할 데이터:', JSON.stringify(preferencePayload, null, 2));
+
+                const saveResponse = await fetch('/api/preferences', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(preferencePayload)
                 });
 
+                if (!saveResponse.ok) {
+                    const errorData = await saveResponse.json();
+                    console.error('저장 에러:', errorData);
+                    throw new Error(`저장 실패: ${errorData.detail || saveResponse.statusText}`);
+                }
+
+                // 로딩 숨기고 결과 표시
+                loader.style.display = 'none';
                 displayResults(preferencePayload.data);
-                resultContainer.style.display = 'block';
 
             } catch (error) {
                 console.error('Error:', error);
-                document.getElementById('result-display').textContent = `오류가 발생했습니다: ${error.message}`;
-                resultContainer.style.display = 'block';
-            } finally {
                 loader.style.display = 'none';
+                document.getElementById('result-display').textContent = `오류가 발생했습니다: ${error.message}`;
+            } finally {
+                // 애니메이션 정리
+                setTimeout(() => {
+                    // 모든 추가 요소 제거
+                    const magnifyingGlass = nurseCharacter.querySelector('.magnifying-glass');
+                    const papers = nurseCharacter.querySelector('.papers');
+                    if (magnifyingGlass) magnifyingGlass.remove();
+                    if (papers) papers.remove();
+                    
+                    // 클래스 초기화
+                    nurseCharacter.className = 'nurse-character';
+                }, 500);
             }
         }
 
@@ -359,10 +827,23 @@
             let prefHtml = '<div><h3>동료 선호</h3><table class="result-table"><tr><th>간호사</th><th>선호도</th></tr>';
             if (data.preference && data.preference.length > 0) {
                  data.preference.forEach(p => {
-                    const nurseName = fullNurseSchema.find(n => n.nurse_id === p.id)?.name || p.id.substring(0,8);
-                    const preference = p.weight > 0 ? '선호' : '비선호';
-                    prefHtml += `<tr><td>${nurseName}</td><td>${preference}</td></tr>`;
+                    // 스키마에 존재하는 간호사인지 확인
+                    const nurse = fullNurseSchema.find(n => n.nurse_id === p.id);
+                    if (nurse && p.id) { // 유효한 간호사이고 ID가 존재할 때만 표시
+                        const preference = p.weight > 0 ? '선호' : '비선호';
+                        prefHtml += `<tr><td>${nurse.name}</td><td>${preference}</td></tr>`;
+                    }
                 });
+                
+                // 유효한 선호 데이터가 하나도 없으면 "없음" 표시
+                const validPreferences = data.preference.filter(p => {
+                    const nurse = fullNurseSchema.find(n => n.nurse_id === p.id);
+                    return nurse && p.id;
+                });
+                
+                if (validPreferences.length === 0) {
+                    prefHtml += '<tr><td colspan="2">없음</td></tr>';
+                }
             } else {
                 prefHtml += '<tr><td colspan="2">없음</td></tr>';
             }

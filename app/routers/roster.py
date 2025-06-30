@@ -124,14 +124,14 @@ async def invoke_graph(request: RosterRequest):
         print('우라질레이션',  response)
         print('1기여기여기111', response)
         print('\n\n\n\n\n\n응답1:', parse_shift_results(response), '\n\n\n\n\n\n')
-        print('\n\n\n\n\n\n응답2:', parse_preferences(response), '\n\n\n\n\n\n')
+        print('\n\n\n\n\n\n응답2:', parse_preferences(response, request.schema), '\n\n\n\n\n\n')
         if len(response[0]) > 0:
             result['shift'] = parse_shift_results(response)
             
             # for i in range(len(response[0])):
             #     result.append(response[0][i]['shift_result'][j]['result'] for j in range(len(response[0][i]['shift_result'])))
         if len(response[1]) > 0:
-            result['preference'] = parse_preferences(response)
+            result['preference'] = parse_preferences(response, request.schema)
             # for i in range(len(response[1])):
         print('결과', result)    #     result.append(response[1][i]['preference_result'][j] for j in range(len(response[1][i]['preference_result'])))
         if result == {}:
@@ -195,15 +195,24 @@ def parse_shift_results(
     return parsed
 
 def parse_preferences(
-    response: List[List[Dict[str, Any]]]
+    response: List[List[Dict[str, Any]]],
+    schema: List[Dict[str, Any]] = None
 ) -> List[Dict[str, float]]:
     """
     2-중 리스트 구조의 preference_result 항목들을 전부 뽑아서
     [{'id': 12, 'weight': -1.5}, {'id': 13, 'weight': 1.5}, ...]
     형태의 리스트로 반환합니다. preference_result 가 없거나
     비어있어도 빈 리스트를 반환하며 에러는 발생하지 않습니다.
+    schema가 제공되면 유효한 간호사 ID만 필터링합니다.
     """
     parsed: List[Dict[str, float]] = []
+    
+    # schema에서 유효한 간호사 ID 목록 추출
+    valid_nurse_ids = set()
+    if schema:
+        for nurse in schema:
+            if isinstance(nurse, dict) and 'nurse_id' in nurse:
+                valid_nurse_ids.add(nurse['nurse_id'])
 
     # 최상위: 여러 agent 그룹
     for sub in response:
@@ -222,6 +231,16 @@ def parse_preferences(
                 # id 와 weight 모두 있을 때만
                 if _id is None or weight is None:
                     continue
+                
+                # 빈 ID는 무시
+                if not _id:
+                    continue
+                    
+                # schema가 있고 ID가 유효하지 않으면 무시
+                if valid_nurse_ids and _id not in valid_nurse_ids:
+                    print(f"Parse Preferences: 무효한 간호사 ID '{_id}' 필터링됨")
+                    continue
+                    
                 try:
                     parsed.append({"id": str(_id), "weight": float(weight)})
                 except (ValueError, TypeError):
