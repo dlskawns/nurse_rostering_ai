@@ -15,9 +15,52 @@
             flex: 1;
         }
         .nurse-status-container {
-            flex: 2;
+            flex: 1;
             max-height: 600px;
             overflow-y: auto;
+        }
+        .generated-roster-container {
+            flex: 3;
+            margin-top: 20px;
+        }
+        .violations-container {
+            flex: 1;
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff3f3;
+            border: 1px solid #fcc;
+            border-radius: 8px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .violations-container h4 {
+            margin-top: 0;
+            color: #d00;
+        }
+        .violations-container ul {
+            padding-left: 20px;
+            margin: 0;
+        }
+        .violations-container li {
+            color: #d00;
+            margin-bottom: 8px;
+        }
+        .roster-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .roster-table th, .roster-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        .roster-table th {
+            background-color: #f8f9fa;
+        }
+        .roster-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
         }
         .calendar {
             border: 1px solid #ddd;
@@ -80,6 +123,11 @@
         .status-not-submitted {
             background-color: #f0f0f0;
             color: #888;
+        }
+        .disabled-link {
+            pointer-events: none;
+            opacity: 0.6;
+            cursor: not-allowed;
         }
         .schedule-status-display {
             background: #f8f9fa;
@@ -146,8 +194,25 @@
                 </div>
             </div>
 
-            <div id="roster-output-container" style="margin-top: 30px;">
-                <!-- Generated roster will be displayed here -->
+            <div id="roster-output-section" style="display: none; margin-top: 30px;">
+                <div style="display: flex; gap: 20px;">
+                    <div class="generated-roster-container">
+                        <h3>생성된 근무표</h3>
+                        <div id="roster-table-container"></div>
+                    </div>
+                    <div class="violations-container">
+                        <h4>위반 사항</h4>
+                        <ul id="violations-list"></ul>
+                    </div>
+                </div>
+                <div class="roster-actions">
+                    <button id="save-roster-btn" class="request-button" onclick="saveRoster()">이 버전으로 저장</button>
+                    <a href="/roster-view" id="view-roster-link" class="request-button disabled-link" onclick="event.preventDefault(); alert('먼저 근무표를 저장해주세요.');">근무표 보기</a>
+                </div>
+            </div>
+
+            <div id="roster-output-container" style="margin-top: 30px; display: none;">
+                <!-- This is now replaced by roster-output-section -->
             </div>
         </div>
     </div>
@@ -156,6 +221,7 @@
         let currentMonth = new Date().getMonth();
         let currentYear = new Date().getFullYear();
         let allNurses = [];
+        let generatedRosterData = null; // To store generated roster data temporarily
         
         async function initializePage() {
             await fetchNursesForRoster();
@@ -302,15 +368,18 @@
         }
 
         async function generateRoster() {
-            const btn = document.getElementById('generate-roster-btn');
-            const originalText = btn.textContent;
-            btn.disabled = true;
-            btn.textContent = '근무표 생성 중...';
+            const rosterOutputSection = document.getElementById('roster-output-section');
+            const rosterTableContainer = document.getElementById('roster-table-container');
+            const violationsList = document.getElementById('violations-list');
+            
+            rosterTableContainer.innerHTML = '<p>근무표 생성 중... 서버 응답에 몇 분 정도 소요될 수 있습니다.</p>';
+            violationsList.innerHTML = '';
+            rosterOutputSection.style.display = 'block';
 
             try {
                 const response = await fetch('/api/roster/generate', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ year: currentYear, month: currentMonth + 1 })
                 });
 
@@ -318,25 +387,35 @@
                     const errorData = await response.json();
                     throw new Error(errorData.detail || '근무표 생성에 실패했습니다.');
                 }
-                
-                const rosterData = await response.json();
-                alert('근무표가 성공적으로 생성되었습니다.');
-                renderRosterTable(rosterData, document.getElementById('roster-output-container'));
-                // Refresh the main status display
-                await updatePageForMonth(currentYear, currentMonth + 1);
 
+                const result = await response.json();
+                generatedRosterData = result; // Store for saving
+
+                // Render Roster
+                renderRosterTable(result.roster, result.year, result.month, rosterTableContainer);
+
+                // Render Violations
+                if (result.violations && result.violations.length > 0) {
+                    result.violations.forEach(v => {
+                        const li = document.createElement('li');
+                        li.textContent = v;
+                        violationsList.appendChild(li);
+                    });
+                } else {
+                    violationsList.innerHTML = '<li>모든 제약 조건을 충족했습니다!</li>';
+                }
+                
+                // Disable save button if roster is empty
+                document.getElementById('save-roster-btn').disabled = !result.roster || result.roster.length === 0;
 
             } catch (error) {
                 console.error('Error generating roster:', error);
-                alert(error.message);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = originalText;
+                rosterTableContainer.innerHTML = `<p style="color: red;">${error.message}</p>`;
             }
         }
 
         async function displayGeneratedRoster(year, month) {
-            const container = document.getElementById('roster-output-container');
+            const container = document.getElementById('roster-table-container');
             container.innerHTML = '발행된 근무표 불러오는 중...';
             try {
                 const response = await fetch(`/api/roster/${year}/${month}`);
@@ -388,57 +467,70 @@
             document.getElementById('nurse-card-grid').appendChild(card);
         }
 
-        function renderRosterTable(data, container) {
+        function renderRosterTable(roster, year, month, container) {
             container.innerHTML = '';
-            
-            if (!data || !data.nurses || data.nurses.length === 0) {
-                container.innerHTML = '<h3>생성된 근무표 정보가 없습니다.</h3>';
+            if (!roster || roster.length === 0) {
+                container.innerHTML = '<p>생성된 근무표가 없습니다.</p>';
                 return;
             }
 
-            const { year, month, days_in_month, shift_colors, nurses } = data;
+            const daysInMonth = new Date(year, month, 0).getDate();
+            let table = '<table class="roster-table">';
+            // Header
+            table += '<thead><tr><th>간호사 (경력)</th>';
+            for (let day = 1; day <= daysInMonth; day++) {
+                table += `<th>${day}</th>`;
+            }
+            table += '</tr></thead>';
             
-            let tableHtml = `
-                <h3>${year}년 ${month}월 근무표</h3>
-                <table class="roster-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>이름</th>
-                            <th>경력</th>
-                            ${[...Array(days_in_month).keys()].map(d => `<th>${d + 1}</th>`).join('')}
-                            <th>D</th><th>E</th><th>N</th><th>O</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            nurses.forEach(nurse => {
-                tableHtml += `
-                    <tr>
-                        <td>${nurse.id.substring(0,8)}</td>
-                        <td>${nurse.name}</td>
-                        <td>${nurse.experience}</td>
-                        ${nurse.schedule.map(shift => `<td style="background-color: ${shift_colors[shift] || '#fff'}; color: ${shift === 'N' ? '#fff' : '#000'}">${shift}</td>`).join('')}
-                        <td>${nurse.counts['D'] || 0}</td>
-                        <td>${nurse.counts['E'] || 0}</td>
-                        <td>${nurse.counts['N'] || 0}</td>
-                        <td>${nurse.counts['O'] || 0}</td>
-                    </tr>
-                `;
+            // Body
+            table += '<tbody>';
+            roster.forEach(nurse => {
+                table += `<tr><td>${nurse.name} (${nurse.experience}년)</td>`;
+                nurse.schedule.forEach(shift => {
+                    table += `<td>${shift}</td>`;
+                });
+                table += '</tr>';
             });
+            table += '</tbody></table>';
 
-            tableHtml += `</tbody></table>`;
-            container.innerHTML = tableHtml;
+            container.innerHTML = table;
+        }
 
-            // Add some basic styling for the new table
-            const style = document.createElement('style');
-            style.innerHTML = `
-                .roster-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-                .roster-table th, .roster-table td { border: 1px solid #ddd; padding: 4px; text-align: center; }
-                .roster-table thead th { background-color: #f2f2f2; }
-            `;
-            container.appendChild(style);
+        async function saveRoster() {
+            if (!generatedRosterData) {
+                alert('저장할 근무표 데이터가 없습니다. 먼저 근무표를 생성해주세요.');
+                return;
+            }
+
+            const saveBtn = document.getElementById('save-roster-btn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = '저장 중...';
+
+            try {
+                const response = await fetch('/api/roster/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(generatedRosterData)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '근무표 저장에 실패했습니다.');
+                }
+                
+                alert('근무표가 성공적으로 저장되었습니다.');
+                
+                const viewLink = document.getElementById('view-roster-link');
+                viewLink.classList.remove('disabled-link');
+                viewLink.onclick = null; // Remove the alert onclick
+                
+            } catch (error) {
+                console.error('Error saving roster:', error);
+                alert(`저장 실패: ${error.message}`);
+                saveBtn.disabled = false;
+                saveBtn.textContent = '이 버전으로 저장';
+            }
         }
         
         document.addEventListener('DOMContentLoaded', initializePage);
