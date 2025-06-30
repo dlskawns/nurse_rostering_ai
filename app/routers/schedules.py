@@ -603,3 +603,56 @@ async def get_roster_for_month(
     roster_data["violations"] = violations
         
     return roster_data 
+
+# [Schedules] - 특정 월의 모든 버전 목록 조회 (수간호사용)
+@router.get("/schedules/{year}/{month}/versions")
+async def get_schedule_versions(
+    year: int, month: int,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    schedules = db.query(Schedule).filter(
+        Schedule.group_id == current_user.group_id,
+        Schedule.year == year,
+        Schedule.month == month
+    ).order_by(Schedule.version.desc()).all()
+    
+    return [{
+        "schedule_id": schedule.schedule_id,
+        "version": schedule.version,
+        "status": schedule.status,
+        "created_at": schedule.created_at.isoformat() if schedule.created_at else None,
+        "created_by": schedule.created_by
+    } for schedule in schedules]
+
+# [Schedules] - 최신 월과 버전의 스케줄 정보 조회 (수간호사용)
+@router.get("/schedules/latest")
+async def get_latest_schedule(
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    # Find the latest schedule (by year, month, version)
+    latest_schedule = db.query(Schedule).filter(
+        Schedule.group_id == current_user.group_id
+    ).order_by(
+        Schedule.year.desc(),
+        Schedule.month.desc(),
+        Schedule.version.desc()
+    ).first()
+    
+    if not latest_schedule:
+        return None
+        
+    return {
+        "year": latest_schedule.year,
+        "month": latest_schedule.month,
+        "version": latest_schedule.version,
+        "status": latest_schedule.status,
+        "schedule_id": latest_schedule.schedule_id
+    } 

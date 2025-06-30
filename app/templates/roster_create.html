@@ -10,14 +10,55 @@
         .roster-create-container {
             display: flex;
             gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
         }
         .calendar-container {
-            flex: 1;
+            flex: 0 0 320px;
         }
         .nurse-status-container {
-            flex: 1;
-            max-height: 600px;
+            flex: 2;
+            max-height: 700px;
             overflow-y: auto;
+        }
+        .version-list-container {
+            width: 220px;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .version-list-container h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+        .version-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+        .version-item:hover {
+            background: #e9ecef;
+        }
+        .version-item.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .version-item .version-number {
+            font-weight: bold;
+        }
+        .version-item .version-status {
+            font-size: 12px;
+            opacity: 0.8;
         }
         .generated-roster-container {
             flex: 3;
@@ -68,21 +109,75 @@
             padding: 15px;
         }
         .calendar-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .calendar-header h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #333;
+        }
+        .calendar-nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+        }
+        .calendar-nav button {
+            padding: 8px 15px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            min-width: 40px;
+        }
+        .calendar-nav button:hover {
+            background: #0056b3;
+        }
+        .calendar-nav .nav-spacer {
+            flex: 1;
         }
         .calendar-body table {
             width: 100%;
             text-align: center;
+            border-collapse: collapse;
         }
         .calendar-body th {
-            padding-bottom: 10px;
+            padding: 8px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            font-weight: bold;
         }
         .calendar-body td {
-            padding: 5px;
-            height: 40px;
+            width: 14.28%;
+            height: 35px;
+            padding: 0;
+            border: 1px solid #dee2e6;
+            vertical-align: middle;
+            position: relative;
+        }
+        .calendar-day {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background: none;
+            border: none;
+            font-size: 14px;
+            cursor: default;
+            transition: background-color 0.2s ease;
+        }
+        .calendar-day:hover {
+            background: #e9ecef;
+        }
+        .calendar-day.today {
+            background: #007bff;
+            color: white;
+            font-weight: bold;
         }
         .request-button {
             width: 100%;
@@ -90,31 +185,35 @@
         }
         .nurse-card-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
         }
         .nurse-card {
             background: #fff;
             border: 1px solid #ddd;
             border-radius: 8px;
-            padding: 15px;
+            padding: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            min-height: 140px;
         }
         .nurse-card h4 {
             margin-top: 0;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             color: #333;
+            font-size: 16px;
         }
         .nurse-card p {
-            margin: 5px 0;
+            margin: 8px 0;
             font-size: 14px;
+            color: #666;
         }
         .status-badge {
-            padding: 5px 10px;
+            padding: 8px 12px;
             border-radius: 12px;
             font-weight: bold;
             text-align: center;
-            margin-top: 10px;
+            margin-top: 15px;
+            font-size: 13px;
         }
         .status-submitted {
             background-color: #28a745;
@@ -141,6 +240,11 @@
             margin: 0;
             color: #495057;
         }
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 20px;
+        }
     </style>
 </head>
 <body>
@@ -164,9 +268,12 @@
                 <div class="calendar-container">
                     <div class="calendar">
                         <div class="calendar-header">
-                            <button onclick="prevMonth()">&lt;</button>
                             <h3 id="month-year"></h3>
-                            <button onclick="nextMonth()">&gt;</button>
+                            <div class="calendar-nav">
+                                <button onclick="prevMonth()">&lt;</button>
+                                <div class="nav-spacer"></div>
+                                <button onclick="nextMonth()">&gt;</button>
+                            </div>
                         </div>
                         <div class="calendar-body">
                             <table id="calendar-table">
@@ -183,6 +290,13 @@
                         <h4 id="schedule-status-text"></h4>
                     </div>
                     <button id="request-btn" class="request-button" onclick="requestWantedShifts()">Wanted 작성 요청하기</button>
+                </div>
+
+                <div class="version-list-container" id="version-list-container" style="display: none;">
+                    <h4 id="version-list-title">버전 목록</h4>
+                    <div id="version-list">
+                        <!-- Version items will be populated here -->
+                    </div>
                 </div>
 
                 <div class="nurse-status-container">
@@ -222,10 +336,33 @@
         let currentYear = new Date().getFullYear();
         let allNurses = [];
         let generatedRosterData = null; // To store generated roster data temporarily
+        let currentVersion = null;
+        let allVersions = [];
         
         async function initializePage() {
             await fetchNursesForRoster();
+            
+            // Try to load the latest schedule first
+            const latestSchedule = await fetchLatestSchedule();
+            if (latestSchedule) {
+                currentYear = latestSchedule.year;
+                currentMonth = latestSchedule.month - 1; // JavaScript months are 0-indexed
+                currentVersion = latestSchedule.version;
+            }
+            
             await renderCalendar();
+        }
+
+        async function fetchLatestSchedule() {
+            try {
+                const response = await fetch('/api/schedules/latest');
+                if (!response.ok) return null;
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('최신 스케줄 조회 실패:', error);
+                return null;
+            }
         }
 
         async function fetchNursesForRoster() {
@@ -251,6 +388,7 @@
 
             const firstDay = new Date(currentYear, currentMonth, 1).getDay();
             const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            const today = new Date();
 
             let date = 1;
             for (let i = 0; i < 6; i++) {
@@ -258,11 +396,15 @@
                 for (let j = 0; j < 7; j++) {
                     let cell = document.createElement('td');
                     if (i === 0 && j < firstDay) {
-                        cell.textContent = '';
+                        cell.innerHTML = '';
                     } else if (date > daysInMonth) {
                         break;
                     } else {
-                        cell.textContent = date;
+                        const isToday = (currentYear === today.getFullYear() && 
+                                       currentMonth === today.getMonth() && 
+                                       date === today.getDate());
+                        
+                        cell.innerHTML = `<div class="calendar-day ${isToday ? 'today' : ''}">${date}</div>`;
                         date++;
                     }
                     row.appendChild(cell);
@@ -290,11 +432,13 @@
             const requestBtn = document.getElementById('request-btn');
             const grid = document.getElementById('nurse-card-grid');
             const generateBtn = document.getElementById('generate-roster-btn');
+            const versionContainer = document.getElementById('version-list-container');
 
             statusTextEl.textContent = '상태 확인 중...';
             grid.innerHTML = ''; // Clear nurse statuses
             requestBtn.disabled = true;
             generateBtn.style.display = 'none';
+            versionContainer.style.display = 'none';
 
             try {
                 const response = await fetch(`/api/schedules/status?year=${year}&month=${month}`);
@@ -309,12 +453,16 @@
                     requestBtn.textContent = 'Wanted 새로운 버전 작성 요청하기';
                     requestBtn.disabled = false;
                     generateBtn.style.display = 'block'; // Show generate button
+                    versionContainer.style.display = 'block'; // Show version list
+                    await updateVersionList(year, month);
                     await updateNurseStatusDisplay(year, month);
                 } else if (statusData.schedule_status === 'issued') {
                     statusTextEl.textContent = `${year}년 ${month}월 근무표 발행 완료`;
                     requestBtn.textContent = 'Wanted 새로운 버전 작성 요청하기';
                     requestBtn.disabled = false;
                     generateBtn.style.display = 'block'; // Show generate button
+                    versionContainer.style.display = 'block'; // Show version list
+                    await updateVersionList(year, month);
                     await updateNurseStatusDisplay(year, month);
                     // Also show the generated roster
                     await displayGeneratedRoster(year, month);
@@ -330,6 +478,74 @@
                 requestBtn.textContent = 'Wanted 작성 요청하기';
                 requestBtn.disabled = false;
             }
+        }
+
+        async function updateVersionList(year, month) {
+            const versionList = document.getElementById('version-list');
+            const versionTitle = document.getElementById('version-list-title');
+            
+            versionTitle.textContent = `${year}년 ${month}월 버전 목록`;
+            versionList.innerHTML = '로딩 중...';
+            
+            try {
+                const response = await fetch(`/api/schedules/${year}/${month}/versions`);
+                if (!response.ok) throw new Error('버전 목록을 불러올 수 없습니다.');
+                
+                allVersions = await response.json();
+                versionList.innerHTML = '';
+                
+                if (allVersions.length === 0) {
+                    versionList.innerHTML = '<p>버전이 없습니다.</p>';
+                    return;
+                }
+                
+                allVersions.forEach(version => {
+                    const versionItem = document.createElement('div');
+                    versionItem.className = 'version-item';
+                    if (currentVersion === version.version) {
+                        versionItem.classList.add('active');
+                    }
+                    
+                    const statusText = version.status === 'requested' ? '접수중' : 
+                                     version.status === 'issued' ? '발행됨' : version.status;
+                    
+                    versionItem.innerHTML = `
+                        <div class="version-number">v${version.version}</div>
+                        <div class="version-status">${statusText}</div>
+                    `;
+                    
+                    versionItem.onclick = () => switchToVersion(version.version);
+                    versionList.appendChild(versionItem);
+                });
+                
+                // If no version is selected, select the latest (first) one
+                if (!currentVersion && allVersions.length > 0) {
+                    await switchToVersion(allVersions[0].version);
+                }
+                
+            } catch (error) {
+                console.error('버전 목록 조회 실패:', error);
+                versionList.innerHTML = '버전 목록을 불러올 수 없습니다.';
+            }
+        }
+
+        async function switchToVersion(version) {
+            currentVersion = version;
+            
+            // Update active state in version list
+            document.querySelectorAll('.version-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            const activeItem = Array.from(document.querySelectorAll('.version-item')).find(item => 
+                item.querySelector('.version-number').textContent === `v${version}`
+            );
+            if (activeItem) {
+                activeItem.classList.add('active');
+            }
+            
+            // Update nurse status display for this version
+            await updateNurseStatusDisplay(currentYear, currentMonth + 1);
         }
 
         async function requestWantedShifts() {
