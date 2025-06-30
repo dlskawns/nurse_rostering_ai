@@ -185,9 +185,18 @@
         }
         .nurse-card-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(3, 1fr); /* 기본값 3개 */
             gap: 20px;
+            transition: all 0.3s ease; /* 부드러운 전환 효과 */
         }
+        
+        /* 동적 그리드 클래스들 */
+        .nurse-card-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+        .nurse-card-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+        .nurse-card-grid.cols-5 { grid-template-columns: repeat(5, 1fr); }
+        .nurse-card-grid.cols-6 { grid-template-columns: repeat(6, 1fr); }
+        .nurse-card-grid.cols-7 { grid-template-columns: repeat(7, 1fr); }
+        
         .nurse-card {
             background: #fff;
             border: 1px solid #ddd;
@@ -195,18 +204,60 @@
             padding: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             min-height: 140px;
+            transition: all 0.3s ease; /* 부드러운 크기 변경 */
         }
+        
+        /* 카드 크기 조절 클래스들 */
+        .nurse-card.size-large {
+            padding: 20px;
+            min-height: 140px;
+        }
+        .nurse-card.size-medium {
+            padding: 16px;
+            min-height: 120px;
+        }
+        .nurse-card.size-small {
+            padding: 12px;
+            min-height: 100px;
+        }
+        .nurse-card.size-xsmall {
+            padding: 10px;
+            min-height: 85px;
+        }
+        .nurse-card.size-xxsmall {
+            padding: 8px;
+            min-height: 75px;
+        }
+        
         .nurse-card h4 {
             margin-top: 0;
             margin-bottom: 15px;
             color: #333;
             font-size: 16px;
+            transition: font-size 0.3s ease;
         }
+        
+        /* 제목 폰트 크기 조절 */
+        .nurse-card.size-large h4 { font-size: 16px; margin-bottom: 15px; }
+        .nurse-card.size-medium h4 { font-size: 15px; margin-bottom: 12px; }
+        .nurse-card.size-small h4 { font-size: 14px; margin-bottom: 10px; }
+        .nurse-card.size-xsmall h4 { font-size: 13px; margin-bottom: 8px; }
+        .nurse-card.size-xxsmall h4 { font-size: 12px; margin-bottom: 6px; }
+        
         .nurse-card p {
             margin: 8px 0;
             font-size: 14px;
             color: #666;
+            transition: all 0.3s ease;
         }
+        
+        /* 본문 텍스트 크기 조절 */
+        .nurse-card.size-large p { font-size: 14px; margin: 8px 0; }
+        .nurse-card.size-medium p { font-size: 13px; margin: 6px 0; }
+        .nurse-card.size-small p { font-size: 12px; margin: 5px 0; }
+        .nurse-card.size-xsmall p { font-size: 11px; margin: 4px 0; }
+        .nurse-card.size-xxsmall p { font-size: 10px; margin: 3px 0; }
+        
         .status-badge {
             padding: 8px 12px;
             border-radius: 12px;
@@ -214,7 +265,16 @@
             text-align: center;
             margin-top: 15px;
             font-size: 13px;
+            transition: all 0.3s ease;
         }
+        
+        /* 배지 크기 조절 */
+        .nurse-card.size-large .status-badge { padding: 8px 12px; font-size: 13px; margin-top: 15px; }
+        .nurse-card.size-medium .status-badge { padding: 7px 10px; font-size: 12px; margin-top: 12px; }
+        .nurse-card.size-small .status-badge { padding: 6px 8px; font-size: 11px; margin-top: 10px; }
+        .nurse-card.size-xsmall .status-badge { padding: 5px 7px; font-size: 10px; margin-top: 8px; }
+        .nurse-card.size-xxsmall .status-badge { padding: 4px 6px; font-size: 9px; margin-top: 6px; }
+        
         .status-submitted {
             background-color: #28a745;
             color: white;
@@ -244,6 +304,64 @@
             max-width: 1500px;
             margin: 0 auto;
             padding: 20px;
+        }
+        
+        /* 슬라이더 컨트롤 스타일 */
+        .card-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .card-controls label {
+            font-weight: 500;
+            color: #495057;
+            white-space: nowrap;
+        }
+        
+        .card-slider {
+            flex: 1;
+            max-width: 200px;
+        }
+        
+        .card-slider input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #dee2e6;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .card-slider input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #007bff;
+            cursor: pointer;
+        }
+        
+        .card-slider input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #007bff;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .card-count-display {
+            font-weight: bold;
+            color: #007bff;
+            min-width: 40px;
+            text-align: center;
         }
     </style>
 </head>
@@ -301,7 +419,15 @@
 
                 <div class="nurse-status-container">
                     <h3>제출 현황</h3>
-                    <div id="nurse-card-grid" class="nurse-card-grid">
+                    <div class="card-controls">
+                        <label for="card-columns-slider">한 줄에 표시할 카드 수:</label>
+                        <div class="card-slider">
+                            <input type="range" id="card-columns-slider" min="3" max="7" value="3" 
+                                   oninput="updateCardLayout(this.value)" onchange="updateCardLayout(this.value)">
+                        </div>
+                        <div class="card-count-display" id="card-count-display">3개</div>
+                    </div>
+                    <div id="nurse-card-grid" class="nurse-card-grid cols-3">
                         <!-- Nurse cards will be populated here -->
                     </div>
                     <button id="generate-roster-btn" class="request-button" style="margin-top: 20px; display: none;" onclick="generateRoster()">현재 버전으로 근무표 만들기</button>
@@ -338,6 +464,51 @@
         let generatedRosterData = null; // To store generated roster data temporarily
         let currentVersion = null;
         let allVersions = [];
+        let currentCardColumns = 3; // 현재 카드 컬럼 수
+        
+        // 카드 레이아웃 업데이트 함수
+        function updateCardLayout(columns) {
+            currentCardColumns = parseInt(columns);
+            const grid = document.getElementById('nurse-card-grid');
+            const countDisplay = document.getElementById('card-count-display');
+            
+            // 기존 클래스 제거
+            grid.className = grid.className.replace(/cols-\d+/g, '');
+            
+            // 새 컬럼 클래스 추가
+            grid.classList.add(`cols-${currentCardColumns}`);
+            
+            // 카운트 표시 업데이트
+            countDisplay.textContent = `${currentCardColumns}개`;
+            
+            // 모든 카드에 적절한 크기 클래스 적용
+            updateCardSizes();
+        }
+        
+        // 카드 크기 업데이트 함수
+        function updateCardSizes() {
+            const cards = document.querySelectorAll('.nurse-card');
+            const sizeClass = getSizeClassForColumns(currentCardColumns);
+            
+            cards.forEach(card => {
+                // 기존 크기 클래스 제거
+                card.className = card.className.replace(/size-\w+/g, '');
+                // 새 크기 클래스 추가
+                card.classList.add(sizeClass);
+            });
+        }
+        
+        // 컬럼 수에 따른 크기 클래스 결정
+        function getSizeClassForColumns(columns) {
+            switch(columns) {
+                case 3: return 'size-large';
+                case 4: return 'size-medium';
+                case 5: return 'size-small';
+                case 6: return 'size-xsmall';
+                case 7: return 'size-xxsmall';
+                default: return 'size-medium';
+            }
+        }
         
         async function initializePage() {
             await fetchNursesForRoster();
@@ -654,6 +825,9 @@
                 const submittedNurseIds = new Set(data.submitted_nurses);
 
                 grid.innerHTML = '';
+                // 현재 그리드 클래스 유지
+                grid.className = `nurse-card-grid cols-${currentCardColumns}`;
+                
                  if (allNurses.length === 0) {
                     grid.innerHTML = '간호사 정보가 없습니다.';
                     return;
@@ -671,7 +845,8 @@
 
         function renderNurseCard(nurse, isSubmitted) {
             const card = document.createElement('div');
-            card.className = 'nurse-card';
+            const sizeClass = getSizeClassForColumns(currentCardColumns);
+            card.className = `nurse-card ${sizeClass}`;
             card.innerHTML = `
                 <h4>${nurse.name}</h4>
                 <p>ID: ${nurse.nurse_id.substring(0,8)}</p>
