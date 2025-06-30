@@ -4,6 +4,12 @@ from typing import List, TypedDict, Annotated, operator
 from google import genai
 from google.genai import types
 from langgraph.graph import StateGraph, END
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import SystemMessage, HumanMessage
+import os
+import dotenv
+
+dotenv.load_dotenv()
 
 class PreferenceSubgraph(TypedDict):
     requests: List[str]
@@ -36,7 +42,7 @@ class preferenceAnalyzerPrompt:
         """
         self.system = f"""
             # 역할
-            당신은 “간호사 근무표 엔진”용 **선호 스코어 추출기**입니다.  
+            당신은 "간호사 근무표 엔진"용 **선호 스코어 추출기**입니다.  
             입력으로 자연어 문장(한국어·영어·혼합)을 받으면, 간호사 간 pair-score 와 개인 shift-score 로 변환해 JSON 으로 출력합니다.
 
             # 입력 스키마
@@ -46,27 +52,27 @@ class preferenceAnalyzerPrompt:
                 "is_head": bool, "is_night_nurse": bool }}
             ```
             * utterances : 문자열 배열
-                (간호사들의 “같이 하고 싶어/싫어, 겹치지 말아줘” 등 자유 서술)
+                (간호사들의 "같이 하고 싶어/싫어, 겹치지 말아줘" 등 자유 서술)
 
             # 출력 스키마
-
             ```json
-                {{
-                "pair_preferences":[
-                    {{ "id":int, "weight":float, "reason":str }}
-                ],
-                }}
+            {{
+                "processor": "분석 과정 설명",
+                "id": "nurse_id",
+                "weight": 0.0,
+                "reason": "선호/기피 이유"
+            }}
             ```
 
             # 가이드라인
                 1. 매핑 규칙
                     | 표현 패턴        | 예시                       | weight               |
                     | ------------ | ------------------------ | -------------------- |
-                    | **강한 선호**    | “꼭 ○○쌤이랑” “무조건 같이”       | +3.0                 |
-                    | **보통 선호**    | “가능하면 ○○쌤” “같이 하고 싶어”    | +1.5                 |
-                    | **보통 기피**    | “가급적 ○○쌤은 피하고”           | −1.5                 |
-                    | **강한 기피**    | “절대 ○○쌤이랑 싫어” “제발 안 겹치게” | −2.0                 |
-                    | **모호/농담/없음**    | “○○쌤이랑은 글쎄요ㅎㅎ”           | 0 |
+                    | **강한 선호**    | "꼭 ○○쌤이랑" "무조건 같이"       | +3.0                 |
+                    | **보통 선호**    | "가능하면 ○○쌤" "같이 하고 싶어"    | +1.5                 |
+                    | **보통 기피**    | "가급적 ○○쌤은 피하고"           | −1.5                 |
+                    | **강한 기피**    | "절대 ○○쌤이랑 싫어" "제발 안 겹치게" | −2.0                 |
+                    | **모호/농담/없음**    | "○○쌤이랑은 글쎄요ㅎㅎ"           | 0 |
                 3. 규칙
                     * id 매핑은 이름 완전일치 우선, 이름도, 성도 찾지 못하면 ignored(0).
                     * 팩트 없는 추론·환상 (hallucination)은 금지.
@@ -81,22 +87,22 @@ class preferenceAnalyzerPrompt:
                         {{"nurse_id":"ooonsjk3","name":"이해린","exp":10,"is_head":true,"is_night_nurse":false}}
                         ],
                         "utterances":[
-                        "저 박수정 쌤이랑은 제발 안 겹치게 해주세요…😭",
-                        "수쌤(이해린)은 같이 데이 들어가고 싶어요",
+                        "저 박수정 쌤이랑은 제발 안 겹치게 해주세요…😭"
                         ]
                         }}
                     ```
                     <출력>
                     ```json
                         {{
-                        "pair_preferences":[
-                        {{"processor": "'박수정 쌤'은 정보상 nurse_id가 'mlnwjk2'이고, 강한 기피를 표현하니 가중치는 -2로 줘야할 것 같아.", "nurse_id":"mlnwjk2","weight":-2.0,"reason":"강한 기피 표현"}},
-                        {{"processor": "'수썜'은 is_head가 true인 수간호사를 의미하므로 이혜린 간호사이고, nurse_id 는 'ooonsjk3'이다. 같이 하고자 하는 느낌이 조금 있다.", "nurse_id":"ooonsjk3","weight":+1.5,"reason":"같이 근무 선호"}}
-                        ]
+                        "processor": "'박수정 쌤'은 정보상 nurse_id가 'mlnwjk2'이고, 강한 기피를 표현하니 가중치는 -2로 줘야할 것 같아.",
+                        "id": "mlnwjk2",
+                        "weight": -2.0,
+                        "reason": "강한 기피 표현"
                         }}
                     ```
                 5. 출력 형식
                     * 반드시 위 JSON 구조만 반환 (불필요한 문장·주석 x)
+                    * 여러 명이 언급되면 가장 중요한/명확한 한 명만 선택
             """
                 
         self.human=f"""
@@ -108,30 +114,55 @@ class preferenceAnalyzerPrompt:
             """
 
 async def preference_analyzer(state):
-    client = state['model']
+    # client = state['model']
+    # phase = state['phase']
+    # query = state['requests'][phase]
+    # data = state['schema']
+    # # context = "일단 문선생님이랑은 무조건 따로 하고싶고, 천간호사랑 계속 같이 있고싶어요.. 진짜 많이 도와줘서 행복해요.. 그리고 웬만하면 D는 안하고 싶어요 ㅠ"
+
+    # # query= "정쌤은 무조건 다 겹치게 해주세요"
+    # preference_analyzer_prompt = preferenceAnalyzerPrompt(data, query)
+
+    # print('\n\n\n\n\n\n완료121212\n\n\n\n\n\n')
+    # response = client.models.generate_content(
+    # model="gemini-2.0-flash",
+    # contents=[preference_analyzer_prompt.human],                       # or [pil_img, information]
+    # config=types.GenerateContentConfig(
+    #     response_mime_type="application/json",
+    #     response_schema=preferenceAnalyzer,      # ★ 핵심: Root 모델
+    #     system_instruction=preference_analyzer_prompt.system
+    # ),
+    # )   
+    # print('\n\n\n\n\n\n완료131313\n\n\n\n\n\n')
+    # parts = response.candidates[0].content.parts
+    # print('----------------preference;;;;;;;;;;;;;;;',json.loads(parts[0].text))
+    # json_answer = json.loads(parts[0].text)
+    # print('여기여기여기', json_answer)
+    
+    client = ChatAnthropic(
+        model="claude-3-7-sonnet-20250219",
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+    )
     phase = state['phase']
     query = state['requests'][phase]
     data = state['schema']
-    # context = "일단 문선생님이랑은 무조건 따로 하고싶고, 천간호사랑 계속 같이 있고싶어요.. 진짜 많이 도와줘서 행복해요.. 그리고 웬만하면 D는 안하고 싶어요 ㅠ"
-
-    # query= "정쌤은 무조건 다 겹치게 해주세요"
+    
     preference_analyzer_prompt = preferenceAnalyzerPrompt(data, query)
+    
+    messages = [
+        SystemMessage(content=preference_analyzer_prompt.system),
+        HumanMessage(content=preference_analyzer_prompt.human)
+    ]
+    llm = client.with_structured_output(preferenceAnalyzer)
 
-    print('\n\n\n\n\n\n완료121212\n\n\n\n\n\n')
-    response = client.models.generate_content(
-    model="gemini-2.0-flash",
-    contents=[preference_analyzer_prompt.human],                       # or [pil_img, information]
-    config=types.GenerateContentConfig(
-        response_mime_type="application/json",
-        response_schema=preferenceAnalyzer,      # ★ 핵심: Root 모델
-        system_instruction=preference_analyzer_prompt.system
-    ),
-    )   
-    print('\n\n\n\n\n\n완료131313\n\n\n\n\n\n')
-    parts = response.candidates[0].content.parts
-    print('----------------preference;;;;;;;;;;;;;;;',json.loads(parts[0].text))
-    json_answer = json.loads(parts[0].text)
-    print('여기여기여기', json_answer)
+    response = await llm.ainvoke(messages)
+    json_answer = {
+        "processor": response.processor,
+        "id": response.id,
+        "weight": response.weight,
+        "reason": response.reason
+    }
+    print('preference_analyzer 답변:', json_answer)
     return {'preference_result': [json_answer]}
 
 

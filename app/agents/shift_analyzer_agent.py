@@ -40,7 +40,7 @@ class ShiftSubgraph(TypedDict):
 class shiftResponse(TypedDict):
     shift: str 
     date: List[int] 
-    score: List[int] 
+    score: List[float] 
 
 class shiftAnalyzer(BaseModel):
     processor: str

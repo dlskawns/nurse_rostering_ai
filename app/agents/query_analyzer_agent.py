@@ -1,4 +1,3 @@
-
 import json
 from pydantic import BaseModel
 from typing import List, TypedDict, Annotated, operator
@@ -8,14 +7,17 @@ import dotenv
 from langgraph.prebuilt import create_react_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
 import pprint
+from langchain_anthropic import ChatAnthropic
+import os
+from langchain_core.messages import SystemMessage, HumanMessage
 dotenv.load_dotenv()
 
 print(dotenv.load_dotenv())
 class queryAnalyzer(BaseModel):
-    Chat: str
+    Chat: List[str] 
     Shift: List[str] 
     Preference: List[str]
-    Others: str
+    Others: List[str] 
 
 
 class queryAnalyzerPrompt:
@@ -25,17 +27,17 @@ class queryAnalyzerPrompt:
         """
         self.system = f"""
             ## GOAL:
-                당신은 “간호사 희망사항 전처리기” 입니다.  
+                당신은 "간호사 희망사항 전처리기" 입니다.  
                 한국어 자연어 입력 ➜ 카테고리별 List(JSON) 로 분해·정규화해 주세요.
 
             ## 1. 작업 목표
                 1. 한 문장 안에 여러 날짜·Shift·선호 가 섞여 있으면 의미 단위로 잘라 개별 항목화.
                 2. Shift / Preference 항목의 각 요소에는 단일 내용만 존재해야 함.  
                 예)  
-                - “5/5는 쉬고 싶고, 5/6은 E로 줘” →  
+                - "5/5는 쉬고 싶고, 5/6은 E로 줘" →  
                     `"Shift": ["5/5은 OFF로 줘", "5/6은 E로 줘"]`
-                3. 날짜가 생략된 지시(“그 외엔…”)는 앞선 날짜를 보완하여 정보 손실 없이 재기술.  
-                예) “5/5는 N, 그 외엔 E” →  
+                3. 날짜가 생략된 지시("그 외엔…")는 앞선 날짜를 보완하여 정보 손실 없이 재기술.  
+                예) "5/5는 N, 그 외엔 E" →  
                     `"Shift": ["5/5은 N로 줘", "5/5 제외 나머지는 E로 줘"]`
                 4. 절대 중복/혼합 금지: 한 요소에 OFF와 E 같이 넣지 마세요.
                 5. 최종 JSON 키
@@ -80,31 +82,61 @@ class queryAnalyzerPrompt:
 
 
 async def query_analyzer(state):
-    client = genai.Client()
+    # client = genai.Client()
 
-    context = state['request']
+    # context = state['request']
 
 
-    query_analyzer_prompt = queryAnalyzerPrompt(context)
+    # query_analyzer_prompt = queryAnalyzerPrompt(context)
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=[query_analyzer_prompt.human],                       # or [pil_img, information]
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=queryAnalyzer,      # ★ 핵심: Root 모델
-            system_instruction=query_analyzer_prompt.system
-        ),
+    # response = client.models.generate_content(
+    #     model="gemini-2.0-flash",
+    #     contents=[query_analyzer_prompt.human],                       # or [pil_img, information]
+    #     config=types.GenerateContentConfig(
+    #         response_mime_type="application/json",
+    #         response_schema=queryAnalyzer,      # ★ 핵심: Root 모델
+    #         system_instruction=query_analyzer_prompt.system
+    #     ),
+    # )
+    # parts = response.candidates[0].content.parts
+    # print(json.loads(parts[0].text))
+    # json_answer = json.loads(parts[0].text)
+    # print('json_answer: ',json_answer)
+    # chat = json_answer['Chat']
+    # shift= json_answer['Shift']
+    # preference = json_answer['Preference']
+    # others = json_answer['Others']
+    # print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_others: {others}")
+    jj = {
+    "Chat": [],
+    "Shift": [
+        "5일에는 OFF로 줘요",
+        "금요일마다 D로 줘요"
+    ],
+    "Preference": ['이지연 간호사와는 하고싶지 않아요'],
+    "Others": []
+    }
+    client = ChatAnthropic(
+    model="claude-3-7-sonnet-20250219",
+    anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
     )
-    parts = response.candidates[0].content.parts
-    print(json.loads(parts[0].text))
-    json_answer = json.loads(parts[0].text)
-    print('json_answer: ',json_answer)
-    chat = json_answer['Chat']
-    shift= json_answer['Shift']
-    preference = json_answer['Preference']
-    others = json_answer['Others']
-    print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_others: {others}")
+    context = state['request']
+    query_analyzer_prompt = queryAnalyzerPrompt(context)
+    messages = [
+        SystemMessage(content=query_analyzer_prompt.system),
+        HumanMessage(content=query_analyzer_prompt.human)
+    ]
+    llm = client.with_structured_output(queryAnalyzer)
+
+    response = await llm.ainvoke(messages)
+    chat = response.Chat
+    shift = response.Shift
+    preference = response.Preference
+    others = response.Others
+    print('chat', chat)
+    print('shift', shift)
+    print('preference', preference)
+    print('others', others)
     return {"query_chat": chat, 'query_shift': shift, 'query_preference': preference, 'query_others': others, 'model': client}
 
 
