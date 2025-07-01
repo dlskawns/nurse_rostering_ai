@@ -1126,21 +1126,39 @@
                 }
 
                 const result = await response.json();
-                generatedRosterData = result; // Store for saving
-                editedRosterData = JSON.parse(JSON.stringify(result.roster)); // 편집용 복사본
+                
+                // API 응답 데이터를 올바른 형식으로 변환
+                if (result.nurses) {
+                    editedRosterData = result.nurses.map(nurse => ({
+                        name: nurse.name,
+                        experience: nurse.experience,
+                        schedule: nurse.schedule,
+                        nurse_id: nurse.id
+                    }));
+                    generatedRosterData = {
+                        year: result.year,
+                        month: result.month,
+                        roster: editedRosterData,
+                        violations: result.violations || []
+                    };
+                } else {
+                    // 기존 형식 지원 (하위 호환성)
+                    editedRosterData = result.roster ? JSON.parse(JSON.stringify(result.roster)) : [];
+                    generatedRosterData = result;
+                }
 
                 // 히스토리 초기화
                 changeHistory = [];
                 historyIndex = -1;
 
                 // Render Roster with editing functionality
-                renderRosterTable(result.roster, result.year, result.month);
+                renderRosterTable(editedRosterData, result.year, result.month);
 
                 // Render Violations
                 updateViolationsDisplay(result.violations || []);
                 
                 // Enable save button
-                document.getElementById('save-roster-btn').disabled = !result.roster || result.roster.length === 0;
+                document.getElementById('save-roster-btn').disabled = !editedRosterData || editedRosterData.length === 0;
                 
                 // Show editing controls
                 showEditingControls(true);
