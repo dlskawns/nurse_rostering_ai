@@ -18,6 +18,16 @@ from nurse import Nurse as NurseEngine
 from config import NurseRosterConfig
 from app.routers.utils import parse_prefs_to_dict
 
+# CP-SAT 기반 엔진 import
+try:
+    from cp_sat_basic import generate_roster_cp_sat
+    CPSAT_AVAILABLE = True
+    print("CP-SAT 기반 엔진을 사용할 수 있습니다.")
+except ImportError as e:
+    CPSAT_AVAILABLE = False
+    print(f"CP-SAT 엔진을 사용할 수 없습니다: {e}")
+    print("기존 엔진을 사용합니다.")
+
 router = APIRouter(
     prefix="/api",
     tags=["schedules"]
@@ -343,7 +353,6 @@ async def generate_roster_endpoint(
 
     # 2. Fetch all nurses and their preferences
     nurses_in_group = db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
-    print('\n\n\n\n\nnurses_in_group', nurses_in_group)
     nurse_ids = [n.nurse_id for n in nurses_in_group]
     
     preferences = db.query(ShiftPreference).filter(
@@ -352,110 +361,38 @@ async def generate_roster_endpoint(
         ShiftPreference.month == req.month
     ).all()
     
-    nurses_dict = [n.__dict__ for n in nurses_in_group]
-    prefs_dict = [p.__dict__ for p in preferences]
-    print('\n\n\n\n\nnurses_dict', nurses_dict)
-    print('\n\n\n\n\nprefs_dict', prefs_dict)
-    # 3. Call the roster generation logic
+    # 3. Get latest roster configuration
     latest_config = db.query(RosterConfig).filter(
         RosterConfig.group_id == current_user.group_id
     ).order_by(RosterConfig.created_at.desc()).first()
-
-    with Timer("RosterSystem 초기화"):
-        # `RosterSystem`에 맞는 데이터 구조로 변환
-        nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(nurses_in_group)]
-        
-        # target_month를 date 객체로 생성
-        target_month_date = date(req.year, req.month, 1)
-
-        # DB에서 불러온 config를 NurseRosterConfig 객체로 변환
-        roster_config_for_engine = NurseRosterConfig(
-            daily_shift_requirements={
-                'D': latest_config.day_req,
-                'E': latest_config.eve_req,
-                'N': latest_config.nig_req
-            },
-            min_experience_per_shift=latest_config.min_exp_per_shift,
-            required_experienced_nurses=latest_config.req_exp_nurses,
-            max_consecutive_work_days=latest_config.max_conseq_work,
-            max_night_shifts_per_month=latest_config.max_nig_per_month,
-            enforce_two_offs_per_week=latest_config.two_offs_per_week,
-            shift_requirement_priority=latest_config.shift_priority,
-            max_consecutive_nights=3 if latest_config.three_seq_nig else 2,
-            global_monthly_off_days=2, # 하드코딩 필요
-            standard_personal_off_days=latest_config.off_days - 2 if latest_config.off_days > 2 else 0 # 하드코딩 필요
-        )
-
-        roster_system = RosterSystem(
-            nurses=nurses_for_engine,
-            target_month=target_month_date,
-            config=roster_config_for_engine
-        )
-
-    shift_preferences, off_requests, pair_preferences = parse_prefs_to_dict(prefs_dict)
-    print('\n\n\n\n\npair_preferences', pair_preferences, '\n\n\n\n\n')
-    print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
-    print('\n\n\n\n\nshift_preferences', shift_preferences, '\n\n\n\n\n')
-    with Timer("휴무 요청 적용"):
-        # off_requests = {} # Placeholder
-        # Example: off_requests = {"1": {"5": 10.0, "12": 10.0}}
-        roster_system.apply_off_requests(off_requests)
-
-    with Timer("선호 근무 유형 적용"):
-        # shift_preferences = {} # Placeholder
-        # Example: shift_preferences = {"1": {"D": {"4": 1.0, "5": 3.2}}}
-        roster_system.apply_shift_preferences(shift_preferences)
-
-    with Timer("페어링 선호도 적용"):
-        pair_preferences = {
-            "work_together": [], # e.g., [{"nurse_1": 1, "nurse_2": 5, "weight": 3.0}]
-            "work_apart": []     # e.g., [{"nurse_1": 1, "nurse_2": 6, "weight": 3.0}]
-        }
-        roster_system.apply_pair_preferences(pair_preferences)
-
-    with Timer("CP-SAT으로 최적화"):
-        roster_system.optimize_roster_with_cp_sat_v2(time_limit_seconds=60)
-
-    # with Timer("최적화 결과 출력"):
-    #     print("--- 최적화된 근무표 지표 ---")
-    #     metrics = roster_system.calculate_detailed_metrics()
-    #     for key, value in metrics.items():
-    #         if isinstance(value, dict):
-    #             print(f"  {key}:")
-    #             for sub_key, sub_value in value.items():
-    #                 print(f"    {sub_key}: {sub_value}")
-    #         else:
-    #             print(f"  {key}: {value}")
-
-    # # 4. Clear old entries and save new roster to DB
-    # db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
     
-    # shift_map = {i: s for i, s in enumerate(roster_system.config.shift_types)}
+    if not latest_config:
+        raise HTTPException(status_code=400, detail="설정값을 입력해주세요")
 
-    # for n_idx, nurse_schedule in enumerate(roster_system.roster):
-    #     nurse_db_id = roster_system.nurses[n_idx].db_id
-    #     for day_idx, shift_vector in enumerate(nurse_schedule):
-    #         shift_idx = np.where(shift_vector == 1)[0]
-    #         if len(shift_idx) > 0:
-    #             shift_id = shift_map[shift_idx[0]]
-    #             work_date = date(req.year, req.month, day_idx + 1)
-    #             entry = ScheduleEntry(
-    #                 entry_id=str(uuid.uuid4().hex)[:16],
-    #                 schedule_id=schedule.schedule_id,
-    #                 nurse_id=nurse_db_id,
-    #                 work_date=work_date,
-    #                 shift_id=shift_id.upper()
-    #             )
-    #             db.add(entry)
-    ###############
-    
+    # 4. Convert data to formats expected by engines
     nurses_dict = [n.__dict__ for n in nurses_in_group]
     prefs_dict = [p.__dict__ for p in preferences]
+    config_dict = latest_config.__dict__ if latest_config else {}
+    
+    print(f"간호사 수: {len(nurses_dict)}, 선호도 수: {len(prefs_dict)}")
 
-    # 3. Call the roster generation logic
-    generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
+    # 5. Choose engine and generate roster
+    if CPSAT_AVAILABLE:
+        print("CP-SAT 기반 엔진을 사용하여 근무표를 생성합니다.")
+        try:
+            with Timer("CP-SAT 엔진으로 근무표 생성"):
+                generated = generate_roster_cp_sat(
+                    nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=60
+                )
+        except Exception as e:
+            print(f"CP-SAT 엔진 실행 중 오류 발생: {e}")
+            print("기존 엔진으로 폴백합니다.")
+            generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
+    else:
+        print("기존 엔진을 사용하여 근무표를 생성합니다.")
+        generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
 
-    # 4. Clear old entries and save new roster to DB
+    # 6. Clear old entries and save new roster to DB
     db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
     
     for nurse_id, shifts in generated.items():
@@ -470,80 +407,13 @@ async def generate_roster_endpoint(
             )
             db.add(entry)
 
-    # 5. Update schedule status to 'issued'
+    # 7. Update schedule status to 'issued'
     schedule.status = 'issued'
-    
-    # 6. 위반사항 계산하여 Schedule에 저장 - 임시로 주석 처리
-    # violations = []
-    # try:
-    #     # 생성된 근무표 데이터를 이용해 위반사항 계산
-    #     entries_by_nurse = {}
-    #     for nurse_id, shifts in generated.items():
-    #         for day_index, shift_id in enumerate(shifts):
-    #             if nurse_id not in entries_by_nurse:
-    #                 entries_by_nurse[nurse_id] = {}
-    #             entries_by_nurse[nurse_id][day_index + 1] = shift_id
-    #     
-    #     # RosterSystem으로 위반사항 계산
-    #     roster_config_for_engine = NurseRosterConfig(
-    #         daily_shift_requirements={
-    #             'D': latest_config.day_req,
-    #             'E': latest_config.eve_req,
-    #             'N': latest_config.nig_req
-    #         },
-    #         max_consecutive_work_days=latest_config.max_conseq_work,
-    #         max_night_shifts_per_month=latest_config.max_nig_per_month,
-    #         max_consecutive_nights=3 if latest_config.three_seq_nig else 2
-    #     )
-    #     
-    #     nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(nurses_in_group)]
-    #     system = RosterSystem(
-    #         nurses=nurses_for_engine,
-    #         target_month=date(req.year, req.month, 1),
-    #         config=roster_config_for_engine
-    #     )
-    #     
-    #     # 생성된 근무표를 RosterSystem에 맞게 변환
-    #     shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
-    #     system.roster.fill(0)
-    #     
-    #     for nurse_idx, nurse in enumerate(system.nurses):
-    #         nurse_schedule = entries_by_nurse.get(nurse.db_id, {})
-    #         for day in range(system.num_days):
-    #             day_key = day + 1
-    #             shift = nurse_schedule.get(day_key, "O")
-    #             shift_idx = shift_map.get(shift.upper())
-    #             if shift_idx is None:
-    #                 shift_idx = shift_map.get("OFF") if shift.upper() == "O" else shift_map.get("O")
-    #             if shift_idx is not None:
-    #                 system.roster[nurse_idx, day, shift_idx] = 1
-    #     
-    #     # 위반사항 찾기
-    #     violation_details = system._find_violations()
-    #     
-    #     # 위반사항 메시지 포맷팅
-    #     violation_messages = set()
-    #     for v in violation_details:
-    #         if v['type'] == 'shift_requirement':
-    #             violation_messages.add(f"{v['day']+1}일: {v['shift']} 근무 인원 미달 (필요: {v['required']}, 배정: {v['actual']})")
-    #         elif v['type'] == 'consecutive':
-    #             nurse_name = system.nurses[v['nurse_idx']].name
-    #             violation_messages.add(f"{nurse_name}: 최대 연속 근무일 초과")
-    #         elif v['type'] == 'night':
-    #             nurse_name = system.nurses[v['nurse_idx']].name
-    #             violation_messages.add(f"{nurse_name}: 야간 근무 제약 위반")
-    #     
-    #     violations = sorted(list(violation_messages))
-    #     
-    # except Exception as e:
-    #     print(f"위반사항 계산 중 오류 발생: {e}")
-    #     violations = [f"위반사항 계산 중 오류가 발생했습니다: {str(e)}"]
-    # 
-    # # Schedule에 위반사항 저장
-    # schedule.violations = violations
     db.commit()
     
-    # 7. Fetch and return the created roster for display
+    print("근무표 생성 및 저장 완료")
+    
+    # 8. Fetch and return the created roster for display
     return await get_roster_for_month(req.year, req.month, current_user, db)
 
 # [Roster] - 특정 월의 근무표 조회
