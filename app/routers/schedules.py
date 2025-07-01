@@ -472,9 +472,78 @@ async def generate_roster_endpoint(
 
     # 5. Update schedule status to 'issued'
     schedule.status = 'issued'
+    
+    # 6. 위반사항 계산하여 Schedule에 저장 - 임시로 주석 처리
+    # violations = []
+    # try:
+    #     # 생성된 근무표 데이터를 이용해 위반사항 계산
+    #     entries_by_nurse = {}
+    #     for nurse_id, shifts in generated.items():
+    #         for day_index, shift_id in enumerate(shifts):
+    #             if nurse_id not in entries_by_nurse:
+    #                 entries_by_nurse[nurse_id] = {}
+    #             entries_by_nurse[nurse_id][day_index + 1] = shift_id
+    #     
+    #     # RosterSystem으로 위반사항 계산
+    #     roster_config_for_engine = NurseRosterConfig(
+    #         daily_shift_requirements={
+    #             'D': latest_config.day_req,
+    #             'E': latest_config.eve_req,
+    #             'N': latest_config.nig_req
+    #         },
+    #         max_consecutive_work_days=latest_config.max_conseq_work,
+    #         max_night_shifts_per_month=latest_config.max_nig_per_month,
+    #         max_consecutive_nights=3 if latest_config.three_seq_nig else 2
+    #     )
+    #     
+    #     nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(nurses_in_group)]
+    #     system = RosterSystem(
+    #         nurses=nurses_for_engine,
+    #         target_month=date(req.year, req.month, 1),
+    #         config=roster_config_for_engine
+    #     )
+    #     
+    #     # 생성된 근무표를 RosterSystem에 맞게 변환
+    #     shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
+    #     system.roster.fill(0)
+    #     
+    #     for nurse_idx, nurse in enumerate(system.nurses):
+    #         nurse_schedule = entries_by_nurse.get(nurse.db_id, {})
+    #         for day in range(system.num_days):
+    #             day_key = day + 1
+    #             shift = nurse_schedule.get(day_key, "O")
+    #             shift_idx = shift_map.get(shift.upper())
+    #             if shift_idx is None:
+    #                 shift_idx = shift_map.get("OFF") if shift.upper() == "O" else shift_map.get("O")
+    #             if shift_idx is not None:
+    #                 system.roster[nurse_idx, day, shift_idx] = 1
+    #     
+    #     # 위반사항 찾기
+    #     violation_details = system._find_violations()
+    #     
+    #     # 위반사항 메시지 포맷팅
+    #     violation_messages = set()
+    #     for v in violation_details:
+    #         if v['type'] == 'shift_requirement':
+    #             violation_messages.add(f"{v['day']+1}일: {v['shift']} 근무 인원 미달 (필요: {v['required']}, 배정: {v['actual']})")
+    #         elif v['type'] == 'consecutive':
+    #             nurse_name = system.nurses[v['nurse_idx']].name
+    #             violation_messages.add(f"{nurse_name}: 최대 연속 근무일 초과")
+    #         elif v['type'] == 'night':
+    #             nurse_name = system.nurses[v['nurse_idx']].name
+    #             violation_messages.add(f"{nurse_name}: 야간 근무 제약 위반")
+    #     
+    #     violations = sorted(list(violation_messages))
+    #     
+    # except Exception as e:
+    #     print(f"위반사항 계산 중 오류 발생: {e}")
+    #     violations = [f"위반사항 계산 중 오류가 발생했습니다: {str(e)}"]
+    # 
+    # # Schedule에 위반사항 저장
+    # schedule.violations = violations
     db.commit()
     
-    # 6. Fetch and return the created roster for display
+    # 7. Fetch and return the created roster for display
     return await get_roster_for_month(req.year, req.month, current_user, db)
 
 # [Roster] - 특정 월의 근무표 조회
@@ -524,68 +593,9 @@ async def get_roster_for_month(
             entries_by_nurse[entry.nurse_id] = {}
         entries_by_nurse[entry.nurse_id][entry.work_date.day] = entry.shift_id
 
-    # RosterSystem을 사용하여 위반사항 계산
-    violations = []
-    try:
-        # DB에서 불러온 config를 NurseRosterConfig 객체로 변환
-        latest_config_db = db.query(RosterConfig).filter(
-            RosterConfig.group_id == current_user.group_id
-        ).order_by(RosterConfig.created_at.desc()).first()
-        print('1')
-        roster_config_for_engine = NurseRosterConfig(
-            daily_shift_requirements={
-                'D': latest_config_db.day_req,
-                'E': latest_config_db.eve_req,
-                'N': latest_config_db.nig_req
-            },
-            max_consecutive_work_days=latest_config_db.max_conseq_work,
-            max_night_shifts_per_month=latest_config_db.max_nig_per_month,
-            max_consecutive_nights=3 if latest_config_db.three_seq_nig else 2
-        )
-        print('2')
-        # 임시 RosterSystem 인스턴스 생성
-        nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all())]
-        print('3')
-        system = RosterSystem(
-            nurses=nurses_for_engine,
-            target_month=date(year, month, 1),
-            config=roster_config_for_engine
-        )
-        print('4')
-        # 생성된 근무표를 RosterSystem에 맞게 변환하여 채워넣기
-        shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
-        print('5')
-        print('system.nurses', system.nurses)
-        for nurse_idx, nurse in enumerate(system.nurses):
-            nurse_schedule = entries_by_nurse.get(nurse.db_id, {})
-            for day in range(system.num_days):
-                day_key = day + 1
-                shift = nurse_schedule.get(day_key, "O")
-                shift_idx = shift_map.get(shift.upper())
-                if shift_idx is None: # 'O' vs 'OFF' 처리
-                    shift_idx = shift_map.get("OFF") if shift.upper() == "O" else shift_map.get("O")
-                
-                system.roster[nurse_idx, day, shift_idx] = 1
-                
-        # 위반사항 찾기
-        violation_details = system._find_violations()
-        print('7')
-        # 위반사항 메시지 포맷팅 및 중복 제거
-        violation_messages = set()
-        for v in violation_details:
-            if v['type'] == 'shift_requirement':
-                violation_messages.add(f"{v['day']+1}일: {v['shift']} 근무 인원 미달 (필요: {v['required']}, 배정: {v['actual']})")
-            elif v['type'] == 'consecutive':
-                nurse_name = system.nurses[v['nurse_idx']].name
-                violation_messages.add(f"{nurse_name}: 최대 연속 근무일 초과")
-            elif v['type'] == 'night':
-                 nurse_name = system.nurses[v['nurse_idx']].name
-                 violation_messages.add(f"{nurse_name}: 야간 근무 제약 위반")
-        print('8')
-        violations = sorted(list(violation_messages))
-        print('9')
-    except Exception as e:
-        print(f"위반사항 계산 중 오류 발생: {e}")
+    # 저장된 위반사항 사용 (RosterSystem 생성하지 않음)
+    # violations = schedule_info.violations if schedule_info.violations else []
+    violations = []  # 임시로 빈 리스트 반환 - DB 스키마 업데이트 후 위반사항 기능 복구 예정
 
     for nurse in nurses_in_group:
         nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, 'O') for d in range(1, roster_data["days_in_month"] + 1)]
@@ -602,7 +612,7 @@ async def get_roster_for_month(
     
     roster_data["violations"] = violations
         
-    return roster_data 
+    return roster_data
 
 # [Roster] - 근무표 저장
 @router.post("/roster/save")
@@ -653,8 +663,78 @@ async def save_roster(
                 )
                 db.add(entry)
 
-    # Update schedule status to 'issued'
+    # 위반사항 계산하여 Schedule에 저장
+    # violations = []
+    # try:
+    #     # Get roster configuration
+    #     latest_config_db = db.query(RosterConfig).filter(
+    #         RosterConfig.group_id == current_user.group_id
+    #     ).order_by(RosterConfig.created_at.desc()).first()
+    #     
+    #     if latest_config_db:
+    #         # Create RosterSystem configuration
+    #         roster_config_for_engine = NurseRosterConfig(
+    #             daily_shift_requirements={
+    #                 'D': latest_config_db.day_req,
+    #                 'E': latest_config_db.eve_req,
+    #                 'N': latest_config_db.nig_req
+    #             },
+    #             max_consecutive_work_days=latest_config_db.max_conseq_work,
+    #             max_night_shifts_per_month=latest_config_db.max_nig_per_month,
+    #             max_consecutive_nights=3 if latest_config_db.three_seq_nig else 2
+    #         )
+    #         
+    #         # Get nurses for engine
+    #         nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all())]
+    #         
+    #         # Create RosterSystem instance
+    #         system = RosterSystem(
+    #             nurses=nurses_for_engine,
+    #             target_month=date(year, month, 1),
+    #             config=roster_config_for_engine
+    #         )
+    #         
+    #         # Convert roster data to RosterSystem format
+    #         shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
+    #         
+    #         # Initialize roster with zeros
+    #         system.roster.fill(0)
+    #         
+    #         for nurse_idx, nurse_data in enumerate(roster):
+    #             if nurse_idx >= len(system.nurses):
+    #                 continue
+    #             schedule_data = nurse_data.get('schedule', [])
+    #             for day_idx, shift in enumerate(schedule_data):
+    #                 if day_idx >= system.num_days:
+    #                     continue
+    #                 shift_idx = shift_map.get(shift.upper())
+    #                 if shift_idx is not None:
+    #                     system.roster[nurse_idx, day_idx, shift_idx] = 1
+    #         
+    #         # Find violations
+    #         violation_details = system._find_violations()
+    #         
+    #         # Format violation messages
+    #         violation_messages = set()
+    #         for v in violation_details:
+    #             if v['type'] == 'shift_requirement':
+    #                 violation_messages.add(f"{v['day']+1}일: {v['shift']} 근무 인원 미달 (필요: {v['required']}, 배정: {v['actual']})")
+    #             elif v['type'] == 'consecutive':
+    #                 nurse_name = system.nurses[v['nurse_idx']].name
+    #                 violation_messages.add(f"{nurse_name}: 최대 연속 근무일 초과")
+    #             elif v['type'] == 'night':
+    #                 nurse_name = system.nurses[v['nurse_idx']].name
+    #                 violation_messages.add(f"{nurse_name}: 야간 근무 제약 위반")
+    #         
+    #         violations = sorted(list(violation_messages))
+    #         
+    # except Exception as e:
+    #     print(f"위반사항 계산 중 오류 발생: {e}")
+    #     violations = [f"위반사항 계산 중 오류가 발생했습니다: {str(e)}"]
+
+    # Update schedule status and violations
     schedule.status = 'issued'
+    # schedule.violations = violations  # 임시로 주석 처리
     db.commit()
     
     return {"message": "Roster saved successfully"}

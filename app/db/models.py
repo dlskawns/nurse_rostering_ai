@@ -52,6 +52,7 @@ class Schedule(Base):
     created_at = Column(DATETIME, default=func.now())
     updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
     status = Column(VARCHAR(10)) # e.g., 'requested', 'issued'
+    # violations = Column(JSON, nullable=True) # 임시로 주석 처리 - DB 스키마 업데이트 후 활성화 예정
 
     roster_config = relationship("RosterConfig")
 
