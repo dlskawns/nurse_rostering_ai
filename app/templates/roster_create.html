@@ -88,16 +88,328 @@
         }
         .roster-table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 1px;
+            font-size: 12px;
+            margin-top: 10px;
+            background: #dee2e6;
         }
         .roster-table th, .roster-table td {
-            border: 1px solid #ddd;
-            padding: 8px;
+            border: none;
+            padding: 4px;
             text-align: center;
+            width: 28px;
+            height: 28px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: white;
+            font-size: 11px;
         }
         .roster-table th {
             background-color: #f8f9fa;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            height: 32px;
+            font-size: 10px;
         }
+        .roster-table td:first-child {
+            text-align: left;
+            background-color: #f8f9fa;
+            font-weight: bold;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+            cursor: default;
+            width: 120px;
+            padding-left: 8px;
+            min-width: 120px;
+        }
+        .roster-table th:first-child {
+            left: 0;
+            z-index: 11;
+            width: 120px;
+            min-width: 120px;
+        }
+        .roster-table td.shift-cell {
+            position: relative;
+            font-weight: bold;
+        }
+        .roster-table td.shift-cell:hover {
+            background-color: #e9ecef !important;
+            transform: scale(1.1);
+            z-index: 2;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .roster-table td.shift-cell.selected {
+            background-color: #007bff !important;
+            color: white;
+            transform: scale(1.1);
+            z-index: 3;
+            box-shadow: 0 2px 8px rgba(0,123,255,0.4);
+        }
+        
+        /* 통계 컬럼 스타일 */
+        .roster-table th.summary-col, .roster-table td.summary-col {
+            background-color: #e9ecef;
+            font-weight: bold;
+            width: 32px;
+            min-width: 32px;
+        }
+        .roster-table tfoot td {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            font-size: 10px;
+            height: 24px;
+        }
+        
+        /* 근무 코드 색상 - 더 진하게 */
+        .shift-D { background-color: #4FC3F7 !important; color: #fff; }
+        .shift-E { background-color: #FFB74D !important; color: #fff; }
+        .shift-N { background-color: #9575CD !important; color: #fff; }
+        .shift-O { background-color: #E0E0E0 !important; color: #333; }
+        
+        /* 상단 근무 코드 선택기 - 더 컴팩트하게 */
+        .shift-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+            align-items: center;
+            position: relative;
+        }
+        .shift-selector-title {
+            font-weight: bold;
+            font-size: 12px;
+            color: #495057;
+            margin-right: 8px;
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #ced4da;
+        }
+        .shift-button {
+            padding: 6px 12px;
+            border: 2px solid transparent;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            min-width: 50px;
+            font-size: 11px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .shift-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        .shift-button.selected {
+            border-color: #007bff;
+            background: #007bff;
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(0,123,255,0.3);
+        }
+        .clear-selection-btn {
+            padding: 4px 8px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            transition: all 0.3s ease;
+            margin-left: auto;
+            box-shadow: 0 1px 3px rgba(220,53,69,0.3);
+        }
+        .clear-selection-btn:hover {
+            background: #c82333;
+            transform: scale(1.05);
+            box-shadow: 0 2px 6px rgba(220,53,69,0.4);
+        }
+        .clear-selection-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* 히스토리 및 되돌리기 버튼 */
+        .history-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+        }
+        .undo-btn, .redo-btn {
+            padding: 6px 12px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s ease;
+            min-width: 60px;
+        }
+        .undo-btn:hover, .redo-btn:hover {
+            background: #5a6268;
+            transform: translateY(-1px);
+        }
+        .undo-btn:disabled, .redo-btn:disabled {
+            background: #e9ecef;
+            color: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .history-info {
+            font-size: 11px;
+            color: #6c757d;
+            margin-left: auto;
+        }
+        
+        /* 위반사항 컨테이너 - 접기/펼치기 */
+        .violations-container {
+            flex: 1;
+            margin-top: 20px;
+            border: 1px solid #fcc;
+            border-radius: 8px;
+            max-height: 600px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .violations-header {
+            background: #fff3f3;
+            padding: 12px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #fcc;
+            transition: all 0.2s ease;
+        }
+        .violations-header:hover {
+            background: #ffeaea;
+        }
+        .violations-header h4 {
+            margin: 0;
+            color: #d00;
+            font-size: 14px;
+        }
+        .violations-toggle {
+            color: #d00;
+            font-size: 16px;
+            transition: transform 0.3s ease;
+        }
+        .violations-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+        .violations-content {
+            padding: 15px;
+            background: #fff;
+            max-height: 500px;
+            overflow-y: auto;
+            transition: all 0.3s ease;
+        }
+        .violations-content.collapsed {
+            max-height: 0;
+            padding: 0 15px;
+            overflow: hidden;
+        }
+        .violations-content ul {
+            padding-left: 20px;
+            margin: 0;
+        }
+        .violations-content li {
+            color: #d00;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .violations-count {
+            background: #dc3545;
+            color: white;
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        /* 근무 코드 색상 */
+        .shift-D { background-color: #87CEEB !important; color: #333; }
+        .shift-E { background-color: #FFDAB9 !important; color: #333; }
+        .shift-N { background-color: #6A5ACD !important; color: white; }
+        .shift-O { background-color: #F5F5F5 !important; color: #333; }
+        
+        /* 상단 근무 코드 선택기 */
+        .shift-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px dashed #dee2e6;
+        }
+        .shift-button {
+            padding: 10px 20px;
+            border: 2px solid #ccc;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            min-width: 60px;
+        }
+        .shift-button:hover {
+            border-color: #007bff;
+            transform: scale(1.05);
+        }
+        .shift-button.selected {
+            border-color: #007bff;
+            background: #007bff;
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,123,255,0.3);
+        }
+        
+        /* 크기 조정 컨트롤 */
+        .size-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .size-slider {
+            flex: 1;
+            margin: 0 10px;
+        }
+        .size-display {
+            font-weight: bold;
+            min-width: 100px;
+            text-align: center;
+        }
+        
+        /* 크기별 테이블 스타일 */
+        .roster-container.size-small .roster-table { font-size: 11px; }
+        .roster-container.size-small .roster-table th, 
+        .roster-container.size-small .roster-table td { padding: 4px; min-width: 25px; }
+        
+        .roster-container.size-medium .roster-table { font-size: 13px; }
+        .roster-container.size-medium .roster-table th, 
+        .roster-container.size-medium .roster-table td { padding: 5px; min-width: 28px; }
+        
+        .roster-container.size-large .roster-table { font-size: 16px; }
+        .roster-container.size-large .roster-table th, 
+        .roster-container.size-large .roster-table td { padding: 8px; min-width: 35px; }
         .roster-actions {
             margin-top: 20px;
             display: flex;
@@ -438,11 +750,42 @@
                 <div style="display: flex; gap: 20px;">
                     <div class="generated-roster-container">
                         <h3>생성된 근무표</h3>
-                        <div id="roster-table-container"></div>
+                        
+                        <!-- 히스토리 및 되돌리기 컨트롤 -->
+                        <div class="history-controls" id="history-controls" style="display: none;">
+                            <button class="undo-btn" id="undo-btn" onclick="undoChange()" disabled>↶ 되돌리기</button>
+                            <button class="redo-btn" id="redo-btn" onclick="redoChange()" disabled>↷ 다시하기</button>
+                            <div class="history-info" id="history-info">변경사항: 0</div>
+                        </div>
+                        
+                        <!-- 근무표 편집 컨트롤들 - 개선된 디자인 -->
+                        <div class="shift-selector" id="shift-selector" style="display: none;">
+                            <div class="shift-selector-title">근무 코드</div>
+                            <div class="shift-button shift-D" data-shift="D">D</div>
+                            <div class="shift-button shift-E" data-shift="E">E</div>
+                            <div class="shift-button shift-N" data-shift="N">N</div>
+                            <div class="shift-button shift-O" data-shift="O">O</div>
+                            <button class="clear-selection-btn" onclick="clearSelection()">✕ 해제</button>
+                        </div>
+                        
+                        <!-- 크기 조정 컨트롤 -->
+                        <div class="size-controls" id="size-controls" style="display: none;">
+                            <span style="font-weight: bold;">크기 조정:</span>
+                            <input type="range" class="size-slider" id="roster-size-slider" min="1" max="3" value="2" 
+                                   oninput="updateRosterSize(this.value)" onchange="updateRosterSize(this.value)">
+                            <div class="size-display" id="roster-size-display">보통</div>
+                        </div>
+                        
+                        <div id="roster-table-container" class="roster-container size-medium"></div>
                     </div>
                     <div class="violations-container">
-                        <h4>위반 사항</h4>
-                        <ul id="violations-list"></ul>
+                        <div class="violations-header" onclick="toggleViolations()">
+                            <h4>위반 사항 <span class="violations-count" id="violations-count">0</span></h4>
+                            <span class="violations-toggle" id="violations-toggle">▼</span>
+                        </div>
+                        <div class="violations-content" id="violations-content">
+                            <ul id="violations-list"></ul>
+                        </div>
                     </div>
                 </div>
                 <div class="roster-actions">
@@ -465,6 +808,14 @@
         let currentVersion = null;
         let allVersions = [];
         let currentCardColumns = 3; // 현재 카드 컬럼 수
+        let selectedShift = null;
+        let isDragging = false;
+        let editedRosterData = null;
+        let currentRosterSize = 2; // 1: small, 2: medium, 3: large
+        let changeHistory = [];
+        let historyIndex = -1;
+        let violationsCollapsed = false;
+        let isValidating = false;
         
         // 카드 레이아웃 업데이트 함수
         function updateCardLayout(columns) {
@@ -757,10 +1108,9 @@
         async function generateRoster() {
             const rosterOutputSection = document.getElementById('roster-output-section');
             const rosterTableContainer = document.getElementById('roster-table-container');
-            const violationsList = document.getElementById('violations-list');
             
             rosterTableContainer.innerHTML = '<p>근무표 생성 중... 서버 응답에 몇 분 정도 소요될 수 있습니다.</p>';
-            violationsList.innerHTML = '';
+            updateViolationsDisplay([]);
             rosterOutputSection.style.display = 'block';
 
             try {
@@ -777,27 +1127,28 @@
 
                 const result = await response.json();
                 generatedRosterData = result; // Store for saving
+                editedRosterData = JSON.parse(JSON.stringify(result.roster)); // 편집용 복사본
 
-                // Render Roster
-                renderRosterTable(result.roster, result.year, result.month, rosterTableContainer);
+                // 히스토리 초기화
+                changeHistory = [];
+                historyIndex = -1;
+
+                // Render Roster with editing functionality
+                renderRosterTable(result.roster, result.year, result.month);
 
                 // Render Violations
-                if (result.violations && result.violations.length > 0) {
-                    result.violations.forEach(v => {
-                        const li = document.createElement('li');
-                        li.textContent = v;
-                        violationsList.appendChild(li);
-                    });
-                } else {
-                    violationsList.innerHTML = '<li>모든 제약 조건을 충족했습니다!</li>';
-                }
+                updateViolationsDisplay(result.violations || []);
                 
-                // Disable save button if roster is empty
+                // Enable save button
                 document.getElementById('save-roster-btn').disabled = !result.roster || result.roster.length === 0;
+                
+                // Show editing controls
+                showEditingControls(true);
 
             } catch (error) {
                 console.error('Error generating roster:', error);
                 rosterTableContainer.innerHTML = `<p style="color: red;">${error.message}</p>`;
+                showEditingControls(false);
             }
         }
 
@@ -808,10 +1159,39 @@
                 const response = await fetch(`/api/roster/${year}/${month}`);
                 if (!response.ok) throw new Error('발행된 근무표를 불러올 수 없습니다.');
                 const rosterData = await response.json();
-                renderRosterTable(rosterData, container);
+                
+                // API 응답 데이터를 renderRosterTable에 맞는 형식으로 변환
+                if (rosterData.nurses) {
+                    editedRosterData = rosterData.nurses.map(nurse => ({
+                        name: nurse.name,
+                        experience: nurse.experience,
+                        schedule: nurse.schedule,
+                        nurse_id: nurse.id
+                    }));
+                    generatedRosterData = {
+                        year: rosterData.year,
+                        month: rosterData.month,
+                        roster: editedRosterData,
+                        violations: rosterData.violations || []
+                    };
+                } else {
+                    editedRosterData = rosterData.roster || rosterData;
+                }
+                
+                // 히스토리 초기화
+                changeHistory = [];
+                historyIndex = -1;
+                
+                renderRosterTable(editedRosterData, year, month);
+                showEditingControls(true);
+                
+                // Show violations
+                updateViolationsDisplay(rosterData.violations || []);
+                
             } catch (error) {
                 console.error(error);
                 container.innerHTML = `<p style="color: red;">${error.message}</p>`;
+                showEditingControls(false);
             }
         }
 
@@ -858,38 +1238,207 @@
             document.getElementById('nurse-card-grid').appendChild(card);
         }
 
-        function renderRosterTable(roster, year, month, container) {
+        function renderRosterTable(roster, year, month) {
+            const container = document.getElementById('roster-table-container');
             container.innerHTML = '';
+            
             if (!roster || roster.length === 0) {
                 container.innerHTML = '<p>생성된 근무표가 없습니다.</p>';
+                showEditingControls(false);
                 return;
             }
 
             const daysInMonth = new Date(year, month, 0).getDate();
-            let table = '<table class="roster-table">';
+            
+            // 통계 계산
+            const statistics = calculateStatistics(roster, daysInMonth);
+            
+            let table = '<table class="roster-table" id="roster-table">';
+            
             // Header
             table += '<thead><tr><th>간호사 (경력)</th>';
             for (let day = 1; day <= daysInMonth; day++) {
                 table += `<th>${day}</th>`;
             }
-            table += '</tr></thead>';
+            table += '<th class="summary-col">D</th><th class="summary-col">E</th><th class="summary-col">N</th><th class="summary-col">O</th></tr></thead>';
             
             // Body
             table += '<tbody>';
-            roster.forEach(nurse => {
+            roster.forEach((nurse, nurseIndex) => {
+                const nurseCounts = statistics.nurseCounts[nurseIndex];
                 table += `<tr><td>${nurse.name} (${nurse.experience}년)</td>`;
-                nurse.schedule.forEach(shift => {
-                    table += `<td>${shift}</td>`;
+                nurse.schedule.forEach((shift, dayIndex) => {
+                    table += `<td class="shift-cell shift-${shift}" data-nurse="${nurseIndex}" data-day="${dayIndex}" data-shift="${shift}">${shift}</td>`;
                 });
-                table += '</tr>';
+                table += `<td class="summary-col">${nurseCounts.D}</td><td class="summary-col">${nurseCounts.E}</td><td class="summary-col">${nurseCounts.N}</td><td class="summary-col">${nurseCounts.O}</td></tr>`;
             });
-            table += '</tbody></table>';
+            table += '</tbody>';
+            
+            // Footer - 일별 통계
+            table += '<tfoot>';
+            ['D', 'E', 'N', 'O'].forEach(shift => {
+                table += `<tr><td colspan="1"><b>${shift}</b></td>`;
+                for (let day = 0; day < daysInMonth; day++) {
+                    table += `<td>${statistics.dailyCounts[day][shift] || 0}</td>`;
+                }
+                table += `<td colspan="4"></td></tr>`;
+            });
+            table += '</tfoot></table>';
 
             container.innerHTML = table;
+            
+            // Add event listeners for editing
+            addEditingEventListeners();
+            showEditingControls(true);
+        }
+
+        function calculateStatistics(roster, daysInMonth) {
+            const nurseCounts = roster.map(() => ({ D: 0, E: 0, N: 0, O: 0 }));
+            const dailyCounts = Array(daysInMonth).fill(null).map(() => ({ D: 0, E: 0, N: 0, O: 0 }));
+            
+            roster.forEach((nurse, nurseIndex) => {
+                nurse.schedule.forEach((shift, dayIndex) => {
+                    if (nurseCounts[nurseIndex][shift] !== undefined) {
+                        nurseCounts[nurseIndex][shift]++;
+                    }
+                    if (dailyCounts[dayIndex] && dailyCounts[dayIndex][shift] !== undefined) {
+                        dailyCounts[dayIndex][shift]++;
+                    }
+                });
+            });
+            
+            return { nurseCounts, dailyCounts };
+        }
+
+        function addEditingEventListeners() {
+            const shiftCells = document.querySelectorAll('.shift-cell');
+            const shiftButtons = document.querySelectorAll('.shift-button');
+            
+            // 근무 코드 선택 버튼 이벤트
+            shiftButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // 이전 선택 해제
+                    shiftButtons.forEach(btn => btn.classList.remove('selected'));
+                    // 현재 버튼 선택
+                    this.classList.add('selected');
+                    selectedShift = this.dataset.shift;
+                });
+            });
+            
+            // 근무표 셀 이벤트 (클릭 & 드래그)
+            shiftCells.forEach(cell => {
+                cell.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    if (selectedShift) {
+                        isDragging = true;
+                        updateCell(this);
+                    }
+                });
+                
+                cell.addEventListener('mouseenter', function() {
+                    if (isDragging && selectedShift) {
+                        updateCell(this);
+                    }
+                });
+                
+                cell.addEventListener('click', function() {
+                    if (selectedShift) {
+                        updateCell(this);
+                    }
+                });
+            });
+            
+            // 드래그 종료
+            document.addEventListener('mouseup', function() {
+                isDragging = false;
+            });
+        }
+
+        function updateCell(cell) {
+            if (!selectedShift) return;
+            
+            const nurseIndex = parseInt(cell.dataset.nurse);
+            const dayIndex = parseInt(cell.dataset.day);
+            const oldShift = cell.dataset.shift;
+            
+            if (oldShift === selectedShift) return; // 같은 값이면 변경하지 않음
+            
+            // 히스토리에 저장
+            saveToHistory('edit', nurseIndex, dayIndex, oldShift, selectedShift);
+            
+            // 데이터 업데이트
+            if (editedRosterData && editedRosterData[nurseIndex]) {
+                editedRosterData[nurseIndex].schedule[dayIndex] = selectedShift;
+            }
+            
+            // UI 업데이트
+            cell.textContent = selectedShift;
+            cell.dataset.shift = selectedShift;
+            cell.className = `shift-cell shift-${selectedShift}`;
+            
+            // 통계 업데이트
+            updateStatistics();
+            
+            // 위반사항 재계산 (디바운스)
+            debounceValidateRoster();
+            
+            console.log(`간호사 ${nurseIndex}, 날짜 ${dayIndex + 1}: ${oldShift} → ${selectedShift}`);
+        }
+
+        function clearSelection() {
+            const shiftButtons = document.querySelectorAll('.shift-button');
+            shiftButtons.forEach(btn => btn.classList.remove('selected'));
+            selectedShift = null;
+        }
+
+        function showEditingControls(show) {
+            const shiftSelector = document.getElementById('shift-selector');
+            const sizeControls = document.getElementById('size-controls');
+            const historyControls = document.getElementById('history-controls');
+            const rosterOutputSection = document.getElementById('roster-output-section');
+            
+            if (show) {
+                shiftSelector.style.display = 'flex';
+                sizeControls.style.display = 'flex';
+                historyControls.style.display = 'flex';
+                rosterOutputSection.style.display = 'block';
+                
+                // 히스토리 버튼 상태 업데이트
+                updateHistoryButtons();
+            } else {
+                shiftSelector.style.display = 'none';
+                sizeControls.style.display = 'none';
+                historyControls.style.display = 'none';
+            }
+        }
+
+        function updateRosterSize(size) {
+            currentRosterSize = parseInt(size);
+            const container = document.getElementById('roster-table-container');
+            const sizeDisplay = document.getElementById('roster-size-display');
+            
+            // 기존 크기 클래스 제거
+            container.className = container.className.replace(/size-\w+/g, '');
+            
+            // 새 크기 클래스 추가
+            switch (currentRosterSize) {
+                case 1:
+                    container.classList.add('size-small');
+                    sizeDisplay.textContent = '작게';
+                    break;
+                case 2:
+                    container.classList.add('size-medium');
+                    sizeDisplay.textContent = '보통';
+                    break;
+                case 3:
+                    container.classList.add('size-large');
+                    sizeDisplay.textContent = '크게';
+                    break;
+            }
         }
 
         async function saveRoster() {
-            if (!generatedRosterData) {
+            if (!editedRosterData) {
                 alert('저장할 근무표 데이터가 없습니다. 먼저 근무표를 생성해주세요.');
                 return;
             }
@@ -899,10 +1448,16 @@
             saveBtn.textContent = '저장 중...';
 
             try {
+                // 편집된 데이터로 새로운 요청 생성
+                const saveData = {
+                    ...generatedRosterData,
+                    roster: editedRosterData
+                };
+                
                 const response = await fetch('/api/roster/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(generatedRosterData)
+                    body: JSON.stringify(saveData)
                 });
 
                 if (!response.ok) {
@@ -919,11 +1474,182 @@
             } catch (error) {
                 console.error('Error saving roster:', error);
                 alert(`저장 실패: ${error.message}`);
+            } finally {
                 saveBtn.disabled = false;
                 saveBtn.textContent = '이 버전으로 저장';
             }
         }
-        
+
+        // 히스토리 관리 함수들
+        function saveToHistory(action, nurseIndex, dayIndex, oldShift, newShift) {
+            const historyItem = {
+                action,
+                nurseIndex,
+                dayIndex,
+                oldShift,
+                newShift,
+                timestamp: Date.now()
+            };
+            
+            // 현재 위치 이후의 히스토리 제거 (새로운 변경사항이 있을 때)
+            changeHistory = changeHistory.slice(0, historyIndex + 1);
+            changeHistory.push(historyItem);
+            historyIndex = changeHistory.length - 1;
+            
+            updateHistoryButtons();
+        }
+
+        function updateHistoryButtons() {
+            const undoBtn = document.getElementById('undo-btn');
+            const redoBtn = document.getElementById('redo-btn');
+            const historyInfo = document.getElementById('history-info');
+            
+            undoBtn.disabled = historyIndex < 0;
+            redoBtn.disabled = historyIndex >= changeHistory.length - 1;
+            historyInfo.textContent = `변경사항: ${changeHistory.length}`;
+        }
+
+        function undoChange() {
+            if (historyIndex < 0) return;
+            
+            const change = changeHistory[historyIndex];
+            applyChange(change.nurseIndex, change.dayIndex, change.oldShift);
+            historyIndex--;
+            updateHistoryButtons();
+            
+            // 위반사항 재계산
+            debounceValidateRoster();
+        }
+
+        function redoChange() {
+            if (historyIndex >= changeHistory.length - 1) return;
+            
+            historyIndex++;
+            const change = changeHistory[historyIndex];
+            applyChange(change.nurseIndex, change.dayIndex, change.newShift);
+            updateHistoryButtons();
+            
+            // 위반사항 재계산
+            debounceValidateRoster();
+        }
+
+        function applyChange(nurseIndex, dayIndex, shift) {
+            if (editedRosterData && editedRosterData[nurseIndex]) {
+                editedRosterData[nurseIndex].schedule[dayIndex] = shift;
+                
+                // UI 업데이트
+                const cell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${dayIndex}"]`);
+                if (cell) {
+                    cell.textContent = shift;
+                    cell.dataset.shift = shift;
+                    cell.className = `shift-cell shift-${shift}`;
+                }
+                
+                // 통계 재계산 및 업데이트
+                updateStatistics();
+            }
+        }
+
+        function updateStatistics() {
+            const daysInMonth = editedRosterData[0]?.schedule.length || 0;
+            const statistics = calculateStatistics(editedRosterData, daysInMonth);
+            
+            // 간호사별 통계 업데이트
+            editedRosterData.forEach((nurse, nurseIndex) => {
+                const counts = statistics.nurseCounts[nurseIndex];
+                const row = document.querySelector(`tr:nth-child(${nurseIndex + 1})`);
+                if (row) {
+                    const summaryCells = row.querySelectorAll('.summary-col');
+                    if (summaryCells.length >= 4) {
+                        summaryCells[0].textContent = counts.D;
+                        summaryCells[1].textContent = counts.E;
+                        summaryCells[2].textContent = counts.N;
+                        summaryCells[3].textContent = counts.O;
+                    }
+                }
+            });
+            
+            // 일별 통계 업데이트
+            const footerRows = document.querySelectorAll('tfoot tr');
+            ['D', 'E', 'N', 'O'].forEach((shift, shiftIndex) => {
+                const row = footerRows[shiftIndex];
+                if (row) {
+                    const cells = row.querySelectorAll('td');
+                    for (let day = 0; day < daysInMonth; day++) {
+                        const cellIndex = day + 1; // 첫 번째 셀은 라벨
+                        if (cells[cellIndex]) {
+                            cells[cellIndex].textContent = statistics.dailyCounts[day][shift] || 0;
+                        }
+                    }
+                }
+            });
+        }
+
+        // 위반사항 관리 함수들
+        function toggleViolations() {
+            const content = document.getElementById('violations-content');
+            const toggle = document.getElementById('violations-toggle');
+            
+            violationsCollapsed = !violationsCollapsed;
+            
+            if (violationsCollapsed) {
+                content.classList.add('collapsed');
+                toggle.classList.add('collapsed');
+                toggle.textContent = '▶';
+            } else {
+                content.classList.remove('collapsed');
+                toggle.classList.remove('collapsed');
+                toggle.textContent = '▼';
+            }
+        }
+
+        function updateViolationsDisplay(violations) {
+            const violationsList = document.getElementById('violations-list');
+            const violationsCount = document.getElementById('violations-count');
+            
+            violationsCount.textContent = violations.length;
+            
+            if (violations.length === 0) {
+                violationsList.innerHTML = '<li style="color: #28a745;">모든 제약 조건을 충족했습니다! ✓</li>';
+            } else {
+                violationsList.innerHTML = violations.map(v => `<li>${v}</li>`).join('');
+            }
+        }
+
+        // 디바운스된 위반사항 검증
+        let validateTimeout;
+        function debounceValidateRoster() {
+            if (validateTimeout) clearTimeout(validateTimeout);
+            validateTimeout = setTimeout(validateRoster, 500);
+        }
+
+        async function validateRoster() {
+            if (!editedRosterData || !generatedRosterData || isValidating) return;
+            
+            isValidating = true;
+            
+            try {
+                const response = await fetch('/api/roster/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        year: generatedRosterData.year,
+                        month: generatedRosterData.month,
+                        roster: editedRosterData
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    updateViolationsDisplay(result.violations || []);
+                }
+            } catch (error) {
+                console.error('위반사항 검증 실패:', error);
+            } finally {
+                isValidating = false;
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', initializePage);
     </script>
     <script>

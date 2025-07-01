@@ -604,6 +604,149 @@ async def get_roster_for_month(
         
     return roster_data 
 
+# [Roster] - 근무표 저장
+@router.post("/roster/save")
+async def save_roster(
+    roster_data: dict,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    year = roster_data.get('year')
+    month = roster_data.get('month')
+    roster = roster_data.get('roster')
+    
+    if not all([year, month, roster]):
+        raise HTTPException(status_code=400, detail="Missing required fields: year, month, roster")
+
+    # Get the latest schedule for the month
+    schedule = db.query(Schedule).filter(
+        Schedule.group_id == current_user.group_id,
+        Schedule.year == year,
+        Schedule.month == month
+    ).order_by(Schedule.version.desc()).first()
+    
+    if not schedule:
+        raise HTTPException(status_code=404, detail="No schedule found for this month")
+
+    # Clear existing roster entries
+    db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
+    
+    # Save new roster entries
+    for nurse in roster:
+        nurse_id = nurse.get('nurse_id') or nurse.get('id')  # 둘 다 체크
+        if not nurse_id:
+            continue  # nurse_id가 없으면 건너뛰기
+            
+        schedule_data = nurse.get('schedule', [])
+        for day_index, shift_id in enumerate(schedule_data):
+            if shift_id and shift_id.strip():  # 빈 값이 아닌 경우만
+                work_date = date(year, month, day_index + 1)
+                entry = ScheduleEntry(
+                    entry_id=str(uuid.uuid4().hex)[:16],
+                    schedule_id=schedule.schedule_id,
+                    nurse_id=nurse_id,
+                    work_date=work_date,
+                    shift_id=shift_id.upper()
+                )
+                db.add(entry)
+
+    # Update schedule status to 'issued'
+    schedule.status = 'issued'
+    db.commit()
+    
+    return {"message": "Roster saved successfully"}
+
+# [Roster] - 근무표 위반사항 실시간 계산
+@router.post("/roster/validate")
+async def validate_roster(
+    roster_data: dict,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    year = roster_data.get('year')
+    month = roster_data.get('month')
+    roster = roster_data.get('roster')
+    
+    if not all([year, month, roster]):
+        raise HTTPException(status_code=400, detail="Missing required fields: year, month, roster")
+
+    try:
+        # Get roster configuration
+        latest_config_db = db.query(RosterConfig).filter(
+            RosterConfig.group_id == current_user.group_id
+        ).order_by(RosterConfig.created_at.desc()).first()
+        
+        if not latest_config_db:
+            return {"violations": ["근무표 설정을 찾을 수 없습니다."]}
+        
+        # Create RosterSystem configuration
+        roster_config_for_engine = NurseRosterConfig(
+            daily_shift_requirements={
+                'D': latest_config_db.day_req,
+                'E': latest_config_db.eve_req,
+                'N': latest_config_db.nig_req
+            },
+            max_consecutive_work_days=latest_config_db.max_conseq_work,
+            max_night_shifts_per_month=latest_config_db.max_nig_per_month,
+            max_consecutive_nights=3 if latest_config_db.three_seq_nig else 2
+        )
+        
+        # Get nurses for engine
+        nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all())]
+        
+        # Create RosterSystem instance
+        system = RosterSystem(
+            nurses=nurses_for_engine,
+            target_month=date(year, month, 1),
+            config=roster_config_for_engine
+        )
+        
+        # Convert roster data to RosterSystem format
+        shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
+        
+        # Initialize roster with zeros
+        system.roster.fill(0)
+        
+        for nurse_idx, nurse_data in enumerate(roster):
+            if nurse_idx >= len(system.nurses):
+                continue
+            schedule = nurse_data.get('schedule', [])
+            for day_idx, shift in enumerate(schedule):
+                if day_idx >= system.num_days:
+                    continue
+                shift_idx = shift_map.get(shift.upper())
+                if shift_idx is not None:
+                    system.roster[nurse_idx, day_idx, shift_idx] = 1
+        
+        # Find violations
+        violation_details = system._find_violations()
+        
+        # Format violation messages
+        violation_messages = set()
+        for v in violation_details:
+            if v['type'] == 'shift_requirement':
+                violation_messages.add(f"{v['day']+1}일: {v['shift']} 근무 인원 미달 (필요: {v['required']}, 배정: {v['actual']})")
+            elif v['type'] == 'consecutive':
+                nurse_name = system.nurses[v['nurse_idx']].name
+                violation_messages.add(f"{nurse_name}: 최대 연속 근무일 초과")
+            elif v['type'] == 'night':
+                nurse_name = system.nurses[v['nurse_idx']].name
+                violation_messages.add(f"{nurse_name}: 야간 근무 제약 위반")
+        
+        violations = sorted(list(violation_messages))
+        
+        return {"violations": violations}
+        
+    except Exception as e:
+        print(f"위반사항 계산 중 오류 발생: {e}")
+        return {"violations": [f"위반사항 계산 중 오류가 발생했습니다: {str(e)}"]}
+
 # [Schedules] - 특정 월의 모든 버전 목록 조회 (수간호사용)
 @router.get("/schedules/{year}/{month}/versions")
 async def get_schedule_versions(
