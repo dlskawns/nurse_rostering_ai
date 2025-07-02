@@ -1374,7 +1374,7 @@
             }
         }
 
-        async function updateVersionList(year, month) {
+        async function updateVersionList(year, month, forceSelectScheduleId = null) {
             const versionList = document.getElementById('version-list');
             const versionTitle = document.getElementById('version-list-title');
             const rosterOutputSection = document.getElementById('roster-output-section');
@@ -1433,10 +1433,33 @@
                     versionList.appendChild(versionItem);
                 });
                 
-                // 자동 버전 선택 로직: 발행된 버전 우선, 없으면 최신 버전
+                // 버전 선택 로직
                 if (allVersions.length > 0) {
                     let versionToSelect = null;
                     
+                    // 강제 선택할 버전이 지정된 경우 (근무표 생성 직후)
+                    if (forceSelectScheduleId) {
+                        versionToSelect = allVersions.find(v => v.schedule_id === forceSelectScheduleId);
+                        if (versionToSelect) {
+                            // 강제 선택된 버전이 있으면 화면을 다시 로드하지 않고 UI만 업데이트
+                            currentVersion = versionToSelect.schedule_id;
+                            
+                            // Update active state in version list
+                            document.querySelectorAll('.version-item').forEach(item => {
+                                item.classList.remove('active');
+                            });
+                            
+                            const activeItem = document.querySelector(`[data-schedule-id="${versionToSelect.schedule_id}"]`);
+                            if (activeItem) {
+                                activeItem.classList.add('active');
+                            }
+                            
+                            // 이미 화면에 올바른 근무표가 표시되어 있으므로 추가 로드하지 않음
+                            return;
+                        }
+                    }
+                    
+                    // 기존 자동 버전 선택 로직: 발행된 버전 우선, 없으면 최신 버전
                     // 1순위: 발행된 버전이 있는지 확인 (issued 상태)
                     const issuedVersion = allVersions.find(v => v.status === 'issued');
                     if (issuedVersion) {
@@ -1693,11 +1716,15 @@
                     currentVersion = result.schedule_id;
                 }
                 
-                // 버전 목록 업데이트
-                await updateVersionList(currentYear, currentMonth + 1);
+                // 버전 목록 업데이트 (새로 생성된 버전을 강제 선택하기 위해 플래그 설정)
+                const previousCurrentVersion = currentVersion;
+                await updateVersionList(currentYear, currentMonth + 1, result.schedule_id);
                 
                 // 새로 생성된 버전을 활성화 (표시는 이미 되어있으므로 UI만 업데이트)
                 if (result.schedule_id) {
+                    // 버전 목록 업데이트 후에도 currentVersion 유지
+                    currentVersion = result.schedule_id;
+                    
                     const newVersionItem = document.querySelector(`[data-schedule-id="${result.schedule_id}"]`);
                     if (newVersionItem) {
                         document.querySelectorAll('.version-item').forEach(item => {
