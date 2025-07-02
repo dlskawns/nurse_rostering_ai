@@ -656,8 +656,8 @@
                 }
 
                 if (currentWanted.status === 'closed') {
-                    statusMessage.textContent = 'wanted 작성 요청이 마감되었습니다.';
-                    pageStatusDiv.style.display = 'flex';
+                    // wanted가 마감된 경우: 폼은 비활성화하되, 다른 북마크는 활성화 유지
+                    setClosedState();
                     return;
                 }
 
@@ -683,8 +683,16 @@
         }
 
         function setSubmittedState(preferenceData) {
+            // closed-notice 숨기기
+            const closedNotice = document.getElementById('closed-notice');
+            if (closedNotice) {
+                closedNotice.style.display = 'none';
+            }
+            
             document.getElementById('wanted-input').disabled = true;
+            document.getElementById('wanted-input').placeholder = '희망 근무 내용을 입력하세요';
             document.querySelector('#nurse-view button').disabled = true;
+            document.querySelector('#nurse-view button').textContent = '희망사항 확인';
             document.getElementById('result-container').style.display = 'block';
             
             const submitBtn = document.getElementById('final-submit-btn');
@@ -701,8 +709,16 @@
         }
 
         function setDraftState(preferenceData) {
+            // closed-notice 숨기기
+            const closedNotice = document.getElementById('closed-notice');
+            if (closedNotice) {
+                closedNotice.style.display = 'none';
+            }
+            
             document.getElementById('wanted-input').disabled = false;
+            document.getElementById('wanted-input').placeholder = '희망 근무 내용을 입력하세요';
             document.querySelector('#nurse-view button').disabled = false;
+            document.querySelector('#nurse-view button').textContent = '희망사항 확인';
 
             const submitBtn = document.getElementById('final-submit-btn');
             submitBtn.textContent = '최종 제출';
@@ -717,6 +733,48 @@
                 document.getElementById('wanted-input').value = '';
                 document.getElementById('result-container').style.display = 'none';
             }
+        }
+
+        function setClosedState() {
+            // 페이지 오버레이는 숨기고, 폼만 비활성화
+            const pageStatusDiv = document.getElementById('page-status');
+            pageStatusDiv.style.display = 'none';
+            
+            // 폼 영역 비활성화
+            document.getElementById('wanted-input').disabled = true;
+            document.getElementById('wanted-input').value = '';
+            document.getElementById('wanted-input').placeholder = `${activeYear}년 ${activeMonth}월 wanted 작성이 마감되었습니다.`;
+            
+            const button = document.querySelector('#nurse-view button');
+            if (button) {
+                button.disabled = true;
+                button.textContent = '마감됨';
+            }
+            
+            // 결과 컨테이너와 제출 섹션 숨기기
+            document.getElementById('result-container').style.display = 'none';
+            document.getElementById('submit-section').style.display = 'none';
+            
+            // 안내 메시지 표시 (오버레이 없이)
+            const mainContent = document.querySelector('.main-content');
+            let closedNotice = document.getElementById('closed-notice');
+            if (!closedNotice) {
+                closedNotice = document.createElement('div');
+                closedNotice.id = 'closed-notice';
+                closedNotice.style.cssText = `
+                    background: #fff3cd;
+                    border: 1px solid #ffeaa7;
+                    color: #856404;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                    text-align: center;
+                    font-weight: 500;
+                `;
+                mainContent.insertBefore(closedNotice, mainContent.firstChild);
+            }
+            closedNotice.textContent = `${activeYear}년 ${activeMonth}월 wanted 작성이 마감되었습니다. 다른 월을 선택해주세요.`;
+            closedNotice.style.display = 'block';
         }
 
         async function fetchNurseSchema() {

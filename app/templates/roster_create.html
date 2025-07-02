@@ -511,30 +511,122 @@
             position: relative;
         }
         .calendar-day {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            background: none;
-            border: none;
-            font-size: 14px;
-            cursor: default;
-            transition: background-color 0.2s ease;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            text-align: center;
+            width: 40px;
+            height: 40px;
+            line-height: 24px;
         }
+        
         .calendar-day:hover {
-            background: #e9ecef;
+            background-color: #e3f2fd;
         }
+        
         .calendar-day.today {
-            background: #007bff;
+            background-color: #2196f3;
             color: white;
             font-weight: bold;
         }
+        
+        .calendar-day.selected-exp-date {
+            background-color: #ff5722 !important;
+            color: white !important;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(255, 87, 34, 0.3);
+        }
+        
+        .calendar-day.disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+            background-color: #f5f5f5;
+            color: #ccc;
+        }
+        
+        .calendar-day.disabled:hover {
+            background-color: #f5f5f5;
+        }
+        
+        /* 마감일 컨트롤 스타일 */
+        .deadline-controls {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .deadline-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .deadline-checkbox input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .selected-date-display {
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #fff3e0;
+            border: 1px solid #ffcc02;
+            border-radius: 4px;
+            font-weight: 500;
+            color: #e65100;
+        }
+        
+        /* 버튼 스타일 확장 */
+        .request-button.wanted-close {
+            background-color: #dc3545 !important;
+            border-color: #dc3545 !important;
+        }
+        
+        .request-button.wanted-close:hover {
+            background-color: #c82333 !important;
+            border-color: #bd2130 !important;
+        }
+        
+        .request-button.wanted-close:disabled {
+            background-color: #6c757d !important;
+            border-color: #6c757d !important;
+        }
+        
         .request-button {
             width: 100%;
             margin-top: 20px;
+            padding: 12px 24px;
+            background-color: #007bff;
+            color: white;
+            border: 1px solid #007bff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s ease;
+        }
+        
+        .request-button:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+            text-decoration: none;
+            color: white;
+        }
+        
+        .request-button:disabled {
+            background-color: #6c757d;
+            border-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.65;
         }
         .nurse-card-grid {
             display: grid;
@@ -716,6 +808,33 @@
             min-width: 40px;
             text-align: center;
         }
+        
+        /* 마감일 수정 버튼 스타일 */
+        .edit-deadline-btn {
+            margin-left: 10px;
+            padding: 6px 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .edit-deadline-btn:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+        
+        .edit-deadline-btn.editing {
+            background: #28a745;
+        }
+        
+        .edit-deadline-btn.editing:hover {
+            background: #1e7e34;
+        }
     </style>
 </head>
 <body>
@@ -741,9 +860,8 @@
                         <div class="calendar-header">
                             <h3 id="month-year"></h3>
                             <div class="calendar-nav">
-                                <button onclick="prevMonth()">&lt;</button>
-                                <div class="nav-spacer"></div>
-                                <button onclick="nextMonth()">&gt;</button>
+                                <button id="prev-month" onclick="prevMonth()">&lt;</button>
+                                <button id="next-month" onclick="nextMonth()">&gt;</button>
                             </div>
                         </div>
                         <div class="calendar-body">
@@ -756,7 +874,18 @@
                                 <tbody></tbody>
                             </table>
                         </div>
+                        <div class="deadline-controls">
+                            <label class="deadline-checkbox">
+                                <input type="checkbox" id="no-deadline-checkbox" onchange="toggleDeadlineMode()">
+                                <span>마감일 없음</span>
+                            </label>
+                            <button id="edit-deadline-btn" class="edit-deadline-btn" onclick="toggleDeadlineEdit()" style="display: none;">마감일 수정하기</button>
+                            <div class="selected-date-display" id="selected-date-display" style="display: none;">
+                                선택된 마감일: <span id="selected-date-text"></span>
+                            </div>
+                        </div>
                     </div>
+                    
                     <div class="schedule-status-display">
                         <h4 id="schedule-status-text"></h4>
                     </div>
@@ -956,6 +1085,8 @@
             const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
             const today = new Date();
 
+            // 마감일 관련 상태 초기화 제거 - updatePageForMonth에서 wanted 데이터에 따라 설정하도록 변경
+
             let date = 1;
             for (let i = 0; i < 6; i++) {
                 let row = document.createElement('tr');
@@ -1020,20 +1151,51 @@
                 const wantedResponse = await fetch(`/api/wanted/status?year=${year}&month=${month}`);
                 const wantedData = wantedResponse.ok ? await wantedResponse.json() : { status: null };
 
-                // 3. 전체 wanted 목록 확인 (하나라도 있는지)
+                // 3. 마감일 상태 설정 (wanted 데이터에 따라)
+                setDeadlineStateFromWantedData(wantedData);
+
+                // 4. 전체 wanted 목록 확인 (하나라도 있는지)
                 const allWantedResponse = await fetch('/api/wanted/all');
                 const allWantedData = allWantedResponse.ok ? await allWantedResponse.json() : [];
 
-                // 4. 버튼 활성화 조건 설정
+                // 5. 버튼 활성화 조건 설정
                 const hasWantedForMonth = wantedData.status !== null;
                 const hasAnyWanted = allWantedData.length > 0;
 
-                // Wanted 작성 요청하기 버튼: 해당 월에 wanted가 없을 때만 활성화
-                wantedBtn.disabled = hasWantedForMonth;
+                // Wanted 작성 요청하기 버튼 처리
                 if (hasWantedForMonth) {
-                    wantedBtn.title = '이미 해당 월의 요청이 존재합니다.';
+                    // 이미 wanted가 존재하는 경우
+                    if (wantedData.status === 'closed') {
+                        // 마감된 경우: 버튼 비활성화 및 회색으로 표시
+                        wantedBtn.disabled = true;
+                        wantedBtn.classList.remove('wanted-close');
+                        wantedBtn.onclick = null;
+                        wantedBtn.textContent = 'Wanted 마감됨';
+                        wantedBtn.title = '해당 월의 wanted 요청이 마감되었습니다.';
+                        wantedBtn.style.backgroundColor = '#6c757d';
+                        wantedBtn.style.borderColor = '#6c757d';
+                    } else {
+                        // 아직 마감되지 않은 경우: 마감하기 버튼으로 변경
+                        wantedBtn.disabled = false;
+                        wantedBtn.classList.add('wanted-close');
+                        wantedBtn.onclick = () => closeWanted(year, month);
+                        
+                        const expDateText = wantedData.exp_date ? 
+                            new Date(wantedData.exp_date).toLocaleDateString('ko-KR') : '마감일 없음';
+                        wantedBtn.textContent = `Wanted 마감하기(due: ${expDateText})`;
+                        wantedBtn.title = '해당 월의 wanted 요청을 마감합니다.';
+                        wantedBtn.style.backgroundColor = '';
+                        wantedBtn.style.borderColor = '';
+                    }
                 } else {
+                    // wanted가 없는 경우: 원래 버튼으로 설정
+                    wantedBtn.disabled = false;
+                    wantedBtn.classList.remove('wanted-close');
+                    wantedBtn.onclick = requestWantedShifts;
+                    wantedBtn.textContent = 'Wanted 작성 요청하기';
                     wantedBtn.title = '';
+                    wantedBtn.style.backgroundColor = '';
+                    wantedBtn.style.borderColor = '';
                 }
 
                 // 근무표 생성하기 버튼: wanted가 하나라도 있고, 해당 월에 스케줄이 있을 때만 활성화
@@ -1053,6 +1215,64 @@
                 statusTextEl.textContent = '스케줄 상태를 불러오는데 실패했습니다.';
                 wantedBtn.disabled = false;
                 generateBtn.disabled = false;
+            }
+        }
+
+        // wanted 데이터에 따라 마감일 상태를 설정하는 함수
+        function setDeadlineStateFromWantedData(wantedData) {
+            const noDeadlineCheckbox = document.getElementById('no-deadline-checkbox');
+            const selectedDateDisplay = document.getElementById('selected-date-display');
+            const selectedDateText = document.getElementById('selected-date-text');
+            const calendarTable = document.getElementById('calendar-table');
+            const editDeadlineBtn = document.getElementById('edit-deadline-btn');
+            
+            // 기존 선택된 날짜 하이라이트 제거
+            document.querySelectorAll('.calendar-day').forEach(day => {
+                day.classList.remove('selected-exp-date');
+            });
+            
+            if (wantedData && wantedData.status !== null) {
+                // wanted가 존재하는 경우 - 항상 캘린더 비활성화하고 수정 버튼 표시
+                editDeadlineBtn.style.display = 'inline-block';
+                editDeadlineBtn.textContent = '마감일 수정하기';
+                editDeadlineBtn.classList.remove('editing');
+                
+                // 캘린더 비활성화 (wanted가 있는 경우 항상)
+                calendarTable.style.opacity = '0.5';
+                calendarTable.style.pointerEvents = 'none';
+                
+                if (wantedData.exp_date) {
+                    // 마감일이 있는 경우
+                    selectedExpDate = new Date(wantedData.exp_date);
+                    noDeadlineCheckbox.checked = false;
+                    
+                    // 선택된 날짜 표시
+                    selectedDateText.textContent = selectedExpDate.toLocaleDateString('ko-KR');
+                    selectedDateDisplay.style.display = 'block';
+                    
+                    // 해당 날짜 하이라이트 (현재 표시된 월과 같은 경우에만)
+                    if (selectedExpDate.getFullYear() === currentYear && selectedExpDate.getMonth() === currentMonth) {
+                        const dayElements = document.querySelectorAll('.calendar-day');
+                        dayElements.forEach(dayEl => {
+                            if (parseInt(dayEl.textContent) === selectedExpDate.getDate()) {
+                                dayEl.classList.add('selected-exp-date');
+                            }
+                        });
+                    }
+                } else {
+                    // 마감일이 없는 경우
+                    selectedExpDate = null;
+                    noDeadlineCheckbox.checked = true;
+                    selectedDateDisplay.style.display = 'none';
+                }
+            } else {
+                // wanted가 없는 경우 - 초기 상태로 설정
+                selectedExpDate = null;
+                noDeadlineCheckbox.checked = false;
+                selectedDateDisplay.style.display = 'none';
+                calendarTable.style.opacity = '1';
+                calendarTable.style.pointerEvents = 'auto';
+                editDeadlineBtn.style.display = 'none';
             }
         }
 
@@ -1148,10 +1368,29 @@
             btn.textContent = '요청 중...';
 
             try {
+                // 마감일 설정 확인
+                let expDate = null;
+                const noDeadlineCheckbox = document.getElementById('no-deadline-checkbox');
+                
+                if (!noDeadlineCheckbox.checked && !selectedExpDate) {
+                    // 마감일을 선택하지 않고 마감일 없음도 체크하지 않은 경우
+                    noDeadlineCheckbox.checked = true;
+                    toggleDeadlineMode();
+                    exp_Date = null;
+                }
+                
+                if (selectedExpDate) {
+                    expDate = selectedExpDate.toISOString();
+                }
+
                 const response = await fetch('/api/wanted/request', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ year: currentYear, month: currentMonth + 1 })
+                    body: JSON.stringify({ 
+                        year: currentYear, 
+                        month: currentMonth + 1,
+                        exp_date: expDate
+                    })
                 });
 
                 if (!response.ok) {
@@ -1165,7 +1404,60 @@
                 }
 
                 alert('요청이 성공적으로 완료되었습니다.');
+                
+                // 즉시 버튼 상태 업데이트
+                const expDateText = expDate ? 
+                    new Date(expDate).toLocaleDateString('ko-KR') : '마감일 없음';
+                btn.classList.add('wanted-close');
+                btn.onclick = () => closeWanted(currentYear, currentMonth + 1);
+                btn.textContent = `Wanted 마감하기(due: ${expDateText})`;
+                btn.title = '해당 월의 wanted 요청을 마감합니다.';
+                btn.style.backgroundColor = '';
+                btn.style.borderColor = '';
+                
+                // 전체 페이지 상태 업데이트 (간호사 목록 등)
                 await updatePageForMonth(currentYear, currentMonth + 1);
+
+            } catch (error) {
+                console.error(error);
+                alert(error.message);
+                
+                // 에러 발생 시 버튼 원상복구
+                btn.classList.remove('wanted-close');
+                btn.onclick = requestWantedShifts;
+                btn.textContent = originalText;
+                btn.title = '';
+                btn.style.backgroundColor = '';
+                btn.style.borderColor = '';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Wanted 마감 함수
+        async function closeWanted(year, month) {
+            const btn = document.getElementById('wanted-request-btn');
+            const originalText = btn.textContent;
+            
+            if (!confirm('해당 월의 Wanted 요청을 마감하시겠습니까?\n마감 후에는 간호사들이 더 이상 작성할 수 없습니다.')) {
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = '마감 중...';
+
+            try {
+                const response = await fetch(`/api/wanted/close?year=${year}&month=${month}`, {
+                    method: 'PATCH'
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Wanted 마감에 실패했습니다.');
+                }
+
+                alert('Wanted 요청이 성공적으로 마감되었습니다.');
+                await updatePageForMonth(year, month);
 
             } catch (error) {
                 console.error(error);
@@ -1727,6 +2019,83 @@
             }
         }
 
+        // 마감일 수정/저장 토글 함수
+        function toggleDeadlineEdit() {
+            const editDeadlineBtn = document.getElementById('edit-deadline-btn');
+            const calendarTable = document.getElementById('calendar-table');
+            const noDeadlineCheckbox = document.getElementById('no-deadline-checkbox');
+            
+            if (editDeadlineBtn.classList.contains('editing')) {
+                // 저장 모드 - 변경사항을 서버에 저장
+                saveDeadlineChange();
+            } else {
+                // 수정 모드로 전환
+                editDeadlineBtn.textContent = '마감일 저장하기';
+                editDeadlineBtn.classList.add('editing');
+                
+                // 캘린더 활성화
+                calendarTable.style.opacity = '1';
+                calendarTable.style.pointerEvents = 'auto';
+            }
+        }
+
+        // 마감일 변경사항을 서버에 저장
+        async function saveDeadlineChange() {
+            const editDeadlineBtn = document.getElementById('edit-deadline-btn');
+            const noDeadlineCheckbox = document.getElementById('no-deadline-checkbox');
+            const calendarTable = document.getElementById('calendar-table');
+            
+            editDeadlineBtn.disabled = true;
+            editDeadlineBtn.textContent = '저장 중...';
+            
+            try {
+                // 현재 상태에 따른 마감일 설정
+                let expDate = null;
+                if (!noDeadlineCheckbox.checked && selectedExpDate) {
+                    expDate = selectedExpDate.toISOString();
+                }
+                
+                const response = await fetch(`/api/wanted/deadline`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        year: currentYear,
+                        month: currentMonth + 1,
+                        exp_date: expDate
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '마감일 변경에 실패했습니다.');
+                }
+                
+                alert('마감일이 성공적으로 변경되었습니다.');
+                
+                // 편집 모드 종료
+                editDeadlineBtn.textContent = '마감일 수정하기';
+                editDeadlineBtn.classList.remove('editing');
+                
+                // 캘린더 비활성화
+                calendarTable.style.opacity = '0.5';
+                calendarTable.style.pointerEvents = 'none';
+                
+                // 버튼 텍스트 업데이트 (wanted 마감하기 버튼)
+                const wantedBtn = document.getElementById('wanted-request-btn');
+                if (wantedBtn.classList.contains('wanted-close')) {
+                    const expDateText = expDate ? 
+                        new Date(expDate).toLocaleDateString('ko-KR') : '마감일 없음';
+                    wantedBtn.textContent = `Wanted 마감하기(due: ${expDateText})`;
+                }
+                
+            } catch (error) {
+                console.error('마감일 변경 실패:', error);
+                alert(error.message);
+            } finally {
+                editDeadlineBtn.disabled = false;
+            }
+        }
+
         // 버전 이름 편집 관련 함수들
         function startEditName(scheduleId) {
             const versionItem = document.querySelector(`[data-schedule-id="${scheduleId}"]`);
@@ -1819,7 +2188,6 @@
             
             try {
                 const response = await fetch(`/api/roster/schedule/${scheduleId}`);
-                console.log("response", response)
                 if (!response.ok) throw new Error('근무표를 불러올 수 없습니다.');
                 
                 const rosterData = await response.json();
@@ -1864,13 +2232,52 @@
         
         // 마감일 선택 함수
         function selectExpDate(date) {
-            selectedExpDate = date;
+            const noDeadlineCheckbox = document.getElementById('no-deadline-checkbox');
+            
+            // 마감일 없음이 체크되어 있으면 날짜 선택 무시
+            if (noDeadlineCheckbox.checked) {
+                return;
+            }
+            
+            selectedExpDate = new Date(currentYear, currentMonth, date);
+            
             // 선택된 날짜 하이라이트
             document.querySelectorAll('.calendar-day').forEach(day => {
                 day.classList.remove('selected-exp-date');
             });
             event.target.classList.add('selected-exp-date');
+            
+            // 선택된 날짜 표시
+            const selectedDateDisplay = document.getElementById('selected-date-display');
+            const selectedDateText = document.getElementById('selected-date-text');
+            selectedDateText.textContent = `${currentYear}년 ${currentMonth + 1}월 ${date}일`;
+            selectedDateDisplay.style.display = 'block';
+            
             console.log('선택된 마감일:', selectedExpDate);
+        }
+        
+        // 마감일 없음 토글 함수
+        function toggleDeadlineMode() {
+            const noDeadlineCheckbox = document.getElementById('no-deadline-checkbox');
+            const calendarTable = document.getElementById('calendar-table');
+            const selectedDateDisplay = document.getElementById('selected-date-display');
+            
+            if (noDeadlineCheckbox.checked) {
+                // 마감일 없음 모드: 캘린더 비활성화
+                selectedExpDate = null;
+                calendarTable.style.opacity = '0.5';
+                calendarTable.style.pointerEvents = 'none';
+                selectedDateDisplay.style.display = 'none';
+                
+                // 선택된 날짜 하이라이트 제거
+                document.querySelectorAll('.calendar-day').forEach(day => {
+                    day.classList.remove('selected-exp-date');
+                });
+            } else {
+                // 일반 모드: 캘린더 활성화
+                calendarTable.style.opacity = '1';
+                calendarTable.style.pointerEvents = 'auto';
+            }
         }
         
         // 발행 모달 표시 함수
@@ -1898,7 +2305,7 @@
             const originalText = saveBtn.textContent;
             saveBtn.disabled = true;
             saveBtn.textContent = '발행 중...';
-            
+
             try {
                 const response = await fetch('/api/roster/publish', {
                     method: 'POST',
@@ -1908,7 +2315,7 @@
                         issue_comment: comment
                     })
                 });
-                
+
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.detail || '발행에 실패했습니다.');
@@ -1931,35 +2338,5 @@
             }
         }
     </script>
-    <script>
-        function toggleNav() {
-            const sidebar = document.getElementById("mySidebar");
-            const main = document.getElementById("main");
-            const toggleBtn = document.querySelector(".sidebar-toggle-btn i");
-
-            const isOpen = sidebar.style.width === "250px";
-            if (isOpen) {
-                sidebar.style.width = "0";
-                main.style.marginLeft = "0";
-                toggleBtn.classList.remove('fa-angles-left');
-                toggleBtn.classList.add('fa-angles-right');
-            } else {
-                sidebar.style.width = "250px";
-                main.style.marginLeft = "250px";
-                toggleBtn.classList.remove('fa-angles-right');
-                toggleBtn.classList.add('fa-angles-left');
-            }
-        }
-        // Initialize sidebar state
-        document.addEventListener("DOMContentLoaded", function() {
-            document.getElementById("mySidebar").style.width = "250px";
-            document.getElementById("main").style.marginLeft = "250px";
-        });
-
-        async function logout() {
-            await fetch('/auth/logout', { method: 'POST' });
-            window.location.href = '/login';
-        }
-    </script>
 </body>
-</html> 
+</html>

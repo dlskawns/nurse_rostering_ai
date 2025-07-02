@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, date
 from fastapi.responses import RedirectResponse
 import numpy as np
-
+from typing import Optional
 from app.db.client import get_db
 from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster
 from app.schemas.auth_schema import User as UserSchema
@@ -793,7 +793,7 @@ async def get_latest_schedule(
 class WantedRequest(BaseModel):
     year: int
     month: int
-    exp_date: datetime = None
+    exp_date: Optional[datetime] = None
 
 # [Wanted] - Wanted 작성 요청 생성 (수간호사용)
 @router.post("/wanted/request")
@@ -897,6 +897,33 @@ async def close_wanted_request(
     db.commit()
     
     return {"message": "Wanted 요청이 마감되었습니다."}
+
+# [Wanted] - Wanted 마감일 변경
+@router.patch("/wanted/deadline")
+async def update_wanted_deadline(
+    req: WantedRequest,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    wanted = db.query(Wanted).filter(
+        Wanted.group_id == current_user.group_id,
+        Wanted.year == req.year,
+        Wanted.month == req.month
+    ).first()
+    
+    if not wanted:
+        raise HTTPException(status_code=404, detail="해당 월의 wanted 요청을 찾을 수 없습니다.")
+    
+    if wanted.status == 'closed':
+        raise HTTPException(status_code=400, detail="마감된 wanted 요청의 마감일은 변경할 수 없습니다.")
+    
+    wanted.exp_date = req.exp_date
+    db.commit()
+    
+    return {"message": "마감일이 성공적으로 변경되었습니다."}
 
 # ========== 발행 관련 API ==========
 
