@@ -59,21 +59,33 @@
             padding-right: 20px;
         }
         .bookmark {
-            padding: 10px 15px;
-            margin-bottom: 10px;
-            background: #e9ecef;
-            border-left: 5px solid #6c757d;
+            padding: 8px 16px;
+            margin: 0 4px;
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 20px;
             cursor: pointer;
-            transition: all 0.2s ease-in-out;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            font-size: 0.9em;
         }
         .bookmark:hover {
-            background: #dee2e6;
+            background: #bbdefb;
+            transform: translateY(-2px);
         }
         .bookmark.active {
-            background: #fff;
-            border-left-color: #007bff;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            transform: translateX(-10px);
+            background: #2196f3;
+            color: white;
+        }
+        .bookmark.closed {
+            background: #f5f5f5;
+            border-color: #9e9e9e;
+            color: #757575;
+            opacity: 0.7;
+        }
+        .bookmark.closed:hover {
+            background: #eeeeee;
+            transform: none;
         }
         .main-content {
             flex: 1;
@@ -538,7 +550,7 @@
 
     <script>
         let fullNurseSchema = [];
-        let activeSchedules = [];
+        let wantedList = [];
         let activeYear, activeMonth;
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -564,23 +576,25 @@
             const bookmarksContainer = document.getElementById('bookmarks-container');
             
             try {
-                const response = await fetch('/api/schedules/active');
-                if (!response.ok) throw new Error('활성화된 스케줄을 불러올 수 없습니다.');
-                activeSchedules = await response.json();
+                // 모든 wanted 데이터를 가져옴
+                const wantedResponse = await fetch('/api/wanted/all');
+                if (!wantedResponse.ok) throw new Error('Wanted 목록을 불러올 수 없습니다.');
+                wantedList = await wantedResponse.json();
 
-                if (activeSchedules.length === 0) {
-                    statusMessage.textContent = 'Wanted 작성 전입니다. 수간호사에게 요청해주세요.';
+                if (wantedList.length === 0) {
+                    statusMessage.textContent = 'wanted 작성 요청 전입니다. 수간호사에게 요청해주세요.';
                     pageStatusDiv.style.display = 'flex';
                     bookmarksContainer.innerHTML = '';
-                } else {
-                    pageStatusDiv.style.display = 'none';
-                    renderBookmarks();
-                    
-                    // If only one schedule, load it automatically
-                    if (activeSchedules.length === 1) {
-                        await switchActiveSchedule(activeSchedules[0].year, activeSchedules[0].month);
-                    }
-                    // If multiple schedules, just show bookmarks without disabling the page
+                    return;
+                }
+
+                // 북마크 렌더링
+                pageStatusDiv.style.display = 'none';
+                renderBookmarks();
+                
+                // 첫 번째 wanted 자동 선택
+                if (wantedList.length > 0) {
+                    await switchActiveSchedule(wantedList[0].year, wantedList[0].month);
                 }
             } catch (error) {
                 console.error(error);
@@ -592,13 +606,21 @@
         function renderBookmarks() {
             const bookmarksContainer = document.getElementById('bookmarks-container');
             bookmarksContainer.innerHTML = '';
-            activeSchedules.forEach(schedule => {
+            
+            wantedList.forEach(wanted => {
                 const bookmark = document.createElement('div');
                 bookmark.className = 'bookmark';
-                bookmark.textContent = `${schedule.year}년 ${schedule.month}월`;
-                bookmark.dataset.year = schedule.year;
-                bookmark.dataset.month = schedule.month;
-                bookmark.onclick = () => switchActiveSchedule(schedule.year, schedule.month);
+                bookmark.textContent = `${wanted.year}년 ${wanted.month}월`;
+                bookmark.dataset.year = wanted.year;
+                bookmark.dataset.month = wanted.month;
+                
+                // wanted 상태에 따른 스타일링
+                if (wanted.status === 'closed') {
+                    bookmark.classList.add('closed');
+                    bookmark.title = 'wanted 작성이 마감되었습니다.';
+                }
+                
+                bookmark.onclick = () => switchActiveSchedule(wanted.year, wanted.month);
                 bookmarksContainer.appendChild(bookmark);
             });
         }
@@ -616,20 +638,37 @@
                 }
             });
 
-            await checkScheduleStatus();
+            await checkWantedStatus();
         }
 
-        async function checkScheduleStatus() {
+        async function checkWantedStatus() {
+            const pageStatusDiv = document.getElementById('page-status');
+            const statusMessage = document.getElementById('status-message');
+            
             try {
+                // 현재 선택된 연월의 wanted 상태 확인
+                const currentWanted = wantedList.find(w => w.year === activeYear && w.month === activeMonth);
+                
+                if (!currentWanted) {
+                    statusMessage.textContent = 'wanted 작성 요청 전입니다. 수간호사에게 요청해주세요.';
+                    pageStatusDiv.style.display = 'flex';
+                    return;
+                }
+
+                if (currentWanted.status === 'closed') {
+                    statusMessage.textContent = 'wanted 작성 요청이 마감되었습니다.';
+                    pageStatusDiv.style.display = 'flex';
+                    return;
+                }
+
+                // wanted 상태가 'requested'인 경우 preference 상태 확인
+                pageStatusDiv.style.display = 'none';
+                
                 const response = await fetch(`/api/schedules/status?year=${activeYear}&month=${activeMonth}`);
                 if (!response.ok) throw new Error('스케줄 상태를 확인할 수 없습니다.');
                 const statusData = await response.json();
 
                 const isSubmitted = statusData.preference_is_submitted;
-                const scheduleStatus = statusData.schedule_status;
-
-                // Hide status overlay for all requested schedules (since they are fetched by /api/schedules/active)
-                document.getElementById('page-status').style.display = 'none';
 
                 if (isSubmitted) {
                     setSubmittedState(statusData.preference_data);
@@ -638,7 +677,8 @@
                 }
             } catch (error) {
                 console.error(error);
-                alert(error.message);
+                statusMessage.textContent = '오류가 발생했습니다: ' + error.message;
+                pageStatusDiv.style.display = 'flex';
             }
         }
 
@@ -872,7 +912,7 @@
                     body: body
                 });
                 alert('성공적으로 제출되었습니다.');
-                await checkScheduleStatus();
+                await checkWantedStatus();
             } catch (error) {
                 alert('제출에 실패했습니다: ' + error.message);
             }
@@ -887,7 +927,7 @@
                     body: JSON.stringify({ year: activeYear, month: activeMonth })
                 });
                 alert('제출이 철회되었습니다. 다시 수정할 수 있습니다.');
-                await checkScheduleStatus();
+                await checkWantedStatus();
             } catch (error) {
                 alert('철회에 실패했습니다: ' + error.message);
             }

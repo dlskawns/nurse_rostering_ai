@@ -104,4 +104,32 @@ class RosterConfig(Base):
     created_at = Column(DATETIME, default=func.now())
 
     office = relationship("Office")
-    group = relationship("Group") 
+    group = relationship("Group")
+
+class Wanted(Base):
+    __tablename__ = 'wanted'
+    group_id = Column(VARCHAR(50), ForeignKey('groups.group_id'), primary_key=True)
+    year = Column(SMALLINT, primary_key=True)
+    month = Column(TINYINT, primary_key=True)
+    exp_date = Column(DATETIME, nullable=True)  # 마감일
+    status = Column(VARCHAR(10), default='requested')  # requested, closed
+    created_at = Column(DATETIME, default=func.now())
+    
+    group = relationship("Group")
+
+class IssuedRoster(Base):
+    __tablename__ = 'issued_roster'
+    seq_no = Column(INTEGER, primary_key=True, autoincrement=True)
+    office_id = Column(VARCHAR(50), ForeignKey('offices.office_id'), nullable=False)
+    group_id = Column(VARCHAR(50), ForeignKey('groups.group_id'), nullable=False)
+    nurse_id = Column(VARCHAR(50), ForeignKey('nurses.nurse_id'), nullable=False)  # 발행한 사람
+    issued_at = Column(DATETIME, default=func.now())
+    version = Column(TINYINT, nullable=False)
+    v_name = Column(VARCHAR(100), nullable=True)  # 버전 명
+    issue_cmmt = Column(VARCHAR(500), nullable=True)  # 발행 코멘트
+    schedule_id = Column(CHAR(12), ForeignKey('schedules.schedule_id'), nullable=False)
+    
+    office = relationship("Office")
+    group = relationship("Group")
+    nurse = relationship("Nurse")
+    schedule = relationship("Schedule") 

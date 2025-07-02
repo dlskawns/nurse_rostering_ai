@@ -33,8 +33,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 def get_user(db: Session, account_id: str):
-
-    return db.query(Nurse).filter(Nurse.account_id == account_id).first()
+    return db.query(Nurse).options(joinedload(Nurse.group)).filter(Nurse.account_id == account_id).first()
 
 @router.post("/login")
 async def login_for_access_token(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -85,7 +84,15 @@ async def get_current_user_from_cookie(token: Optional[str] = Cookie(None, alias
     if user is None:
         return None
     print('user', user)
-    return UserSchema.from_orm(user)
+    
+    # Manually construct UserSchema to avoid from_orm issues
+    return UserSchema(
+        nurse_id=user.nurse_id,
+        account_id=user.account_id,
+        office_id=user.office_id,  # This should now work with eager loading
+        group_id=user.group_id,
+        is_head_nurse=user.is_head_nurse
+    )
 
 @router.get("/me", response_model=UserSchema)
 async def read_users_me(current_user: UserSchema = Depends(get_current_user_from_cookie)):

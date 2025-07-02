@@ -44,6 +44,7 @@
             cursor: pointer;
             transition: all 0.2s ease;
             font-size: 14px;
+            position: relative;
         }
         .version-item:hover {
             background: #e9ecef;
@@ -56,9 +57,49 @@
         .version-item .version-number {
             font-weight: bold;
         }
+        .version-item .version-name {
+            font-size: 13px;
+            margin: 4px 0;
+            color: #495057;
+        }
+        .version-item.active .version-name {
+            color: white;
+        }
         .version-item .version-status {
             font-size: 12px;
             opacity: 0.8;
+        }
+        .version-item .edit-name-input {
+            width: 100%;
+            margin: 4px 0;
+            padding: 2px 4px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .version-item .edit-buttons {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+        .version-item .edit-btn, .version-item .save-btn, .version-item .cancel-btn {
+            padding: 2px 6px;
+            font-size: 10px;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        .version-item .edit-btn {
+            background: #28a745;
+            color: white;
+        }
+        .version-item .save-btn {
+            background: #007bff;
+            color: white;
+        }
+        .version-item .cancel-btn {
+            background: #6c757d;
+            color: white;
         }
         .generated-roster-container {
             flex: 3;
@@ -719,7 +760,8 @@
                     <div class="schedule-status-display">
                         <h4 id="schedule-status-text"></h4>
                     </div>
-                    <button id="request-btn" class="request-button" onclick="requestWantedShifts()">Wanted 작성 요청하기</button>
+                    <button id="wanted-request-btn" class="request-button" onclick="requestWantedShifts()">Wanted 작성 요청하기</button>
+                    <button id="generate-roster-btn" class="request-button" onclick="generateRoster()">근무표 생성하기</button>
                 </div>
 
                 <div class="version-list-container" id="version-list-container" style="display: none;">
@@ -742,7 +784,6 @@
                     <div id="nurse-card-grid" class="nurse-card-grid cols-3">
                         <!-- Nurse cards will be populated here -->
                     </div>
-                    <button id="generate-roster-btn" class="request-button" style="margin-top: 20px; display: none;" onclick="generateRoster()">현재 버전으로 근무표 만들기</button>
                 </div>
             </div>
 
@@ -789,7 +830,7 @@
                     </div>
                 </div>
                 <div class="roster-actions">
-                    <button id="save-roster-btn" class="request-button" onclick="saveRoster()">이 버전으로 저장</button>
+                    <button id="save-roster-btn" class="request-button" onclick="saveRoster()">해당 버전으로 발행하기</button>
                     <a href="/roster-view" id="view-roster-link" class="request-button disabled-link" onclick="event.preventDefault(); alert('먼저 근무표를 저장해주세요.');">근무표 보기</a>
                 </div>
             </div>
@@ -816,6 +857,9 @@
         let historyIndex = -1;
         let violationsCollapsed = false;
         let isValidating = false;
+        
+        // 마감일 선택 관련 변수
+        let selectedExpDate = null;
         
         // 카드 레이아웃 업데이트 함수
         function updateCardLayout(columns) {
@@ -926,7 +970,7 @@
                                        currentMonth === today.getMonth() && 
                                        date === today.getDate());
                         
-                        cell.innerHTML = `<div class="calendar-day ${isToday ? 'today' : ''}">${date}</div>`;
+                        cell.innerHTML = `<div class="calendar-day ${isToday ? 'today' : ''}" onclick="selectExpDate(${date})">${date}</div>`;
                         date++;
                     }
                     row.appendChild(cell);
@@ -950,55 +994,65 @@
         }
 
         async function updatePageForMonth(year, month) {
+            
             const statusTextEl = document.getElementById('schedule-status-text');
-            const requestBtn = document.getElementById('request-btn');
             const grid = document.getElementById('nurse-card-grid');
+            const wantedBtn = document.getElementById('wanted-request-btn');
             const generateBtn = document.getElementById('generate-roster-btn');
             const versionContainer = document.getElementById('version-list-container');
 
             statusTextEl.textContent = '상태 확인 중...';
-            grid.innerHTML = ''; // Clear nurse statuses
-            requestBtn.disabled = true;
-            generateBtn.style.display = 'none';
+            grid.innerHTML = '';
+            wantedBtn.disabled = true;
+            generateBtn.disabled = true;
             versionContainer.style.display = 'none';
 
             try {
-                const response = await fetch(`/api/schedules/status?year=${year}&month=${month}`);
-                if (!response.ok) {
-                    if (response.status === 401) window.location.href = '/login';
+                // 1. 스케줄 상태 확인
+                const scheduleResponse = await fetch(`/api/schedules/status?year=${year}&month=${month}`);
+                if (!scheduleResponse.ok) {
+                    if (scheduleResponse.status === 401) window.location.href = '/login';
                     throw new Error('스케줄 상태를 확인할 수 없습니다.');
                 }
-                const statusData = await response.json();
+                const scheduleData = await scheduleResponse.json();
 
-                if (statusData.schedule_status === 'requested') {
-                    statusTextEl.textContent = `${year}년 ${month}월 근무표 Wanted 접수중`;
-                    requestBtn.textContent = 'Wanted 새로운 버전 작성 요청하기';
-                    requestBtn.disabled = false;
-                    generateBtn.style.display = 'block'; // Show generate button
-                    versionContainer.style.display = 'block'; // Show version list
-                    await updateVersionList(year, month);
-                    await updateNurseStatusDisplay(year, month);
-                } else if (statusData.schedule_status === 'issued') {
-                    statusTextEl.textContent = `${year}년 ${month}월 근무표 발행 완료`;
-                    requestBtn.textContent = 'Wanted 새로운 버전 작성 요청하기';
-                    requestBtn.disabled = false;
-                    generateBtn.style.display = 'block'; // Show generate button
-                    versionContainer.style.display = 'block'; // Show version list
-                    await updateVersionList(year, month);
-                    await updateNurseStatusDisplay(year, month);
-                    // Also show the generated roster
-                    await displayGeneratedRoster(year, month);
+                // 2. wanted 상태 확인
+                const wantedResponse = await fetch(`/api/wanted/status?year=${year}&month=${month}`);
+                const wantedData = wantedResponse.ok ? await wantedResponse.json() : { status: null };
+
+                // 3. 전체 wanted 목록 확인 (하나라도 있는지)
+                const allWantedResponse = await fetch('/api/wanted/all');
+                const allWantedData = allWantedResponse.ok ? await allWantedResponse.json() : [];
+
+                // 4. 버튼 활성화 조건 설정
+                const hasWantedForMonth = wantedData.status !== null;
+                const hasAnyWanted = allWantedData.length > 0;
+
+                // Wanted 작성 요청하기 버튼: 해당 월에 wanted가 없을 때만 활성화
+                wantedBtn.disabled = hasWantedForMonth;
+                if (hasWantedForMonth) {
+                    wantedBtn.title = '이미 해당 월의 요청이 존재합니다.';
                 } else {
-                    statusTextEl.textContent = '해당 월의 근무표 요청이 없습니다.';
-                    requestBtn.textContent = 'Wanted 작성 요청하기';
-                    requestBtn.disabled = false;
-                    grid.innerHTML = '간호사별 제출 현황이 없습니다.';
+                    wantedBtn.title = '';
+                }
+
+                // 근무표 생성하기 버튼: wanted가 하나라도 있고, 해당 월에 스케줄이 있을 때만 활성화
+                generateBtn.disabled = !hasAnyWanted ;
+
+                if (wantedData.status !== null) {
+                    statusTextEl.textContent = `${year}년 ${month}월 근무표 버전 관리`;
+                    versionContainer.style.display = 'block';
+                    await updateVersionList(year, month);
+                    await updateNurseStatusDisplay(year, month);
+                } else {
+                    statusTextEl.textContent = `${year}년 ${month}월 Wanted 작성을 요청하세요.`;
+                    grid.innerHTML = 'Wanted 작성 요청 후 간호사별 정보가 표시됩니다.';
                 }
             } catch (error) {
                 console.error(error);
                 statusTextEl.textContent = '스케줄 상태를 불러오는데 실패했습니다.';
-                requestBtn.textContent = 'Wanted 작성 요청하기';
-                requestBtn.disabled = false;
+                wantedBtn.disabled = false;
+                generateBtn.disabled = false;
             }
         }
 
@@ -1024,25 +1078,43 @@
                 allVersions.forEach(version => {
                     const versionItem = document.createElement('div');
                     versionItem.className = 'version-item';
-                    if (currentVersion === version.version) {
+                    versionItem.dataset.scheduleId = version.schedule_id;
+                    
+                    if (currentVersion === version.schedule_id) {
                         versionItem.classList.add('active');
                     }
                     
-                    const statusText = version.status === 'requested' ? '접수중' : 
+                    const statusText = version.status === 'draft' ? '임시저장' : 
                                      version.status === 'issued' ? '발행됨' : version.status;
                     
                     versionItem.innerHTML = `
                         <div class="version-number">v${version.version}</div>
+                        <div class="version-name" onclick="event.stopPropagation()">${version.name}</div>
                         <div class="version-status">${statusText}</div>
+                        <div class="edit-buttons" style="display: none;" onclick="event.stopPropagation()">
+                            <button class="edit-btn" onclick="startEditName('${version.schedule_id}')">이름 변경</button>
+                        </div>
                     `;
                     
-                    versionItem.onclick = () => switchToVersion(version.version);
+                    // 버전 아이템 호버시 편집 버튼 표시
+                    versionItem.addEventListener('mouseenter', () => {
+                        const editButtons = versionItem.querySelector('.edit-buttons');
+                        editButtons.style.display = 'flex';
+                    });
+                    versionItem.addEventListener('mouseleave', () => {
+                        const editButtons = versionItem.querySelector('.edit-buttons');
+                        if (!versionItem.querySelector('.edit-name-input')) {
+                            editButtons.style.display = 'none';
+                        }
+                    });
+                    
+                    versionItem.onclick = () => switchToVersion(version);
                     versionList.appendChild(versionItem);
                 });
                 
                 // If no version is selected, select the latest (first) one
                 if (!currentVersion && allVersions.length > 0) {
-                    await switchToVersion(allVersions[0].version);
+                    await switchToVersion(allVersions[0]);
                 }
                 
             } catch (error) {
@@ -1052,32 +1124,31 @@
         }
 
         async function switchToVersion(version) {
-            currentVersion = version;
+            currentVersion = version.schedule_id;
             
             // Update active state in version list
             document.querySelectorAll('.version-item').forEach(item => {
                 item.classList.remove('active');
             });
             
-            const activeItem = Array.from(document.querySelectorAll('.version-item')).find(item => 
-                item.querySelector('.version-number').textContent === `v${version}`
-            );
+            const activeItem = document.querySelector(`[data-schedule-id="${version.schedule_id}"]`);
             if (activeItem) {
                 activeItem.classList.add('active');
             }
             
-            // Update nurse status display for this version
-            await updateNurseStatusDisplay(currentYear, currentMonth + 1);
+            // Display roster for this version
+
+            await displayRosterForVersion(version.schedule_id);
         }
 
         async function requestWantedShifts() {
-            const btn = document.getElementById('request-btn');
+            const btn = document.getElementById('wanted-request-btn');
             const originalText = btn.textContent;
             btn.disabled = true;
             btn.textContent = '요청 중...';
 
             try {
-                const response = await fetch('/api/schedules/request', {
+                const response = await fetch('/api/wanted/request', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ year: currentYear, month: currentMonth + 1 })
@@ -1138,6 +1209,7 @@
                     generatedRosterData = {
                         year: result.year,
                         month: result.month,
+                        schedule_id: result.schedule_id,
                         roster: editedRosterData,
                         violations: result.violations || []
                     };
@@ -1162,6 +1234,25 @@
                 
                 // Show editing controls
                 showEditingControls(true);
+                
+                // 새로 생성된 버전의 ID를 미리 설정 (자동 선택 방지)
+                if (result.schedule_id) {
+                    currentVersion = result.schedule_id;
+                }
+                
+                // 버전 목록 업데이트
+                await updateVersionList(currentYear, currentMonth + 1);
+                
+                // 새로 생성된 버전을 활성화 (표시는 이미 되어있으므로 UI만 업데이트)
+                if (result.schedule_id) {
+                    const newVersionItem = document.querySelector(`[data-schedule-id="${result.schedule_id}"]`);
+                    if (newVersionItem) {
+                        document.querySelectorAll('.version-item').forEach(item => {
+                            item.classList.remove('active');
+                        });
+                        newVersionItem.classList.add('active');
+                    }
+                }
 
             } catch (error) {
                 console.error('Error generating roster:', error);
@@ -1170,7 +1261,7 @@
             }
         }
 
-        async function displayGeneratedRoster(year, month) {
+        async function displayIssuedRoster(year, month) {
             const container = document.getElementById('roster-table-container');
             container.innerHTML = '발행된 근무표 불러오는 중...';
             try {
@@ -1189,6 +1280,7 @@
                     generatedRosterData = {
                         year: rosterData.year,
                         month: rosterData.month,
+                        schedule_id: rosterData.schedule_id,
                         roster: editedRosterData,
                         violations: rosterData.violations || []
                     };
@@ -1456,46 +1548,13 @@
         }
 
         async function saveRoster() {
-            if (!editedRosterData) {
-                alert('저장할 근무표 데이터가 없습니다. 먼저 근무표를 생성해주세요.');
+            if (!editedRosterData || !generatedRosterData) {
+                alert('발행할 근무표 데이터가 없습니다. 먼저 근무표를 생성해주세요.');
                 return;
             }
-
-            const saveBtn = document.getElementById('save-roster-btn');
-            saveBtn.disabled = true;
-            saveBtn.textContent = '저장 중...';
-
-            try {
-                // 편집된 데이터로 새로운 요청 생성
-                const saveData = {
-                    ...generatedRosterData,
-                    roster: editedRosterData
-                };
-                
-                const response = await fetch('/api/roster/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(saveData)
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || '근무표 저장에 실패했습니다.');
-                }
-                
-                alert('근무표가 성공적으로 저장되었습니다.');
-                
-                const viewLink = document.getElementById('view-roster-link');
-                viewLink.classList.remove('disabled-link');
-                viewLink.onclick = null; // Remove the alert onclick
-                
-            } catch (error) {
-                console.error('Error saving roster:', error);
-                alert(`저장 실패: ${error.message}`);
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.textContent = '이 버전으로 저장';
-            }
+            
+            // 발행 모달 띄우기
+            showPublishModal();
         }
 
         // 히스토리 관리 함수들
@@ -1668,7 +1727,209 @@
             }
         }
 
+        // 버전 이름 편집 관련 함수들
+        function startEditName(scheduleId) {
+            const versionItem = document.querySelector(`[data-schedule-id="${scheduleId}"]`);
+            const nameDiv = versionItem.querySelector('.version-name');
+            const editButtons = versionItem.querySelector('.edit-buttons');
+            const currentName = nameDiv.textContent;
+            
+            nameDiv.innerHTML = `<input type="text" class="edit-name-input" value="${currentName}" onclick="event.stopPropagation()">`;
+            editButtons.innerHTML = `
+                <button class="save-btn" onclick="saveVersionName('${scheduleId}')">저장</button>
+                <button class="cancel-btn" onclick="cancelEditName('${scheduleId}', '${currentName}')">취소</button>
+            `;
+            
+            const input = nameDiv.querySelector('.edit-name-input');
+            input.focus();
+            input.select();
+            
+            // Enter 키로 저장
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    saveVersionName(scheduleId);
+                }
+            });
+        }
+
+        async function saveVersionName(scheduleId) {
+            const versionItem = document.querySelector(`[data-schedule-id="${scheduleId}"]`);
+            const input = versionItem.querySelector('.edit-name-input');
+            const newName = input.value.trim();
+            
+            if (!newName) {
+                alert('이름을 입력해주세요.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/schedules/${scheduleId}/name`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '이름 변경에 실패했습니다.');
+                }
+                
+                // UI 업데이트
+                const nameDiv = versionItem.querySelector('.version-name');
+                nameDiv.innerHTML = newName;
+                
+                const editButtons = versionItem.querySelector('.edit-buttons');
+                editButtons.innerHTML = `<button class="edit-btn" onclick="startEditName('${scheduleId}')">이름 변경</button>`;
+                editButtons.style.display = 'none';
+                
+                // allVersions 배열도 업데이트
+                const versionData = allVersions.find(v => v.schedule_id === scheduleId);
+                if (versionData) {
+                    versionData.name = newName;
+                }
+                
+            } catch (error) {
+                console.error('이름 변경 실패:', error);
+                alert(error.message);
+                cancelEditName(scheduleId, input.value);
+            }
+        }
+
+        function cancelEditName(scheduleId, originalName) {
+            const versionItem = document.querySelector(`[data-schedule-id="${scheduleId}"]`);
+            const nameDiv = versionItem.querySelector('.version-name');
+            const editButtons = versionItem.querySelector('.edit-buttons');
+            
+            nameDiv.innerHTML = originalName;
+            editButtons.innerHTML = `<button class="edit-btn" onclick="startEditName('${scheduleId}')">이름 변경</button>`;
+            editButtons.style.display = 'none';
+        }
+
+        async function displayRosterForVersion(scheduleId) {
+            const rosterOutputSection = document.getElementById('roster-output-section');
+            const rosterTableContainer = document.getElementById('roster-table-container');
+            
+            if (!scheduleId) {
+                rosterOutputSection.style.display = 'none';
+                return;
+            }
+            
+            rosterTableContainer.innerHTML = '근무표 불러오는 중...';
+            rosterOutputSection.style.display = 'block';
+            
+            try {
+                const response = await fetch(`/api/roster/schedule/${scheduleId}`);
+                console.log("response", response)
+                if (!response.ok) throw new Error('근무표를 불러올 수 없습니다.');
+                
+                const rosterData = await response.json();
+                
+                // API 응답 데이터를 편집 가능한 형식으로 변환
+                if (rosterData.nurses) {
+                    editedRosterData = rosterData.nurses.map(nurse => ({
+                        name: nurse.name,
+                        experience: nurse.experience,
+                        schedule: nurse.schedule,
+                        nurse_id: nurse.id
+                    }));
+                    generatedRosterData = {
+                        year: rosterData.year,
+                        month: rosterData.month,
+                        schedule_id: rosterData.schedule_id,
+                        roster: editedRosterData,
+                        violations: rosterData.violations || []
+                    };
+                } else {
+                    editedRosterData = rosterData.roster || rosterData;
+                }
+                
+                // 히스토리 초기화
+                changeHistory = [];
+                historyIndex = -1;
+                
+                renderRosterTable(editedRosterData, rosterData.year, rosterData.month);
+                showEditingControls(true);
+                
+                // Show violations
+                updateViolationsDisplay(rosterData.violations || []);
+                
+            } catch (error) {
+                console.error(error);
+                rosterTableContainer.innerHTML = `<p style="color: red;">${error.message}</p>`;
+                showEditingControls(false);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', initializePage);
+        
+        // 마감일 선택 함수
+        function selectExpDate(date) {
+            selectedExpDate = date;
+            // 선택된 날짜 하이라이트
+            document.querySelectorAll('.calendar-day').forEach(day => {
+                day.classList.remove('selected-exp-date');
+            });
+            event.target.classList.add('selected-exp-date');
+            console.log('선택된 마감일:', selectedExpDate);
+        }
+        
+        // 발행 모달 표시 함수
+        function showPublishModal() {
+            // 첫 발행인지 확인
+            const currentSchedule = allVersions.find(v => v.schedule_id === currentVersion);
+            const isFirstIssue = !allVersions.some(v => v.status === 'issued');
+            
+            let comment = '';
+            if (isFirstIssue) {
+                comment = '첫 발행';
+            } else {
+                comment = prompt('발행 코멘트를 입력하세요 (예: A간호사 8일 D에서 N으로 변경):', '');
+                if (comment === null) return; // 취소
+            }
+            
+            if (confirm(`근무표를 발행하시겠습니까?${isFirstIssue ? '\n(첫 발행)' : '\n코멘트: ' + comment}`)) {
+                publishRoster(comment);
+            }
+        }
+        
+        // 근무표 발행 함수
+        async function publishRoster(comment) {
+            const saveBtn = document.getElementById('save-roster-btn');
+            const originalText = saveBtn.textContent;
+            saveBtn.disabled = true;
+            saveBtn.textContent = '발행 중...';
+            
+            try {
+                const response = await fetch('/api/roster/publish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        schedule_id: currentVersion,
+                        issue_comment: comment
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '발행에 실패했습니다.');
+                }
+                
+                const result = await response.json();
+                alert('근무표가 성공적으로 발행되었습니다!');
+                
+                // 버전 목록 업데이트
+                await updateVersionList(currentYear, currentMonth + 1);
+                
+                // 발행 후 비활성화 (추후 구현)
+                
+            } catch (error) {
+                console.error('발행 실패:', error);
+                alert(`발행 실패: ${error.message}`);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
     </script>
     <script>
         function toggleNav() {

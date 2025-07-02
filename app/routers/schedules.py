@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 import numpy as np
 
 from app.db.client import get_db
-from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig
+from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster
 from app.schemas.auth_schema import User as UserSchema
 from app.routers.auth import get_current_user_from_cookie
 from app.roster_engine import generate_roster, get_days_in_month
@@ -86,7 +86,7 @@ async def request_schedule(
         version=latest_version + 1,
         config_id=latest_config.config_id,
         created_by=current_user.account_id,
-        status='requested'
+        status='draft'  # 기본적으로 draft 상태로 생성
     )
     db.add(new_schedule)
     db.commit()
@@ -183,6 +183,24 @@ async def get_schedule_status(
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # 수간호사인 경우 schedules 테이블 확인
+    if current_user.is_head_nurse:
+        schedules = db.query(Schedule).filter(
+            Schedule.group_id == current_user.group_id,
+            Schedule.year == year,
+            Schedule.month == month
+        ).all()
+        
+        has_schedules = len(schedules) > 0
+        latest_status = schedules[0].status if schedules else None
+        
+        return {
+            "has_schedules": has_schedules,
+            "latest_status": latest_status,
+            "schedule_count": len(schedules)
+        }
+    
+    # 일반 간호사인 경우 기존 로직 유지
     schedule = db.query(Schedule).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.year == year,
@@ -198,8 +216,7 @@ async def get_schedule_status(
     return {
         "schedule_status": schedule.status if schedule else None,
         "preference_is_submitted": preference.is_submitted if preference else False,
-        "preference_data": preference.data if preference else None,
-        "schedule_id": schedule.schedule_id if schedule else None
+        "has_schedules": schedule is not None
     }
 
 # [Preferences] - 간호사 개인의 선호도 초안 저장
@@ -342,14 +359,18 @@ async def generate_roster_endpoint(
             db.add(Shift(**shift_data))
     db.commit()
 
-    # 1. Get latest schedule for the month
-    schedule = db.query(Schedule).filter(
-        Schedule.group_id == current_user.group_id,
-        Schedule.year == req.year,
-        Schedule.month == req.month
-    ).order_by(Schedule.version.desc()).first()
-    if not schedule:
-        raise HTTPException(status_code=404, detail="No active schedule request found.")
+    # 0. Check if wanted request exists for this month
+    wanted = db.query(Wanted).filter(
+        Wanted.group_id == current_user.group_id,
+        Wanted.year == req.year,
+        Wanted.month == req.month
+    ).first()
+    
+    if not wanted:
+        raise HTTPException(status_code=400, detail="해당 월의 wanted 작성을 먼저 요청해주세요.")
+
+    # 1. Always create a new schedule version for each generation
+    schedule = await request_schedule(req, current_user, db)
 
     # 2. Fetch all nurses and their preferences
     nurses_in_group = db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
@@ -407,14 +428,104 @@ async def generate_roster_endpoint(
             )
             db.add(entry)
 
-    # 7. Update schedule status to 'issued'
-    schedule.status = 'issued'
     db.commit()
+
+    # 7. Get shift colors
+    shifts_db = db.query(Shift).all()
+    shift_colors = {s.shift_id: s.color for s in shifts_db}
     
-    print("근무표 생성 및 저장 완료")
+    # 8. Format and return the created roster data
+    roster_data = {
+        "year": req.year, 
+        "month": req.month,
+        "schedule_id": schedule.schedule_id,
+        "days_in_month": get_days_in_month(req.year, req.month),
+        "shift_colors": shift_colors,
+        "nurses": [],
+        "violations": []  # 임시로 빈 리스트
+    }
     
-    # 8. Fetch and return the created roster for display
-    return await get_roster_for_month(req.year, req.month, current_user, db)
+    # Structure data by nurse
+    for nurse in nurses_in_group:
+        if nurse.nurse_id in generated:
+            nurse_schedule = generated[nurse.nurse_id]
+            counts = {shift: nurse_schedule.count(shift) for shift in shift_colors.keys()}
+            
+            roster_data["nurses"].append({
+                "id": nurse.nurse_id,
+                "name": nurse.name,
+                "experience": nurse.experience,
+                "schedule": nurse_schedule,
+                "counts": counts
+            })
+    
+    return roster_data
+
+# [Roster] - 특정 schedule_id의 근무표 조회
+@router.get("/roster/schedule/{schedule_id}")
+async def get_roster_by_schedule_id(
+    schedule_id: str,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Get schedule info
+    schedule = db.query(Schedule).filter(
+        Schedule.schedule_id == schedule_id,
+        Schedule.group_id == current_user.group_id
+    ).first()
+    
+    if not schedule:
+        raise HTTPException(status_code=404, detail="스케줄을 찾을 수 없습니다.")
+    
+    # Get all nurses in the group
+    nurses_in_group = db.query(Nurse.nurse_id, Nurse.name, Nurse.experience).filter(
+        Nurse.group_id == current_user.group_id
+    ).order_by(Nurse.experience.desc()).all()
+
+    # Get shift colors
+    shifts_db = db.query(Shift).all()
+    shift_colors = {s.shift_id: s.color for s in shifts_db}
+    
+    # Get schedule entries
+    entries = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule_id).all()
+    
+    roster_data = {
+        "year": schedule.year, 
+        "month": schedule.month,
+        "schedule_id": schedule_id,
+        "days_in_month": get_days_in_month(schedule.year, schedule.month),
+        "shift_colors": shift_colors,
+        "nurses": []
+    }
+    
+    # Structure data by nurse
+    entries_by_nurse = {}
+    for entry in entries:
+        if entry.nurse_id not in entries_by_nurse:
+            entries_by_nurse[entry.nurse_id] = {}
+        entries_by_nurse[entry.nurse_id][entry.work_date.day] = entry.shift_id
+
+    violations = []  # 임시로 빈 리스트
+
+    for nurse in nurses_in_group:
+        nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, 'O') for d in range(1, roster_data["days_in_month"] + 1)]
+        
+        counts = {shift: nurse_schedule.count(shift) for shift in shift_colors.keys()}
+        
+        roster_data["nurses"].append({
+            "id": nurse.nurse_id,
+            "name": nurse.name,
+            "experience": nurse.experience,
+            "schedule": nurse_schedule,
+            "counts": counts
+        })
+    
+    roster_data["violations"] = violations
+        
+    return roster_data
 
 # [Roster] - 특정 월의 근무표 조회
 @router.get("/roster/{year}/{month}")
@@ -533,80 +644,7 @@ async def save_roster(
                 )
                 db.add(entry)
 
-    # 위반사항 계산하여 Schedule에 저장
-    # violations = []
-    # try:
-    #     # Get roster configuration
-    #     latest_config_db = db.query(RosterConfig).filter(
-    #         RosterConfig.group_id == current_user.group_id
-    #     ).order_by(RosterConfig.created_at.desc()).first()
-    #     
-    #     if latest_config_db:
-    #         # Create RosterSystem configuration
-    #         roster_config_for_engine = NurseRosterConfig(
-    #             daily_shift_requirements={
-    #                 'D': latest_config_db.day_req,
-    #                 'E': latest_config_db.eve_req,
-    #                 'N': latest_config_db.nig_req
-    #             },
-    #             max_consecutive_work_days=latest_config_db.max_conseq_work,
-    #             max_night_shifts_per_month=latest_config_db.max_nig_per_month,
-    #             max_consecutive_nights=3 if latest_config_db.three_seq_nig else 2
-    #         )
-    #         
-    #         # Get nurses for engine
-    #         nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all())]
-    #         
-    #         # Create RosterSystem instance
-    #         system = RosterSystem(
-    #             nurses=nurses_for_engine,
-    #             target_month=date(year, month, 1),
-    #             config=roster_config_for_engine
-    #         )
-    #         
-    #         # Convert roster data to RosterSystem format
-    #         shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
-    #         
-    #         # Initialize roster with zeros
-    #         system.roster.fill(0)
-    #         
-    #         for nurse_idx, nurse_data in enumerate(roster):
-    #             if nurse_idx >= len(system.nurses):
-    #                 continue
-    #             schedule_data = nurse_data.get('schedule', [])
-    #             for day_idx, shift in enumerate(schedule_data):
-    #                 if day_idx >= system.num_days:
-    #                     continue
-    #                 shift_idx = shift_map.get(shift.upper())
-    #                 if shift_idx is not None:
-    #                     system.roster[nurse_idx, day_idx, shift_idx] = 1
-    #         
-    #         # Find violations
-    #         violation_details = system._find_violations()
-    #         
-    #         # Format violation messages
-    #         violation_messages = set()
-    #         for v in violation_details:
-    #             if v['type'] == 'shift_requirement':
-    #                 violation_messages.add(f"{v['day']+1}일: {v['shift']} 근무 인원 미달 (필요: {v['required']}, 배정: {v['actual']})")
-    #             elif v['type'] == 'consecutive':
-    #                 nurse_name = system.nurses[v['nurse_idx']].name
-    #                 violation_messages.add(f"{nurse_name}: 최대 연속 근무일 초과")
-    #             elif v['type'] == 'night':
-    #                 nurse_name = system.nurses[v['nurse_idx']].name
-    #                 violation_messages.add(f"{nurse_name}: 야간 근무 제약 위반")
-    #         
-    #         violations = sorted(list(violation_messages))
-    #         
-    # except Exception as e:
-    #     print(f"위반사항 계산 중 오류 발생: {e}")
-    #     violations = [f"위반사항 계산 중 오류가 발생했습니다: {str(e)}"]
-
-    # Update schedule status and violations
-    schedule.status = 'issued'
-    # schedule.violations = violations  # 임시로 주석 처리
     db.commit()
-    
     return {"message": "Roster saved successfully"}
 
 # [Roster] - 근무표 위반사항 실시간 계산
@@ -748,4 +786,190 @@ async def get_latest_schedule(
         "version": latest_schedule.version,
         "status": latest_schedule.status,
         "schedule_id": latest_schedule.schedule_id
+    }
+
+# ========== WANTED 관련 API ==========
+
+class WantedRequest(BaseModel):
+    year: int
+    month: int
+    exp_date: datetime = None
+
+# [Wanted] - Wanted 작성 요청 생성 (수간호사용)
+@router.post("/wanted/request")
+async def request_wanted_shifts(
+    req: WantedRequest,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    # Check if wanted request already exists for this month
+    existing_wanted = db.query(Wanted).filter(
+        Wanted.group_id == current_user.group_id,
+        Wanted.year == req.year,
+        Wanted.month == req.month
+    ).first()
+    
+    if existing_wanted:
+        raise HTTPException(status_code=400, detail="이미 해당 월의 요청이 존재합니다.")
+
+    new_wanted = Wanted(
+        group_id=current_user.group_id,
+        year=req.year,
+        month=req.month,
+        exp_date=req.exp_date,
+        status='requested'
+    )
+    db.add(new_wanted)
+    db.commit()
+    db.refresh(new_wanted)
+
+    return {"message": "Wanted 작성 요청이 성공적으로 생성되었습니다."}
+
+# [Wanted] - 특정 그룹의 Wanted 상태 조회
+@router.get("/wanted/status")
+async def get_wanted_status(
+    year: int, month: int,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    wanted = db.query(Wanted).filter(
+        Wanted.group_id == current_user.group_id,
+        Wanted.year == year,
+        Wanted.month == month
+    ).first()
+
+    if not wanted:
+        return {"status": None, "message": "wanted 작성 요청 전"}
+    
+    return {
+        "status": wanted.status,
+        "exp_date": wanted.exp_date,
+        "message": "작성 가능" if wanted.status == 'requested' else "wanted 작성 요청이 마감되었습니다"
+    }
+
+# [Wanted] - 현재 그룹의 모든 wanted 데이터 조회
+@router.get("/wanted/all")
+async def get_all_wanted(
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    wanted_list = db.query(Wanted).filter(
+        Wanted.group_id == current_user.group_id
+    ).order_by(Wanted.year.desc(), Wanted.month.desc()).all()
+
+    return [{
+        "year": wanted.year,
+        "month": wanted.month,
+        "status": wanted.status,
+        "exp_date": wanted.exp_date.isoformat() if wanted.exp_date else None,
+        "created_at": wanted.created_at.isoformat() if wanted.created_at else None
+    } for wanted in wanted_list]
+
+# [Wanted] - Wanted 상태를 closed로 변경
+@router.patch("/wanted/close")
+async def close_wanted_request(
+    year: int, month: int,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    wanted = db.query(Wanted).filter(
+        Wanted.group_id == current_user.group_id,
+        Wanted.year == year,
+        Wanted.month == month
+    ).first()
+    
+    if not wanted:
+        raise HTTPException(status_code=404, detail="해당 월의 wanted 요청을 찾을 수 없습니다.")
+    
+    wanted.status = 'closed'
+    db.commit()
+    
+    return {"message": "Wanted 요청이 마감되었습니다."}
+
+# ========== 발행 관련 API ==========
+
+class PublishRequest(BaseModel):
+    schedule_id: str
+    issue_comment: str = None
+
+# [Roster] - 근무표 발행
+@router.post("/roster/publish")
+async def publish_roster(
+    req: PublishRequest,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    # Get current nurse info
+    nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
+    if not nurse:
+        raise HTTPException(status_code=404, detail="간호사 정보를 찾을 수 없습니다.")
+
+    # Get schedule to publish
+    schedule = db.query(Schedule).filter(
+        Schedule.schedule_id == req.schedule_id,
+        Schedule.group_id == current_user.group_id
+    ).first()
+    
+    if not schedule:
+        raise HTTPException(status_code=404, detail="해당 스케줄을 찾을 수 없습니다.")
+
+    # Check if this is the first publication
+    existing_issued = db.query(IssuedRoster).filter(
+        IssuedRoster.group_id == current_user.group_id,
+        IssuedRoster.office_id == nurse.group.office_id
+    ).first()
+    
+    is_first_issue = not existing_issued
+    
+    # Get next sequence number
+    max_seq = db.query(func.max(IssuedRoster.seq_no)).filter(
+        IssuedRoster.group_id == current_user.group_id,
+        IssuedRoster.office_id == nurse.group.office_id
+    ).scalar() or 0
+    
+    # Set all other schedules in this month to draft
+    db.query(Schedule).filter(
+        Schedule.group_id == current_user.group_id,
+        Schedule.year == schedule.year,
+        Schedule.month == schedule.month,
+        Schedule.status == 'issued'
+    ).update({"status": "draft"})
+    
+    # Update current schedule to issued
+    schedule.status = 'issued'
+    
+    # Create issued roster record
+    issued_roster = IssuedRoster(
+        seq_no=max_seq + 1,
+        office_id=nurse.group.office_id,
+        group_id=current_user.group_id,
+        nurse_id=current_user.nurse_id,
+        version=schedule.version,
+        v_name=f"v{schedule.version}",  # 기본 버전명
+        issue_cmmt=req.issue_comment if not is_first_issue else "첫 발행",
+        schedule_id=req.schedule_id
+    )
+    
+    db.add(issued_roster)
+    db.commit()
+    
+    return {
+        "message": "근무표가 성공적으로 발행되었습니다.",
+        "seq_no": issued_roster.seq_no,
+        "is_first_issue": is_first_issue
     } 
