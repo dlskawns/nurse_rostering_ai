@@ -968,6 +968,21 @@
                     <div id="version-list">
                         <!-- Version items will be populated here -->
                     </div>
+                    
+                    <!-- 알고리즘 선택 라디오 버튼 -->
+                    <div class="algorithm-selector" style="margin-top: 15px; padding: 10px; border-top: 1px solid #dee2e6;">
+                        <h5 style="margin: 0 0 8px 0; font-size: 13px; color: #495057;">생성 알고리즘</h5>
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                                <input type="radio" name="algorithm" value="cp_sat" checked style="margin: 0;">
+                                <span>CP-SAT (최적화)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                                <input type="radio" name="algorithm" value="random_sampling" style="margin: 0;">
+                                <span>랜덤 샘플링 (기존)</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="nurse-status-container">
@@ -1572,6 +1587,10 @@
             const rosterOutputSection = document.getElementById('roster-output-section');
             const rosterTableContainer = document.getElementById('roster-table-container');
             
+            // 선택된 알고리즘 가져오기
+            const selectedAlgorithm = document.querySelector('input[name="algorithm"]:checked').value;
+            console.log('선택된 알고리즘:', selectedAlgorithm);
+            
             rosterTableContainer.innerHTML = '<p>근무표 생성 중... 서버 응답에 몇 분 정도 소요될 수 있습니다.</p>';
             updateViolationsDisplay([]);
             rosterOutputSection.style.display = 'block';
@@ -1580,7 +1599,11 @@
                 const response = await fetch('/api/roster/generate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ year: currentYear, month: currentMonth + 1 })
+                    body: JSON.stringify({ 
+                        year: currentYear, 
+                        month: currentMonth + 1,
+                        algorithm: selectedAlgorithm
+                    })
                 });
 
                 if (!response.ok) {

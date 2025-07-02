@@ -36,6 +36,7 @@ router = APIRouter(
 class ScheduleRequest(BaseModel):
     year: int
     month: int
+    algorithm: str = "cp_sat"  # "cp_sat" or "random_sampling"
 
 class PreferenceSubmit(BaseModel):
     year: int
@@ -496,7 +497,7 @@ async def generate_roster_endpoint(
     schedule = await request_schedule(req, current_user, db)
 
     # 2. Fetch all nurses and their preferences
-    nurses_in_group = db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
+    nurses_in_group = db.query(Nurse).filter(Nurse.group_id == current_user.group_id).order_by(Nurse.experience.desc(), Nurse.nurse_id.asc()).all()
     nurse_ids = [n.nurse_id for n in nurses_in_group]
     
     # 각 간호사의 최신 선호도 데이터 조회 (제출된 것 우선)
@@ -540,7 +541,9 @@ async def generate_roster_endpoint(
     print(f"간호사 수: {len(nurses_dict)}, 선호도 수: {len(prefs_dict)}")
 
     # 5. Choose engine and generate roster
-    if CPSAT_AVAILABLE:
+    print(f"선택된 알고리즘: {req.algorithm}")
+    
+    if req.algorithm == "cp_sat" and CPSAT_AVAILABLE:
         print("CP-SAT 기반 엔진을 사용하여 근무표를 생성합니다.")
         try:
             with Timer("CP-SAT 엔진으로 근무표 생성"):
@@ -551,7 +554,11 @@ async def generate_roster_endpoint(
             print(f"CP-SAT 엔진 실행 중 오류 발생: {e}")
             print("기존 엔진으로 폴백합니다.")
             generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
+    elif req.algorithm == "random_sampling":
+        print("랜덤 샘플링 엔진을 사용하여 근무표를 생성합니다.")
+        generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
     else:
+        # 기본값 또는 CP-SAT 사용 불가능한 경우
         print("기존 엔진을 사용하여 근무표를 생성합니다.")
         generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
 
@@ -576,7 +583,10 @@ async def generate_roster_endpoint(
     shifts_db = db.query(Shift).all()
     shift_colors = {s.shift_id: s.color for s in shifts_db}
     
-    # 8. Format and return the created roster data
+    # 8. DB에서 실제 저장된 데이터를 다시 읽어와서 응답 구성 (일관성 보장)
+    # Get schedule entries that were just saved
+    entries = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).all()
+    
     roster_data = {
         "year": req.year, 
         "month": req.month,
@@ -587,19 +597,24 @@ async def generate_roster_endpoint(
         "violations": []  # 임시로 빈 리스트
     }
     
-    # Structure data by nurse
+    # Structure data by nurse using DB entries (동일한 로직으로 일관성 보장)
+    entries_by_nurse = {}
+    for entry in entries:
+        if entry.nurse_id not in entries_by_nurse:
+            entries_by_nurse[entry.nurse_id] = {}
+        entries_by_nurse[entry.nurse_id][entry.work_date.day] = entry.shift_id
+
     for nurse in nurses_in_group:
-        if nurse.nurse_id in generated:
-            nurse_schedule = generated[nurse.nurse_id]
-            counts = {shift: nurse_schedule.count(shift) for shift in shift_colors.keys()}
-            
-            roster_data["nurses"].append({
-                "id": nurse.nurse_id,
-                "name": nurse.name,
-                "experience": nurse.experience,
-                "schedule": nurse_schedule,
-                "counts": counts
-            })
+        nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, 'O') for d in range(1, roster_data["days_in_month"] + 1)]
+        counts = {shift: nurse_schedule.count(shift) for shift in shift_colors.keys()}
+        
+        roster_data["nurses"].append({
+            "id": nurse.nurse_id,
+            "name": nurse.name,
+            "experience": nurse.experience,
+            "schedule": nurse_schedule,
+            "counts": counts
+        })
     
     return roster_data
 
@@ -625,7 +640,7 @@ async def get_roster_by_schedule_id(
     # Get all nurses in the group
     nurses_in_group = db.query(Nurse.nurse_id, Nurse.name, Nurse.experience).filter(
         Nurse.group_id == current_user.group_id
-    ).order_by(Nurse.experience.desc()).all()
+    ).order_by(Nurse.experience.desc(), Nurse.nurse_id.asc()).all()
 
     # Get shift colors
     shifts_db = db.query(Shift).all()
@@ -692,7 +707,7 @@ async def get_roster_for_month(
     # Get all nurses in the group
     nurses_in_group = db.query(Nurse.nurse_id, Nurse.name, Nurse.experience).filter(
         Nurse.group_id == current_user.group_id
-    ).order_by(Nurse.experience.desc()).all()
+    ).order_by(Nurse.experience.desc(), Nurse.nurse_id.asc()).all()
 
     # Get shift colors
     shifts_db = db.query(Shift).all()

@@ -271,7 +271,7 @@ class RosterSystem:
             for shift, required in self.config.daily_shift_requirements.items():
                 shift_idx = self.config.shift_types.index(shift)
                 actual = np.sum(self.roster[:, day, shift_idx])
-                if actual != required:
+                if actual < required:  # 필요 인원보다 적을 때만 위반으로 처리
                     violations.append({
                         'type': 'shift_requirement',
                         'day': day,
