@@ -1618,8 +1618,42 @@
                 // Render Roster with editing functionality
                 renderRosterTable(editedRosterData, result.year, result.month);
 
-                // Render Violations
-                updateViolationsDisplay(result.violations || []);
+                // 근무표 생성 후 위반사항 자동 검증
+                try {
+                    rosterTableContainer.innerHTML += '<p>위반사항 검증 중...</p>';
+                    
+                    const validatePayload = {
+                        year: result.year,
+                        month: result.month,
+                        roster: editedRosterData
+                    };
+
+                    const validateResponse = await fetch('/api/roster/validate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(validatePayload)
+                    });
+
+                    if (validateResponse.ok) {
+                        const validateResult = await validateResponse.json();
+                        console.log('위반사항 검증 결과:', validateResult.violations);
+                        
+                        // 위반사항 표시
+                        updateViolationsDisplay(validateResult.violations || []);
+                        
+                        // generatedRosterData에도 위반사항 정보 업데이트
+                        generatedRosterData.violations = validateResult.violations || [];
+                    } else {
+                        console.warn('위반사항 검증에 실패했습니다.');
+                        updateViolationsDisplay([]);
+                    }
+                } catch (validateError) {
+                    console.error('위반사항 검증 중 오류:', validateError);
+                    updateViolationsDisplay([]);
+                }
+
+                // 로딩 메시지 제거 후 최종 렌더링
+                renderRosterTable(editedRosterData, result.year, result.month);
                 
                 // Enable save button
                 document.getElementById('save-roster-btn').disabled = !editedRosterData || editedRosterData.length === 0;
@@ -1687,8 +1721,44 @@
                 renderRosterTable(editedRosterData, year, month);
                 showEditingControls(true);
                 
-                // Show violations
-                updateViolationsDisplay(rosterData.violations || []);
+                // 발행된 근무표 위반사항 검증
+                try {
+                    container.innerHTML += '<p>위반사항 검증 중...</p>';
+                    
+                    const validatePayload = {
+                        year: year,
+                        month: month,
+                        roster: editedRosterData
+                    };
+
+                    const validateResponse = await fetch('/api/roster/validate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(validatePayload)
+                    });
+
+                    if (validateResponse.ok) {
+                        const validateResult = await validateResponse.json();
+                        console.log('발행된 근무표 위반사항 검증 결과:', validateResult.violations);
+                        
+                        // 위반사항 표시
+                        updateViolationsDisplay(validateResult.violations || []);
+                        
+                        // generatedRosterData에도 위반사항 정보 업데이트
+                        if (generatedRosterData) {
+                            generatedRosterData.violations = validateResult.violations || [];
+                        }
+                    } else {
+                        console.warn('발행된 근무표 위반사항 검증에 실패했습니다.');
+                        updateViolationsDisplay(rosterData.violations || []);
+                    }
+                } catch (validateError) {
+                    console.error('발행된 근무표 위반사항 검증 중 오류:', validateError);
+                    updateViolationsDisplay(rosterData.violations || []);
+                }
+
+                // 로딩 메시지 제거 후 최종 렌더링
+                renderRosterTable(editedRosterData, year, month);
                 
             } catch (error) {
                 console.error(error);
@@ -2401,8 +2471,44 @@
                 renderRosterTable(editedRosterData, rosterData.year, rosterData.month);
                 showEditingControls(true);
                 
-                // Show violations
-                updateViolationsDisplay(rosterData.violations || []);
+                // 버전별 근무표 위반사항 검증
+                try {
+                    rosterTableContainer.innerHTML += '<p>위반사항 검증 중...</p>';
+                    
+                    const validatePayload = {
+                        year: rosterData.year,
+                        month: rosterData.month,
+                        roster: editedRosterData
+                    };
+
+                    const validateResponse = await fetch('/api/roster/validate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(validatePayload)
+                    });
+
+                    if (validateResponse.ok) {
+                        const validateResult = await validateResponse.json();
+                        console.log('버전별 근무표 위반사항 검증 결과:', validateResult.violations);
+                        
+                        // 위반사항 표시
+                        updateViolationsDisplay(validateResult.violations || []);
+                        
+                        // generatedRosterData에도 위반사항 정보 업데이트
+                        if (generatedRosterData) {
+                            generatedRosterData.violations = validateResult.violations || [];
+                        }
+                    } else {
+                        console.warn('버전별 근무표 위반사항 검증에 실패했습니다.');
+                        updateViolationsDisplay(rosterData.violations || []);
+                    }
+                } catch (validateError) {
+                    console.error('버전별 근무표 위반사항 검증 중 오류:', validateError);
+                    updateViolationsDisplay(rosterData.violations || []);
+                }
+
+                // 로딩 메시지 제거 후 최종 렌더링
+                renderRosterTable(editedRosterData, rosterData.year, rosterData.month);
                 
             } catch (error) {
                 console.error(error);

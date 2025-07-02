@@ -664,7 +664,6 @@ async def get_roster_by_schedule_id(
             "schedule": nurse_schedule,
             "counts": counts
         })
-    
     roster_data["violations"] = violations
         
     return roster_data
@@ -732,7 +731,7 @@ async def get_roster_for_month(
             "schedule": nurse_schedule,
             "counts": counts
         })
-    
+    print(f'\n\n\n\n\n\n\n11위반사항 추가\n{violations}\n\n\n\n\n\n')
     roster_data["violations"] = violations
         
     return roster_data
