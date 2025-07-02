@@ -22,13 +22,16 @@ from app.routers.utils import parse_prefs_to_dict
 try:
     from cp_sat_basic import generate_roster_cp_sat
     from cp_sat_main_v3 import generate_roster_cp_sat_main_v3
+    from cp_sat_main_v2 import generate_roster_cp_sat_main_v2
     CPSAT_AVAILABLE = True
     CPSAT_MAIN_V3_AVAILABLE = True
+    CPSAT_MAIN_V2_AVAILABLE = True
     print("CP-SAT 엔진들이 사용 가능합니다.")
 except ImportError as e:
     print(f"CP-SAT 엔진 import 실패: {e}")
     CPSAT_AVAILABLE = False
     CPSAT_MAIN_V3_AVAILABLE = False
+    CPSAT_MAIN_V2_AVAILABLE = False
 
 router = APIRouter(
     prefix="/api",
@@ -565,6 +568,23 @@ async def generate_roster_endpoint(
                 )
         except Exception as e:
             print(f"CP-SAT Main V3 엔진 실행 중 오류 발생: {e}")
+            print("CP-SAT 기본 엔진으로 폴백합니다.")
+            if CPSAT_AVAILABLE:
+                generated = generate_roster_cp_sat(
+                    nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=60
+                )
+            else:
+                print("기존 엔진으로 폴백합니다.")
+                generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
+    elif req.algorithm == "cp_sat_main_v2" and CPSAT_MAIN_V2_AVAILABLE:
+        print("CP-SAT Main V2 엔진을 사용하여 근무표를 생성합니다.")
+        try:
+            with Timer("CP-SAT Main V2 엔진으로 근무표 생성"):
+                generated = generate_roster_cp_sat_main_v2(
+                    nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=90
+                )
+        except Exception as e:
+            print(f"CP-SAT Main V2 엔진 실행 중 오류 발생: {e}")
             print("CP-SAT 기본 엔진으로 폴백합니다.")
             if CPSAT_AVAILABLE:
                 generated = generate_roster_cp_sat(
