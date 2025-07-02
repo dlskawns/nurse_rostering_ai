@@ -98,16 +98,32 @@ class RosterSystem:
         return True
         
     def _check_consecutive_work_days(self, nurse_idx: int, day: int) -> bool:
-        """교대 추가가 연속 근무일 제약 조건을 위반하는지 확인합니다."""
+        """연속 근무일 제약 조건을 위반하는지 확인합니다."""
+        # 충분한 일수가 없으면 위반 없음
         if day < self.config.max_consecutive_work_days:
             return True
             
         off_idx = self.config.shift_types.index('OFF')
-        work_days = np.sum(
-            self.roster[nurse_idx, day-self.config.max_consecutive_work_days:day, :off_idx], 
-            axis=1
-        )
-        return not np.all(work_days > 0)
+        max_work = self.config.max_consecutive_work_days
+        
+        # 현재 날짜를 포함한 연속 근무일 검사
+        # day-max_work+1 부터 day까지 (총 max_work+1일) 검사
+        start_day = max(0, day - max_work)
+        end_day = day + 1  # day 포함
+        
+        # 해당 기간의 근무일 수 계산 (OFF가 아닌 날들)
+        work_days_count = 0
+        for d in range(start_day, end_day):
+            # 해당 날짜에 근무(OFF가 아닌 시프트)했는지 확인
+            is_working = np.sum(self.roster[nurse_idx, d, :off_idx]) > 0
+            if is_working:
+                work_days_count += 1
+            else:
+                # 휴무일이 있으면 연속 근무가 끊어짐
+                work_days_count = 0
+        
+        # 연속 근무일이 최대치를 초과하면 위반
+        return work_days_count <= max_work
         
     def _check_experience_requirements(self, day: int) -> bool:
         """각 교대에 대한 경력 요구사항이 충족되는지 확인합니다."""

@@ -15,6 +15,8 @@ class NurseRosterConfig:
     # 야간 근무 제약 조건
     max_night_shifts_per_month: int = 15  # 월별 최대 야간 근무 수
     max_consecutive_nights: int = 2  # 최대 연속 야간 근무 수
+    two_offs_after_three_nig: bool = False  # N 3회 후 OFF 2회 연속 필수
+    two_offs_after_two_nig: bool = False  # N 2회 후 OFF 2회 연속 필수
     
     # 근무 패턴 제약 조건
     max_consecutive_work_days: int = 6  # 최대 연속 근무일 수
