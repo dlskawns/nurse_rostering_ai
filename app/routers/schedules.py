@@ -160,14 +160,19 @@ async def get_submission_statuses(
     nurses_in_group = db.query(Nurse.nurse_id).filter(Nurse.group_id == current_user.group_id).all()
     nurse_ids_in_group = {n[0] for n in nurses_in_group}
 
-    # Get submitted preferences for those nurses for the given month
-    submitted_prefs = db.query(ShiftPreference).filter(
-        ShiftPreference.nurse_id.in_(nurse_ids_in_group),
-        ShiftPreference.year == year,
-        ShiftPreference.month == month,
-        ShiftPreference.is_submitted == True
-    ).all()
-    submitted_nurse_ids = {p.nurse_id for p in submitted_prefs}
+    # 각 간호사의 최신 제출 상태 확인
+    submitted_nurse_ids = set()
+    for nurse_id in nurse_ids_in_group:
+        # 해당 간호사의 최신 제출된 선호도가 있는지 확인
+        latest_submitted = db.query(ShiftPreference).filter(
+            ShiftPreference.nurse_id == nurse_id,
+            ShiftPreference.year == year,
+            ShiftPreference.month == month,
+            ShiftPreference.is_submitted == True
+        ).order_by(ShiftPreference.submitted_at.desc()).first()
+        
+        if latest_submitted:
+            submitted_nurse_ids.add(nurse_id)
 
     return {
         "submitted_nurses": list(submitted_nurse_ids),
@@ -200,23 +205,57 @@ async def get_schedule_status(
             "schedule_count": len(schedules)
         }
     
-    # 일반 간호사인 경우 기존 로직 유지
+    # 일반 간호사인 경우 - 최신 선호도 데이터 조회
     schedule = db.query(Schedule).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.year == year,
         Schedule.month == month
     ).order_by(Schedule.version.desc()).first()
 
-    preference = db.query(ShiftPreference).filter(
+    # 최신 제출된 선호도 먼저 확인
+    submitted_preference = db.query(ShiftPreference).filter(
         ShiftPreference.nurse_id == current_user.nurse_id,
         ShiftPreference.year == year,
-        ShiftPreference.month == month
-    ).first()
-
+        ShiftPreference.month == month,
+        ShiftPreference.is_submitted == True
+    ).order_by(ShiftPreference.submitted_at.desc()).first()
+    
+    if submitted_preference:
+        return {
+            "schedule_status": schedule.status if schedule else None,
+            "preference_is_submitted": True,
+            "preference_data": submitted_preference.data,
+            "has_schedules": schedule is not None,
+            "created_at": submitted_preference.created_at,
+            "submitted_at": submitted_preference.submitted_at
+        }
+    
+    # 제출된 것이 없으면 최신 draft 확인
+    draft_preference = db.query(ShiftPreference).filter(
+        ShiftPreference.nurse_id == current_user.nurse_id,
+        ShiftPreference.year == year,
+        ShiftPreference.month == month,
+        ShiftPreference.is_submitted == False
+    ).order_by(ShiftPreference.created_at.desc()).first()
+    
+    if draft_preference:
+        return {
+            "schedule_status": schedule.status if schedule else None,
+            "preference_is_submitted": False,
+            "preference_data": draft_preference.data,
+            "has_schedules": schedule is not None,
+            "created_at": draft_preference.created_at,
+            "submitted_at": None
+        }
+    
+    # 아무 선호도도 없는 경우
     return {
         "schedule_status": schedule.status if schedule else None,
-        "preference_is_submitted": preference.is_submitted if preference else False,
-        "has_schedules": schedule is not None
+        "preference_is_submitted": False,
+        "preference_data": None,
+        "has_schedules": schedule is not None,
+        "created_at": None,
+        "submitted_at": None
     }
 
 # [Preferences] - 간호사 개인의 선호도 초안 저장
@@ -229,28 +268,69 @@ async def save_preference_draft(
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Check for existing preference
-    preference = db.query(ShiftPreference).filter(
-        ShiftPreference.nurse_id == current_user.nurse_id,
-        ShiftPreference.year == pref_data.year,
-        ShiftPreference.month == pref_data.month
-    ).first()
+    # try:
+    # 항상 새로운 레코드 생성 (덮어쓰기 방지)
+    print('성공0')
+    from datetime import datetime
     
-    if preference: # Update existing draft
-        preference.data = pref_data.data
-        preference.created_at = datetime.utcnow()
-    else: # Create new draft
-        preference = ShiftPreference(
-            nurse_id=current_user.nurse_id,
-            year=pref_data.year,
-            month=pref_data.month,
-            data=pref_data.data,
-            is_submitted=False
-        )
-        db.add(preference)
-    
+    current_time = datetime.now().replace(microsecond=0)
+    print('성공1', current_time)
+    preference = ShiftPreference(
+        nurse_id=current_user.nurse_id,
+        year=pref_data.year,
+        month=pref_data.month,
+        data=pref_data.data,
+        is_submitted=False,
+        created_at=current_time,
+
+    )
+    db.add(preference)
     db.commit()
+    print('성공3')
+    db.refresh(preference)
+    
     return {"message": "Preference draft saved successfully"}
+        
+    # except Exception as e:
+    #     db.rollback()
+    #     # Primary key 중복 에러 처리
+    #     if "Duplicate entry" in str(e) or "1062" in str(e):
+    #         # 동일한 시간에 생성된 레코드가 있으면 해당 레코드를 업데이트
+            
+    #         current_time = datetime.now()
+            
+    #         # 현재 시간(초 단위)과 동일한 created_at를 가진 레코드 찾기
+    #         existing_pref = db.query(ShiftPreference).filter(
+    #             ShiftPreference.nurse_id == current_user.nurse_id,
+    #             ShiftPreference.year == pref_data.year,
+    #             ShiftPreference.month == pref_data.month,
+    #             func.date_format(ShiftPreference.created_at, '%Y-%m-%d %H:%i:%s') == 
+    #             func.date_format(current_time, '%Y-%m-%d %H:%i:%s')
+    #         ).first()
+            
+    #         if existing_pref:
+    #             # 기존 레코드 업데이트
+    #             existing_pref.data = pref_data.data
+    #             existing_pref.is_submitted = False
+    #             db.commit()
+    #             return {"message": "Preference draft updated successfully"}
+    #         else:
+    #             # 약간의 시간 지연 후 재시도
+    #             import time
+    #             time.sleep(0.1)  # 100ms 대기
+    #             preference = ShiftPreference(
+    #                 nurse_id=current_user.nurse_id,
+    #                 year=pref_data.year,
+    #                 month=pref_data.month,
+    #                 data=pref_data.data,
+    #                 is_submitted=False,
+    #             )
+    #             db.add(preference)
+    #             db.commit()
+    #             db.refresh(preference)
+    #             return {"message": "Preference draft saved successfully (retry)"}
+    #     else:
+    #         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 # [Preferences] - 선호도 최종 제출
 @router.post("/preferences/submit")
@@ -262,11 +342,13 @@ async def submit_preferences(
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
+    # 최신 draft 찾기
     preference = db.query(ShiftPreference).filter(
         ShiftPreference.nurse_id == current_user.nurse_id,
         ShiftPreference.year == req.year,
-        ShiftPreference.month == req.month
-    ).first()
+        ShiftPreference.month == req.month,
+        ShiftPreference.is_submitted == False
+    ).order_by(ShiftPreference.created_at.desc()).first()
 
     if not preference:
         raise HTTPException(status_code=404, detail="No preference draft found to submit")
@@ -286,30 +368,17 @@ async def submit_empty_preferences(
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    # Check for existing preference
-    preference = db.query(ShiftPreference).filter(
-        ShiftPreference.nurse_id == current_user.nurse_id,
-        ShiftPreference.year == req.year,
-        ShiftPreference.month == req.month
-    ).first()
-
-    if preference:
-        # If a draft exists, just update it to be submitted
-        preference.is_submitted = True
-        preference.submitted_at = datetime.utcnow()
-    else:
-        # If no draft exists, create a new one with empty data
-        empty_data = {"shift": {}, "preference": []}
-        preference = ShiftPreference(
-            nurse_id=current_user.nurse_id,
-            year=req.year,
-            month=req.month,
-            data=empty_data,
-            is_submitted=True,
-            submitted_at=datetime.utcnow()
-        )
-        db.add(preference)
-
+    # 빈 데이터로 새 레코드 생성 및 즉시 제출
+    empty_data = {"shift": {}, "preference": []}
+    preference = ShiftPreference(
+        nurse_id=current_user.nurse_id,
+        year=req.year,
+        month=req.month,
+        data=empty_data,
+        is_submitted=True,
+        submitted_at=datetime.utcnow()
+    )
+    db.add(preference)
     db.commit()
     return {"message": "Empty preferences submitted successfully"}
 
@@ -323,18 +392,72 @@ async def retract_submission(
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
+    # 최신 제출된 레코드 찾기
     preference = db.query(ShiftPreference).filter(
         ShiftPreference.nurse_id == current_user.nurse_id,
         ShiftPreference.year == req.year,
-        ShiftPreference.month == req.month
-    ).first()
+        ShiftPreference.month == req.month,
+        ShiftPreference.is_submitted == True
+    ).order_by(ShiftPreference.submitted_at.desc()).first()
 
     if not preference:
-        raise HTTPException(status_code=404, detail="No preference found to retract")
+        raise HTTPException(status_code=404, detail="No submitted preference found to retract")
 
     preference.is_submitted = False
+    preference.submitted_at = None
     db.commit()
     return {"message": "Submission retracted successfully"}
+
+# [Preferences] - 최신 선호도 데이터 조회
+@router.get("/preferences/latest")
+async def get_latest_preference(
+    year: int, 
+    month: int,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # 해당 년월의 최신 레코드 찾기 (제출된 것 우선, 없으면 draft 중 최신)
+    submitted_preference = db.query(ShiftPreference).filter(
+        ShiftPreference.nurse_id == current_user.nurse_id,
+        ShiftPreference.year == year,
+        ShiftPreference.month == month,
+        ShiftPreference.is_submitted == True
+    ).order_by(ShiftPreference.submitted_at.desc()).first()
+    
+    if submitted_preference:
+        return {
+            "preference_data": submitted_preference.data,
+            "is_submitted": True,
+            "created_at": submitted_preference.created_at,
+            "submitted_at": submitted_preference.submitted_at
+        }
+    
+    # 제출된 것이 없으면 최신 draft 찾기
+    draft_preference = db.query(ShiftPreference).filter(
+        ShiftPreference.nurse_id == current_user.nurse_id,
+        ShiftPreference.year == year,
+        ShiftPreference.month == month,
+        ShiftPreference.is_submitted == False
+    ).order_by(ShiftPreference.created_at.desc()).first()
+    
+    if draft_preference:
+        return {
+            "preference_data": draft_preference.data,
+            "is_submitted": False,
+            "created_at": draft_preference.created_at,
+            "submitted_at": None
+        }
+    
+    # 아무것도 없으면 빈 데이터 반환
+    return {
+        "preference_data": None,
+        "is_submitted": False,
+        "created_at": None,
+        "submitted_at": None
+    }
 
 # [Roster] - 근무표 생성
 @router.post("/roster/generate")
@@ -376,12 +499,31 @@ async def generate_roster_endpoint(
     nurses_in_group = db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
     nurse_ids = [n.nurse_id for n in nurses_in_group]
     
-    preferences = db.query(ShiftPreference).filter(
-        ShiftPreference.nurse_id.in_(nurse_ids),
-        ShiftPreference.year == req.year,
-        ShiftPreference.month == req.month
-    ).all()
-    
+    # 각 간호사의 최신 선호도 데이터 조회 (제출된 것 우선)
+    preferences = []
+    for nurse_id in nurse_ids:
+        # 제출된 최신 선호도 먼저 확인
+        submitted_pref = db.query(ShiftPreference).filter(
+            ShiftPreference.nurse_id == nurse_id,
+            ShiftPreference.year == req.year,
+            ShiftPreference.month == req.month,
+            ShiftPreference.is_submitted == True
+        ).order_by(ShiftPreference.submitted_at.desc()).first()
+        
+        if submitted_pref:
+            preferences.append(submitted_pref)
+        else:
+            # 제출된 것이 없으면 최신 draft 확인
+            draft_pref = db.query(ShiftPreference).filter(
+                ShiftPreference.nurse_id == nurse_id,
+                ShiftPreference.year == req.year,
+                ShiftPreference.month == req.month,
+                ShiftPreference.is_submitted == False
+            ).order_by(ShiftPreference.created_at.desc()).first()
+            
+            if draft_pref:
+                preferences.append(draft_pref)
+
     # 3. Get latest roster configuration
     latest_config = db.query(RosterConfig).filter(
         RosterConfig.group_id == current_user.group_id

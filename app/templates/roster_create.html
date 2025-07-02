@@ -1206,6 +1206,11 @@
             const generateBtn = document.getElementById('generate-roster-btn');
             const versionContainer = document.getElementById('version-list-container');
 
+            // 월 변경 시 현재 버전 초기화 및 근무표 숨기기
+            currentVersion = null;
+            const rosterOutputSection = document.getElementById('roster-output-section');
+            rosterOutputSection.style.display = 'none';
+
             statusTextEl.textContent = '상태 확인 중...';
             grid.innerHTML = '';
             wantedBtn.disabled = true;
@@ -1353,6 +1358,7 @@
         async function updateVersionList(year, month) {
             const versionList = document.getElementById('version-list');
             const versionTitle = document.getElementById('version-list-title');
+            const rosterOutputSection = document.getElementById('roster-output-section');
             
             versionTitle.textContent = `${year}년 ${month}월 버전 목록`;
             versionList.innerHTML = '로딩 중...';
@@ -1366,6 +1372,8 @@
                 
                 if (allVersions.length === 0) {
                     versionList.innerHTML = '<p>버전이 없습니다.</p>';
+                    // 버전이 없으면 근무표 숨기기
+                    rosterOutputSection.style.display = 'none';
                     return;
                 }
                 
@@ -1406,14 +1414,32 @@
                     versionList.appendChild(versionItem);
                 });
                 
-                // If no version is selected, select the latest (first) one
-                if (!currentVersion && allVersions.length > 0) {
-                    await switchToVersion(allVersions[0]);
+                // 자동 버전 선택 로직: 발행된 버전 우선, 없으면 최신 버전
+                if (allVersions.length > 0) {
+                    let versionToSelect = null;
+                    
+                    // 1순위: 발행된 버전이 있는지 확인 (issued 상태)
+                    const issuedVersion = allVersions.find(v => v.status === 'issued');
+                    if (issuedVersion) {
+                        versionToSelect = issuedVersion;
+                    } else {
+                        // 2순위: 가장 높은 버전 번호 (최신 버전)
+                        // allVersions는 이미 버전 순으로 정렬되어 있다고 가정하고, 첫 번째가 최신
+                        // 만약 버전 번호로 정렬되지 않았다면 sort가 필요
+                        const sortedVersions = [...allVersions].sort((a, b) => b.version - a.version);
+                        versionToSelect = sortedVersions[0];
+                    }
+                    
+                    if (versionToSelect) {
+                        await switchToVersion(versionToSelect);
+                    }
                 }
                 
             } catch (error) {
                 console.error('버전 목록 조회 실패:', error);
                 versionList.innerHTML = '버전 목록을 불러올 수 없습니다.';
+                // 에러 시에도 근무표 숨기기
+                rosterOutputSection.style.display = 'none';
             }
         }
 

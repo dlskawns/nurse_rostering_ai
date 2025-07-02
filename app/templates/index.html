@@ -642,11 +642,17 @@
         }
 
         async function checkWantedStatus() {
-            const pageStatusDiv = document.getElementById('page-status');
             const statusMessage = document.getElementById('status-message');
+            const pageStatusDiv = document.getElementById('page-status');
             
+            if (!activeYear || !activeMonth) {
+                statusMessage.textContent = '년도와 월을 선택해주세요.';
+                pageStatusDiv.style.display = 'flex';
+                return;
+            }
+
             try {
-                // 현재 선택된 연월의 wanted 상태 확인
+                // 전역 wantedList 사용 (initializeBookmarks에서 이미 로드됨)
                 const currentWanted = wantedList.find(w => w.year === activeYear && w.month === activeMonth);
                 
                 if (!currentWanted) {
@@ -661,19 +667,20 @@
                     return;
                 }
 
-                // wanted 상태가 'requested'인 경우 preference 상태 확인
+                // wanted 상태가 'requested'인 경우 최신 preference 상태 확인
                 pageStatusDiv.style.display = 'none';
                 
-                const response = await fetch(`/api/schedules/status?year=${activeYear}&month=${activeMonth}`);
-                if (!response.ok) throw new Error('스케줄 상태를 확인할 수 없습니다.');
+                // 최신 선호도 데이터 조회
+                const response = await fetch(`/api/preferences/latest?year=${activeYear}&month=${activeMonth}`);
+                if (!response.ok) throw new Error('선호도 상태를 확인할 수 없습니다.');
                 const statusData = await response.json();
 
-                const isSubmitted = statusData.preference_is_submitted;
+                const isSubmitted = statusData.is_submitted;
 
                 if (isSubmitted) {
-                    setSubmittedState(statusData.preference_data);
+                    setSubmittedState(statusData.preference_data, statusData.created_at, statusData.submitted_at);
                 } else {
-                    setDraftState(statusData.preference_data);
+                    setDraftState(statusData.preference_data, statusData.created_at);
                 }
             } catch (error) {
                 console.error(error);
@@ -682,24 +689,52 @@
             }
         }
 
-        function setSubmittedState(preferenceData) {
+        function setSubmittedState(preferenceData, createdAt, submittedAt) {
             // closed-notice 숨기기
             const closedNotice = document.getElementById('closed-notice');
             if (closedNotice) {
                 closedNotice.style.display = 'none';
             }
             
+            // 입력 필드 비활성화
             document.getElementById('wanted-input').disabled = true;
-            document.getElementById('wanted-input').placeholder = '희망 근무 내용을 입력하세요';
-            document.querySelector('#nurse-view button').disabled = true;
-            document.querySelector('#nurse-view button').textContent = '희망사항 확인';
+            document.getElementById('wanted-input').placeholder = '제출된 희망 근무 내용 (수정하려면 수정하기 버튼을 누르세요)';
+            
+            // 희망사항 확인 버튼 비활성화
+            const confirmBtn = document.querySelector('#nurse-view button');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = '제출 완료';
+            
+            // 결과 컨테이너 표시
             document.getElementById('result-container').style.display = 'block';
             
+            // 최종 제출 버튼을 수정하기 버튼으로 변경
             const submitBtn = document.getElementById('final-submit-btn');
-            submitBtn.textContent = '수정';
+            submitBtn.textContent = '수정하기';
             submitBtn.onclick = retractSubmission;
             document.getElementById('submit-section').style.display = 'block';
             
+            // 제출 정보 표시
+            const submitSection = document.getElementById('submit-section');
+            let submitInfo = document.getElementById('submit-info');
+            if (!submitInfo) {
+                submitInfo = document.createElement('div');
+                submitInfo.id = 'submit-info';
+                submitInfo.style.cssText = `
+                    background: #d4edda;
+                    border: 1px solid #c3e6cb;
+                    color: #155724;
+                    padding: 10px;
+                    border-radius: 5px;
+                    margin-bottom: 10px;
+                    font-size: 14px;
+                `;
+                submitSection.insertBefore(submitInfo, submitBtn);
+            }
+            submitInfo.textContent = `제출 완료 (${new Date(submittedAt).toLocaleString('ko-KR')})`;
+            submitInfo.style.display = 'block';
+            
+            // 데이터 표시
             if (preferenceData) {
                 document.getElementById('wanted-input').value = preferenceData.request || '';
                 displayResults(preferenceData);
@@ -708,30 +743,70 @@
             }
         }
 
-        function setDraftState(preferenceData) {
+        function setDraftState(preferenceData, createdAt) {
             // closed-notice 숨기기
             const closedNotice = document.getElementById('closed-notice');
             if (closedNotice) {
                 closedNotice.style.display = 'none';
             }
             
+            // 제출 정보 숨기기
+            const submitInfo = document.getElementById('submit-info');
+            if (submitInfo) {
+                submitInfo.style.display = 'none';
+            }
+            
+            // 입력 필드 활성화
             document.getElementById('wanted-input').disabled = false;
             document.getElementById('wanted-input').placeholder = '희망 근무 내용을 입력하세요';
-            document.querySelector('#nurse-view button').disabled = false;
-            document.querySelector('#nurse-view button').textContent = '희망사항 확인';
+            
+            // 희망사항 확인 버튼 활성화
+            const confirmBtn = document.querySelector('#nurse-view button');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = '희망사항 확인';
 
+            // 최종 제출 버튼으로 변경
             const submitBtn = document.getElementById('final-submit-btn');
             submitBtn.textContent = '최종 제출';
             submitBtn.onclick = finalSubmit;
             document.getElementById('submit-section').style.display = 'block';
 
+            // 데이터 표시
             if (preferenceData) {
                 document.getElementById('wanted-input').value = preferenceData.request || '';
                 displayResults(preferenceData);
                 document.getElementById('result-container').style.display = 'block';
+                
+                // Draft 정보 표시
+                if (createdAt) {
+                    const submitSection = document.getElementById('submit-section');
+                    let draftInfo = document.getElementById('draft-info');
+                    if (!draftInfo) {
+                        draftInfo = document.createElement('div');
+                        draftInfo.id = 'draft-info';
+                        draftInfo.style.cssText = `
+                            background: #fff3cd;
+                            border: 1px solid #ffeaa7;
+                            color: #856404;
+                            padding: 10px;
+                            border-radius: 5px;
+                            margin-bottom: 10px;
+                            font-size: 14px;
+                        `;
+                        submitSection.insertBefore(draftInfo, submitBtn);
+                    }
+                    draftInfo.textContent = `임시 저장됨 (${new Date(createdAt).toLocaleString('ko-KR')})`;
+                    draftInfo.style.display = 'block';
+                }
             } else {
                 document.getElementById('wanted-input').value = '';
                 document.getElementById('result-container').style.display = 'none';
+                
+                // Draft 정보 숨기기
+                const draftInfo = document.getElementById('draft-info');
+                if (draftInfo) {
+                    draftInfo.style.display = 'none';
+                }
             }
         }
 
@@ -951,26 +1026,36 @@
         }
 
         async function finalSubmit() {
-            if (!confirm('최종 제출하시겠습니까? 제출 후에는 수정할 수 없습니다.')) return;
+            if (!confirm('최종 제출하시겠습니까?')) return;
             
-            const statusResponse = await fetch(`/api/schedules/status?year=${activeYear}&month=${activeMonth}`);
-            const statusData = await statusResponse.json();
+            // 현재 최신 데이터 확인
+            const latestResponse = await fetch(`/api/preferences/latest?year=${activeYear}&month=${activeMonth}`);
+            const latestData = await latestResponse.json();
 
             let endpoint = '/api/preferences/submit';
             let body = JSON.stringify({ year: activeYear, month: activeMonth });
 
-            if (!statusData.preference_data) {
+            if (!latestData.preference_data) {
                 endpoint = '/api/preferences/submit/empty';
             }
 
             try {
-                await fetch(endpoint, {
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: body
                 });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '제출에 실패했습니다.');
+                }
+                
                 alert('성공적으로 제출되었습니다.');
+                
+                // 리다이렉트 대신 현재 상태를 업데이트하여 데이터 유지
                 await checkWantedStatus();
+                
             } catch (error) {
                 alert('제출에 실패했습니다: ' + error.message);
             }
@@ -978,14 +1063,24 @@
 
         async function retractSubmission() {
             if (!confirm('제출을 철회하고 수정하시겠습니까?')) return;
+            
             try {
-                await fetch('/api/preferences/retract', {
+                const response = await fetch('/api/preferences/retract', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ year: activeYear, month: activeMonth })
                 });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '철회에 실패했습니다.');
+                }
+                
                 alert('제출이 철회되었습니다. 다시 수정할 수 있습니다.');
+                
+                // 현재 상태를 업데이트하여 편집 모드로 전환
                 await checkWantedStatus();
+                
             } catch (error) {
                 alert('철회에 실패했습니다: ' + error.message);
             }

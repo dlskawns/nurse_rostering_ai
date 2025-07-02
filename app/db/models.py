@@ -1,4 +1,4 @@
-from sqlalchemy import Column, VARCHAR, SMALLINT, BOOLEAN, DATETIME, func, ForeignKey, JSON, CHAR, INTEGER, FLOAT
+from sqlalchemy import Column, VARCHAR, SMALLINT, BOOLEAN, DATETIME, func, ForeignKey, JSON, CHAR, INTEGER, FLOAT, Index
 from sqlalchemy.dialects.mysql import TINYINT 
 from sqlalchemy.orm import relationship
 from app.db.client import Base
@@ -75,10 +75,15 @@ class ShiftPreference(Base):
     nurse_id = Column(VARCHAR(50), ForeignKey("nurses.nurse_id"), primary_key=True)
     year = Column(SMALLINT, primary_key=True)
     month = Column(TINYINT, primary_key=True)
+    created_at = Column(DATETIME, primary_key=True)
     data = Column(JSON, nullable=False)
     is_submitted = Column(BOOLEAN, nullable=False, default=False)
-    created_at = Column(DATETIME, nullable=False, default=func.now())
     submitted_at = Column(DATETIME, nullable=True)
+    
+    # # 복합 인덱스 추가 (성능 향상)
+    # __table_args__ = (
+    #     Index('idx_nurse_year_month_created', 'nurse_id', 'year', 'month', 'created_at'),
+    # )
 
 class RosterConfig(Base):
     __tablename__ = 'roster_config'
