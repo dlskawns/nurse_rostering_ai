@@ -258,16 +258,16 @@
             box-shadow: 0 3px 8px rgba(0,123,255,0.3);
         }
         .clear-selection-btn {
-            padding: 4px 8px;
+            padding: 4px 6px;
             background: #dc3545;
             color: white;
             border: none;
             border-radius: 3px;
             cursor: pointer;
-            font-size: 10px;
+            font-size: 9px;
             transition: all 0.3s ease;
-            margin-left: auto;
             box-shadow: 0 1px 3px rgba(220,53,69,0.3);
+            min-width: 50px;
         }
         .clear-selection-btn:hover {
             background: #c82333;
@@ -276,6 +276,76 @@
         }
         .clear-selection-btn:active {
             transform: scale(0.95);
+        }
+        
+        /* 편집 컨트롤 그룹 */
+        .edit-controls {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+        
+        /* 수정하기/저장하기 버튼 */
+        .edit-mode-btn {
+            padding: 6px 12px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s ease;
+            min-width: 80px;
+            font-weight: 500;
+        }
+        
+        .edit-mode-btn:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+        
+        .edit-mode-btn.saving {
+            background: #007bff;
+        }
+        
+        .edit-mode-btn.saving:hover {
+            background: #0056b3;
+        }
+        
+        /* 비활성화된 편집 컨트롤 스타일 */
+        .shift-selector.disabled {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .shift-selector.disabled .shift-button {
+            background: #e9ecef !important;
+            color: #6c757d !important;
+            border-color: #ced4da !important;
+            cursor: not-allowed;
+        }
+        
+        .shift-selector.disabled .clear-selection-btn {
+            background: #6c757d !important;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        
+        .shift-selector.disabled .edit-mode-btn {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .history-controls.disabled {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .history-controls.disabled .undo-btn,
+        .history-controls.disabled .redo-btn {
+            background: #e9ecef !important;
+            color: #6c757d !important;
+            cursor: not-allowed;
         }
         
         /* 히스토리 및 되돌리기 버튼 */
@@ -935,7 +1005,10 @@
                             <div class="shift-button shift-E" data-shift="E">E</div>
                             <div class="shift-button shift-N" data-shift="N">N</div>
                             <div class="shift-button shift-O" data-shift="O">O</div>
-                            <button class="clear-selection-btn" onclick="clearSelection()">✕ 해제</button>
+                            <div class="edit-controls">
+                                <button class="clear-selection-btn" onclick="clearSelection()">✕ 해제</button>
+                                <button class="edit-mode-btn" id="edit-mode-btn" onclick="toggleEditMode()">수정하기</button>
+                            </div>
                         </div>
                         
                         <!-- 크기 조정 컨트롤 -->
@@ -986,6 +1059,7 @@
         let historyIndex = -1;
         let violationsCollapsed = false;
         let isValidating = false;
+        let isEditMode = false; // 편집 모드 상태 추가
         
         // 마감일 선택 관련 변수
         let selectedExpDate = null;
@@ -1757,7 +1831,7 @@
         }
 
         function updateCell(cell) {
-            if (!selectedShift) return;
+            if (!selectedShift || !isEditMode) return; // 편집 모드가 아니면 변경 불가
             
             const nurseIndex = parseInt(cell.dataset.nurse);
             const dayIndex = parseInt(cell.dataset.day);
@@ -1805,12 +1879,95 @@
                 historyControls.style.display = 'flex';
                 rosterOutputSection.style.display = 'block';
                 
+                // 기본적으로 편집 비활성화 상태로 시작
+                setEditMode(false);
+                
                 // 히스토리 버튼 상태 업데이트
                 updateHistoryButtons();
             } else {
                 shiftSelector.style.display = 'none';
                 sizeControls.style.display = 'none';
                 historyControls.style.display = 'none';
+            }
+        }
+
+        // 편집 모드 토글 함수
+        function toggleEditMode() {
+            setEditMode(!isEditMode);
+            
+            if (isEditMode) {
+                // 편집 모드로 전환됨 - 별도 저장 로직 없이 즉시 편집 가능
+                console.log('편집 모드 활성화');
+            } else {
+                // 저장 모드 - 변경사항을 서버에 저장
+                saveRosterChanges();
+            }
+        }
+
+        // 편집 모드 설정 함수
+        function setEditMode(enabled) {
+            isEditMode = enabled;
+            const editModeBtn = document.getElementById('edit-mode-btn');
+            const shiftSelector = document.getElementById('shift-selector');
+            const historyControls = document.getElementById('history-controls');
+            
+            if (enabled) {
+                // 편집 모드 활성화
+                editModeBtn.textContent = '저장하기';
+                editModeBtn.classList.add('saving');
+                shiftSelector.classList.remove('disabled');
+                historyControls.classList.remove('disabled');
+            } else {
+                // 편집 모드 비활성화
+                editModeBtn.textContent = '수정하기';
+                editModeBtn.classList.remove('saving');
+                shiftSelector.classList.add('disabled');
+                historyControls.classList.add('disabled');
+                
+                // 선택 해제
+                clearSelection();
+            }
+        }
+
+        // 근무표 변경사항 저장
+        async function saveRosterChanges() {
+            if (!editedRosterData || !generatedRosterData) {
+                alert('저장할 근무표 데이터가 없습니다.');
+                return;
+            }
+
+            const editModeBtn = document.getElementById('edit-mode-btn');
+            const originalText = editModeBtn.textContent;
+            editModeBtn.disabled = true;
+            editModeBtn.textContent = '저장 중...';
+
+            try {
+                const response = await fetch('/api/roster/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        year: generatedRosterData.year,
+                        month: generatedRosterData.month,
+                        roster: editedRosterData
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '저장에 실패했습니다.');
+                }
+
+                alert('변경사항이 성공적으로 저장되었습니다.');
+                
+                // 편집 모드 비활성화
+                setEditMode(false);
+
+            } catch (error) {
+                console.error('저장 실패:', error);
+                alert(`저장 실패: ${error.message}`);
+            } finally {
+                editModeBtn.disabled = false;
+                editModeBtn.textContent = originalText;
             }
         }
 
@@ -1879,7 +2036,7 @@
         }
 
         function undoChange() {
-            if (historyIndex < 0) return;
+            if (historyIndex < 0 || !isEditMode) return; // 편집 모드가 아니면 되돌리기 불가
             
             const change = changeHistory[historyIndex];
             applyChange(change.nurseIndex, change.dayIndex, change.oldShift);
@@ -1891,7 +2048,7 @@
         }
 
         function redoChange() {
-            if (historyIndex >= changeHistory.length - 1) return;
+            if (historyIndex >= changeHistory.length - 1 || !isEditMode) return; // 편집 모드가 아니면 다시하기 불가
             
             historyIndex++;
             const change = changeHistory[historyIndex];
