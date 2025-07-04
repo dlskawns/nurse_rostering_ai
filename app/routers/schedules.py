@@ -101,18 +101,18 @@ async def request_schedule(
     db.commit()
     db.refresh(new_schedule)
 
-    # Check and add default shifts if they don't exist
-    default_shifts = [
-        {'shift_id': 'D', 'name': 'Day', 'color': '#87CEEB'},
-        {'shift_id': 'E', 'name': 'Evening', 'color': '#FFDAB9'},
-        {'shift_id': 'N', 'name': 'Night', 'color': '#6A5ACD'},
-        {'shift_id': 'O', 'name': 'Off', 'color': '#F5F5F5'},
-    ]
-    for shift_data in default_shifts:
-        exists = db.query(Shift).filter(Shift.shift_id == shift_data['shift_id']).first()
-        if not exists:
-            db.add(Shift(**shift_data))
-    db.commit()
+    # # Check and add default shifts if they don't exist
+    # default_shifts = [
+    #     {'shift_id': 'D', 'name': 'Day', 'color': '#87CEEB'},
+    #     {'shift_id': 'E', 'name': 'Evening', 'color': '#FFDAB9'},
+    #     {'shift_id': 'N', 'name': 'Night', 'color': '#6A5ACD'},
+    #     {'shift_id': 'O', 'name': 'Off', 'color': '#F5F5F5'},
+    # ]
+    # for shift_data in default_shifts:
+    #     exists = db.query(Shift).filter(Shift.shift_id == shift_data['shift_id']).first()
+    #     if not exists:
+    #         db.add(Shift(**shift_data))
+    # db.commit()
 
     return new_schedule
 
@@ -468,6 +468,55 @@ async def get_latest_preference(
         "submitted_at": None
     }
 
+# [Preferences] - 모든 간호사의 희망사항 현황 조회
+@router.get("/preferences/all")
+async def get_all_preferences(
+    year: int, 
+    month: int,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # 해당 그룹의 모든 간호사의 최신 제출된 선호도 조회
+    preferences = db.query(ShiftPreference).filter(
+        ShiftPreference.year == year,
+        ShiftPreference.month == month,
+        ShiftPreference.is_submitted == True
+    ).join(Nurse, ShiftPreference.nurse_id == Nurse.nurse_id).filter(
+        Nurse.group_id == current_user.group_id
+    ).order_by(ShiftPreference.submitted_at.desc()).all()
+    
+    # 간호사별로 가장 최신 제출 데이터만 유지
+    latest_prefs = {}
+    for pref in preferences:
+        if pref.nurse_id not in latest_prefs:
+            latest_prefs[pref.nurse_id] = pref
+    
+    return list(latest_prefs.values())
+
+# [Shifts] - 모든 시프트 정보 조회
+@router.get("/shifts")
+async def get_shifts(
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # 모든 시프트 정보 조회
+    shifts = db.query(Shift).all()
+    
+    return [
+        {
+            "shift_id": shift.shift_id,
+            "name": shift.name,
+            "color": shift.color
+        }
+        for shift in shifts
+    ]
+
 # [Roster] - 근무표 생성
 @router.post("/roster/generate")
 async def generate_roster_endpoint(
@@ -478,18 +527,18 @@ async def generate_roster_endpoint(
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    # Ensure default shifts exist to prevent foreign key errors
-    default_shifts = [
-        {'shift_id': 'D', 'name': 'Day', 'color': '#87CEEB'},
-        {'shift_id': 'E', 'name': 'Evening', 'color': '#FFDAB9'},
-        {'shift_id': 'N', 'name': 'Night', 'color': '#6A5ACD'},
-        {'shift_id': 'O', 'name': 'Off', 'color': '#F5F5F5'},
-    ]
-    for shift_data in default_shifts:
-        exists = db.query(Shift).filter(Shift.shift_id == shift_data['shift_id']).first()
-        if not exists:
-            db.add(Shift(**shift_data))
-    db.commit()
+    # # Ensure default shifts exist to prevent foreign key errors
+    # default_shifts = [
+    #     {'shift_id': 'D', 'name': 'Day', 'color': '#87CEEB'},
+    #     {'shift_id': 'E', 'name': 'Evening', 'color': '#FFDAB9'},
+    #     {'shift_id': 'N', 'name': 'Night', 'color': '#6A5ACD'},
+    #     {'shift_id': 'O', 'name': 'Off', 'color': '#F5F5F5'},
+    # ]
+    # for shift_data in default_shifts:
+    #     exists = db.query(Shift).filter(Shift.shift_id == shift_data['shift_id']).first()
+    #     if not exists:
+    #         db.add(Shift(**shift_data))
+    # db.commit()
 
     # 0. Check if wanted request exists for this month
     wanted = db.query(Wanted).filter(

@@ -257,6 +257,36 @@
             transform: translateY(-1px);
             box-shadow: 0 3px 8px rgba(0,123,255,0.3);
         }
+        
+        /* 정사각형 축소 버튼 스타일 */
+        .shift-buttons-container {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            max-width: 300px;
+        }
+        .shift-button.compact {
+            padding: 8px;
+            min-width: 32px;
+            width: 32px;
+            height: 32px;
+            font-size: 10px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .shift-button.compact:hover {
+            transform: scale(1.05);
+        }
+        .shift-button.compact.selected {
+            transform: scale(1.05);
+        }
+        
         .clear-selection-btn {
             padding: 4px 6px;
             background: #dc3545;
@@ -1028,10 +1058,9 @@
                         <!-- 근무표 편집 컨트롤들 - 개선된 디자인 -->
                         <div class="shift-selector" id="shift-selector" style="display: none;">
                             <div class="shift-selector-title">근무 코드</div>
-                            <div class="shift-button shift-D" data-shift="D">D</div>
-                            <div class="shift-button shift-E" data-shift="E">E</div>
-                            <div class="shift-button shift-N" data-shift="N">N</div>
-                            <div class="shift-button shift-O" data-shift="O">O</div>
+                            <div class="shift-buttons-container" id="shift-buttons-container">
+                                <!-- 동적으로 생성되는 shift 버튼들 -->
+                            </div>
                             <div class="edit-controls">
                                 <button class="clear-selection-btn" onclick="clearSelection()">✕ 해제</button>
                                 <button class="edit-mode-btn" id="edit-mode-btn" onclick="toggleEditMode()">수정하기</button>
@@ -1137,6 +1166,9 @@
         
         async function initializePage() {
             await fetchNursesForRoster();
+            
+            // Shift 버튼들을 미리 로드
+            await loadShiftButtons();
             
             // Try to load the latest schedule first
             const latestSchedule = await fetchLatestSchedule();
@@ -2037,6 +2069,9 @@
                 historyControls.style.display = 'flex';
                 rosterOutputSection.style.display = 'block';
                 
+                // Shift 버튼들을 동적으로 로드
+                loadShiftButtons();
+                
                 // 기본적으로 편집 비활성화 상태로 시작
                 setEditMode(false);
                 
@@ -2687,6 +2722,71 @@
                 saveBtn.disabled = false;
                 saveBtn.textContent = originalText;
             }
+        }
+
+        // Shifts 데이터를 가져와서 동적으로 shift 버튼 생성
+        async function loadShiftButtons() {
+            try {
+                const response = await fetch('/api/shifts');
+                if (!response.ok) {
+                    throw new Error('Shifts 데이터를 가져올 수 없습니다.');
+                }
+                const shifts = await response.json();
+                renderShiftButtons(shifts);
+            } catch (error) {
+                console.error('Shift 버튼 로딩 실패:', error);
+                // 기본 shifts로 fallback
+                const defaultShifts = [
+                    {shift_id: 'D', name: 'Day', color: '#4FC3F7'},
+                    {shift_id: 'E', name: 'Evening', color: '#FFB74D'},
+                    {shift_id: 'N', name: 'Night', color: '#9575CD'},
+                    {shift_id: 'O', name: 'Off', color: '#E0E0E0'}
+                ];
+                renderShiftButtons(defaultShifts);
+            }
+        }
+
+        // Shift 버튼들을 동적으로 생성
+        function renderShiftButtons(shifts) {
+            const container = document.getElementById('shift-buttons-container');
+            container.innerHTML = '';
+
+            shifts.forEach(shift => {
+                const button = document.createElement('div');
+                button.className = `shift-button compact shift-${shift.shift_id}`;
+                button.dataset.shift = shift.shift_id;
+                button.textContent = shift.shift_id;
+                button.title = shift.name;
+                button.style.backgroundColor = shift.color;
+                
+                // 텍스트 색상 자동 조정 (배경색에 따라)
+                const bgColor = shift.color;
+                const isLight = isLightColor(bgColor);
+                button.style.color = isLight ? '#333' : '#fff';
+                
+                button.addEventListener('click', function() {
+                    // 이전 선택 해제
+                    document.querySelectorAll('.shift-button').forEach(btn => btn.classList.remove('selected'));
+                    // 현재 버튼 선택
+                    this.classList.add('selected');
+                    selectedShift = this.dataset.shift;
+                });
+
+                container.appendChild(button);
+            });
+        }
+
+        // 색상이 밝은지 어두운지 판단하는 함수
+        function isLightColor(color) {
+            // hex 색상을 RGB로 변환
+            const hex = color.replace('#', '');
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            
+            // 명도 계산 (0-255)
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            return brightness > 128;
         }
     </script>
 </body>
