@@ -65,10 +65,10 @@ class shiftAnalyzerPrompt:
             1. Request Type  (가중치 보정치)
             | Type    | 설명                              | Modifier |
             |-|-|-:|
-            | off     | 강제 OFF (가중치 유지)            | × 1.0 |
-            | shift   | 특정 Shift 지정                   | × 0.9 |
-            | keep    | 주기 요청(매주 같은 요일 등)      | × 0.8 |
-            | pattern | "DD→N" " N 후 OFF" 같은 규칙      | × 0.7 |
+            | off     | 강제 OFF (가중치 유지)            | × 2 |
+            | shift   | 특정 Shift 지정                   | × 1.9 |
+            | keep    | 주기 요청(매주 같은 요일 등)      | × 1.8 |
+            | pattern | "DD→N" " N 후 OFF" 같은 규칙      | × 1.7 |
             | other   | 정책외 항목 (가중치 계산 안함)     | – |
 
             2. Request Importance  (기본 가중치)

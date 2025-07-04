@@ -466,6 +466,227 @@
             0%, 100% { opacity: 0.6; }
             50% { opacity: 1; }
         }
+        
+        /* 탭 네비게이션 스타일 */
+        .tab-container {
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tab-navigation {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+            background: white;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .tab-button {
+            flex: 1;
+            padding: 15px 20px;
+            background: #f5f5f5;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s ease;
+            border-radius: 8px 8px 0 0;
+            position: relative;
+        }
+        
+        .tab-button:first-child {
+            border-right: 1px solid #e0e0e0;
+        }
+        
+        .tab-button.active {
+            background: #007bff;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,123,255,0.3);
+        }
+        
+        .tab-button:hover:not(.active) {
+            background: #e9ecef;
+            color: #495057;
+        }
+        
+        .tab-content {
+            display: flex;
+            width: 200%;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .tab-pane {
+            width: 50%;
+            flex-shrink: 0;
+            padding: 0 10px;
+        }
+        
+        .tab-content.slide-to-second {
+            transform: translateX(-50%);
+        }
+        
+        /* 희망 근무 현황 테이블 스타일 */
+        .wish-status-container {
+            display: block;
+            width: 100%;
+            min-height: calc(100vh - 200px);
+        }
+        
+        .wish-table-container {
+            width: 100%;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            overflow: hidden;
+            min-height: calc(100vh - 250px);
+        }
+        
+        .wish-table-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .wish-table-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #495057;
+            margin: 0;
+        }
+        
+        .wish-legend {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+        }
+        
+        .wish-table-wrapper {
+            height: calc(100vh - 320px);
+            overflow: auto;
+            padding: 20px;
+        }
+        
+        .wish-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            min-width: 800px;
+        }
+        
+        .wish-table th {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px 8px;
+            text-align: center;
+            font-weight: 600;
+            color: #495057;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            min-width: 35px;
+        }
+        
+        .wish-table th:first-child {
+            width: 120px;
+            min-width: 120px;
+            left: 0;
+            z-index: 11;
+            text-align: left;
+            padding-left: 15px;
+        }
+        
+        .wish-table td {
+            border: 1px solid #dee2e6;
+            padding: 0;
+            text-align: center;
+            height: 40px;
+            min-width: 35px;
+            position: relative;
+            background: black;
+        }
+        
+        .wish-table td:first-child {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            font-weight: 500;
+            color: #495057;
+            width: 120px;
+            min-width: 120px;
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            text-align: left;
+            white-space: nowrap;
+        }
+        
+        .wish-cell {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: black;
+        }
+
+        .shift-marker {
+            width: 12px;
+            height: 12px;
+            margin: 1px;
+            border-radius: 2px;
+            position: relative;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .shift-marker.diagonal {
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 2px,
+                rgba(255,255,255,0.2) 2px,
+                rgba(255,255,255,0.2) 4px
+            );
+        }
+
+        /* 시프트 컬러 정의 */
+        .shift-D { background-color: #87CEEB; }
+        .shift-E { background-color: #DDA0DD; }
+        .shift-N { background-color: #4169E1; }
+        .shift-OFF { background-color: #90EE90; }
+        .shift-custom { background-color: #FFB6C1; }
+
+        /* 빈 셀은 검은색 유지 */
+        .wish-cell:empty {
+            background: black;
+        }
+
+        .loading-status {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -494,50 +715,103 @@
                     <!-- Bookmarks will be inserted here -->
                 </div>
                 <div class="main-content">
-                    <div id="nurse-view">
-                        <div class="form-group">
-                            <label for="wanted-input">희망 근무 내용 (Wanted)</label>
-                            <textarea id="wanted-input" placeholder="예: 주말 출근은 최대한 N으로 하고싶어요."></textarea>
+                    <div class="tab-container">
+                        <div class="tab-navigation">
+                            <button class="tab-button active" onclick="switchTab(0)">내 희망사항 작성</button>
+                            <button class="tab-button" onclick="switchTab(1)">전체 희망사항 현황</button>
                         </div>
-                        <button onclick="submitRequest()">근무 희망 초안 저장 및 분석</button>
-                    </div>
-        
-                    <!-- 귀여운 간호사 로딩 화면 -->
-                    <div class="cute-loader" id="cute-loader" style="display: none;">
-                        <div class="nurse-character" id="nurse-character">
-                            <div class="cat-body"></div>
-                            <div class="cat-head">
-                                <div class="cat-ear left"></div>
-                                <div class="cat-ear right"></div>
-                            </div>
-                            <div class="nurse-cap"></div>
-                            <div class="cat-face">
-                                <div class="cat-eyes">
-                                    <div class="cat-eye"></div>
-                                    <div class="cat-eye"></div>
+                        
+                        <div class="tab-content" id="tab-content">
+                            <!-- 첫 번째 탭: 기존 희망사항 작성 -->
+                            <div class="tab-pane">
+                                <div id="nurse-view">
+                                    <div class="form-group">
+                                        <label for="wanted-input">희망 근무 내용 (Wanted)</label>
+                                        <textarea id="wanted-input" placeholder="예: 주말 출근은 최대한 N으로 하고싶어요."></textarea>
+                                    </div>
+                                    <button onclick="submitRequest()">근무 희망 초안 저장 및 분석</button>
                                 </div>
-                                <div class="cat-nose"></div>
-                                <div class="cat-mouth"></div>
+                    
+                                <!-- 귀여운 간호사 로딩 화면 -->
+                                <div class="cute-loader" id="cute-loader" style="display: none;">
+                                    <div class="nurse-character" id="nurse-character">
+                                        <div class="cat-body"></div>
+                                        <div class="cat-head">
+                                            <div class="cat-ear left"></div>
+                                            <div class="cat-ear right"></div>
+                                        </div>
+                                        <div class="nurse-cap"></div>
+                                        <div class="cat-face">
+                                            <div class="cat-eyes">
+                                                <div class="cat-eye"></div>
+                                                <div class="cat-eye"></div>
+                                            </div>
+                                            <div class="cat-nose"></div>
+                                            <div class="cat-mouth"></div>
+                                        </div>
+                                        <div class="cat-whiskers">
+                                            <div class="whisker left-1"></div>
+                                            <div class="whisker left-2"></div>
+                                            <div class="whisker right-1"></div>
+                                            <div class="whisker right-2"></div>
+                                        </div>
+                                        <div class="cat-arms">
+                                            <div class="cat-arm left"></div>
+                                            <div class="cat-arm right"></div>
+                                        </div>
+                                        <div class="cat-tail"></div>
+                                    </div>
+                                    <div class="loading-message" id="loading-message">요청 분석중...</div>
+                                    <div class="loading-subtitle" id="loading-subtitle">열심히 분석하고 있어요! 🔍</div>
+                                </div>
+                    
+                                <div id="result-container" style="display: none; position: relative;">
+                                    <h2>처리 결과</h2>
+                                    <div id="result-display"></div>
+                                </div>
                             </div>
-                            <div class="cat-whiskers">
-                                <div class="whisker left-1"></div>
-                                <div class="whisker left-2"></div>
-                                <div class="whisker right-1"></div>
-                                <div class="whisker right-2"></div>
+                            
+                            <!-- 두 번째 탭: 전체 희망사항 현황 -->
+                            <div class="tab-pane">
+                                <div class="wish-status-container">
+                                    <div class="wish-table-container">
+                                        <div class="wish-table-header">
+                                            <h3 class="wish-table-title" id="wish-table-title">전체 희망사항 현황</h3>
+                                            <div class="wish-legend">
+                                                <div class="legend-item">
+                                                    <div class="legend-color shift-D"></div>
+                                                    <span>Day</span>
+                                                </div>
+                                                <div class="legend-item">
+                                                    <div class="legend-color shift-E"></div>
+                                                    <span>Evening</span>
+                                                </div>
+                                                <div class="legend-item">
+                                                    <div class="legend-color shift-N"></div>
+                                                    <span>Night</span>
+                                                </div>
+                                                <div class="legend-item">
+                                                    <div class="legend-color shift-OFF"></div>
+                                                    <span>OFF</span>
+                                                </div>
+                                                <div class="legend-item">
+                                                    <div class="legend-color shift-custom"></div>
+                                                    <span>기타</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="wish-table-wrapper">
+                                            <div id="wish-table-content">
+                                                <div class="loading-status">
+                                                    월을 선택하면 해당 월의 전체 희망사항 현황을 확인할 수 있습니다.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="cat-arms">
-                                <div class="cat-arm left"></div>
-                                <div class="cat-arm right"></div>
-                            </div>
-                            <div class="cat-tail"></div>
                         </div>
-                        <div class="loading-message" id="loading-message">요청 분석중...</div>
-                        <div class="loading-subtitle" id="loading-subtitle">열심히 분석하고 있어요! 🔍</div>
-                    </div>
-        
-                    <div id="result-container" style="display: none; position: relative;">
-                        <h2>처리 결과</h2>
-                        <div id="result-display"></div>
                     </div>
                 </div>
             </div>
@@ -1090,6 +1364,178 @@
             await fetch('/auth/logout', { method: 'POST' });
             window.location.href = '/login';
         }
+
+        // 탭 전환 기능
+        function switchTab(tabIndex) {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContent = document.getElementById('tab-content');
+            
+            // 탭 버튼 활성화 상태 업데이트
+            tabButtons.forEach((button, index) => {
+                if (index === tabIndex) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
+            });
+            
+            // 탭 내용 슬라이딩
+            if (tabIndex === 0) {
+                tabContent.classList.remove('slide-to-second');
+            } else {
+                tabContent.classList.add('slide-to-second');
+                // 두 번째 탭이 활성화될 때 희망사항 현황 로드
+                if (activeYear && activeMonth) {
+                    loadWishStatus();
+                }
+            }
+        }
+
+        // 희망사항 현황 로드
+        async function loadWishStatus() {
+            if (!activeYear || !activeMonth) {
+                document.getElementById('wish-table-content').innerHTML = 
+                    '<div class="loading-status">월을 선택하면 해당 월의 전체 희망사항 현황을 확인할 수 있습니다.</div>';
+                return;
+            }
+
+            try {
+                // 제목 업데이트
+                document.getElementById('wish-table-title').textContent = 
+                    `${activeYear}년 ${activeMonth}월 전체 희망사항 현황`;
+
+                // 로딩 상태 표시
+                document.getElementById('wish-table-content').innerHTML = 
+                    '<div class="loading-status">희망사항 현황을 불러오는 중...</div>';
+
+                // 희망사항 데이터 로드
+                const wishResponse = await fetch(`/api/preferences/all?year=${activeYear}&month=${activeMonth}`);
+                if (!wishResponse.ok) {
+                    throw new Error('희망사항 데이터를 불러올 수 없습니다.');
+                }
+                const wishData = await wishResponse.json();
+
+                // 테이블 생성
+                renderWishTable(wishData);
+
+            } catch (error) {
+                console.error('희망사항 현황 로드 오류:', error);
+                document.getElementById('wish-table-content').innerHTML = 
+                    `<div class="loading-status" style="color: #dc3545;">오류: ${error.message}</div>`;
+            }
+        }
+
+        // 희망사항 테이블 렌더링
+        function renderWishTable(wishData) {
+            const container = document.getElementById('wish-table-content');
+            
+            if (!wishData || wishData.length === 0) {
+                container.innerHTML = '<div class="loading-status">해당 월에 제출된 희망사항이 없습니다.</div>';
+                return;
+            }
+
+            // 해당 월의 일수 계산
+            const daysInMonth = new Date(activeYear, activeMonth, 0).getDate();
+            
+            // 테이블 헤더 생성
+            let tableHtml = '<table class="wish-table"><thead><tr><th>간호사</th>';
+            for (let day = 1; day <= daysInMonth; day++) {
+                tableHtml += `<th>${day}</th>`;
+            }
+            tableHtml += '</tr></thead><tbody>';
+
+            // 간호사별 희망사항 데이터 정리
+            const nurseWishMap = new Map();
+            wishData.forEach(wish => {
+                if (wish.preference_data && wish.preference_data.shift) {
+                    const nurseName = getNurseNameById(wish.nurse_id);
+                    if (nurseName) {
+                        nurseWishMap.set(wish.nurse_id, {
+                            name: nurseName,
+                            shifts: wish.preference_data.shift
+                        });
+                    }
+                }
+            });
+
+            // 모든 간호사에 대해 행 생성 (희망사항이 없는 간호사도 포함)
+            fullNurseSchema.forEach(nurse => {
+                const nurseData = nurseWishMap.get(nurse.nurse_id);
+                tableHtml += `<tr><td>${nurse.name}<br><small style="color: #6c757d;">${nurse.experience}년차</small></td>`;
+                
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${activeYear}-${String(activeMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    tableHtml += '<td>';
+                    
+                    if (nurseData && nurseData.shifts) {
+                        const cellContent = generateCellContent(nurseData.shifts, dateStr);
+                        tableHtml += cellContent;
+                    } else {
+                        tableHtml += '<div class="wish-cell"></div>';
+                    }
+                    
+                    tableHtml += '</td>';
+                }
+                tableHtml += '</tr>';
+            });
+
+            tableHtml += '</tbody></table>';
+            container.innerHTML = tableHtml;
+        }
+
+        // 간호사 ID로 이름 찾기
+        function getNurseNameById(nurseId) {
+            const nurse = fullNurseSchema.find(n => n.nurse_id === nurseId);
+            return nurse ? nurse.name : null;
+        }
+
+        // 셀 내용 생성 (shift 마커들)
+        function generateCellContent(shifts, dateStr) {
+            let cellHtml = '<div class="wish-cell">';
+            
+            for (const [shiftType, dates] of Object.entries(shifts)) {
+                const dateList = Array.isArray(dates) ? dates : Object.keys(dates);
+                if (dateList.includes(dateStr)) {
+                    const shiftClass = getShiftClass(shiftType);
+                    cellHtml += `<div class="shift-marker ${shiftClass} diagonal" title="${shiftType}"></div>`;
+                }
+            }
+            
+            cellHtml += '</div>';
+            return cellHtml;
+        }
+
+        // shift 타입에 따른 CSS 클래스 반환
+        function getShiftClass(shiftType) {
+            const upperShift = shiftType.toUpperCase();
+            switch(upperShift) {
+                case 'D':
+                case 'DAY':
+                    return 'shift-D';
+                case 'E':
+                case 'EVENING':
+                    return 'shift-E';
+                case 'N':
+                case 'NIGHT':
+                    return 'shift-N';
+                case 'OFF':
+                    return 'shift-OFF';
+                default:
+                    return 'shift-custom';
+            }
+        }
+
+        // switchActiveSchedule 함수 수정 - 탭 상태에 따라 희망사항 현황도 업데이트
+        const originalSwitchActiveSchedule = switchActiveSchedule;
+        switchActiveSchedule = async function(year, month) {
+            await originalSwitchActiveSchedule(year, month);
+            
+            // 현재 두 번째 탭이 활성화되어 있으면 희망사항 현황도 업데이트
+            const secondTabButton = document.querySelectorAll('.tab-button')[1];
+            if (secondTabButton && secondTabButton.classList.contains('active')) {
+                loadWishStatus();
+            }
+        };
     </script>
     <script>
         function toggleNav() {
