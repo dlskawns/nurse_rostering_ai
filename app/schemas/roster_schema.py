@@ -3,8 +3,9 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 class RosterRequest(BaseModel):
-    request: str
+    request: str| List[str]
     schema: List[Dict[str, Any]]
+    case: object | None = None
 
 class RosterResponse(BaseModel):
     response: Any

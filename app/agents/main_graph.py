@@ -15,7 +15,7 @@ def collector(state):
     # print('-------collector-------')
     # print('state', state)
 class ContextAnalyticsState(TypedDict):
-    request: str                         # Query - 유저 input
+    request: str | None                         # Query - 유저 input
     schema: object
     query_shift: List[str]
     query_preference: List[str]
@@ -24,6 +24,9 @@ class ContextAnalyticsState(TypedDict):
     shift_results: Annotated[list, operator.add]
     preference_results: Annotated[list, operator.add]
     model: object
+    case: List[str] | None             # case 예시: {'date': '2025-07-01', 'shift': 'D'}
+    
+    
 
 def GraphGenerate():
     graph = StateGraph(ContextAnalyticsState)

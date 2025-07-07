@@ -120,7 +120,8 @@ async def invoke_graph(request: RosterRequest):
         result = {}
         print('요청', request.request)
         print('스키마', request.schema)
-        response =  await graph_service.invoke(request.request, request.schema)
+        print('케이스', request.case)
+        response =  await graph_service.invoke(request.request, request.schema, request.case)
         print('우라질레이션',  response)
         print('1기여기여기111', response)
         print('\n\n\n\n\n\n응답1:', parse_shift_results(response), '\n\n\n\n\n\n')

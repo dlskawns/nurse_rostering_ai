@@ -106,7 +106,7 @@ async def query_analyzer(state):
     # preference = json_answer['Preference']
     # others = json_answer['Others']
     # print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_others: {others}")
-    
+
     context = state['request']
     query_analyzer_prompt = queryAnalyzerPrompt(context)
     
@@ -139,6 +139,13 @@ async def query_analyzer(state):
     preference = []
     others = []
     
+    if state['case'] != None:
+        for content in state['case']:
+            date = content['date']
+            shift_type = content['shift']
+            shift.append(f"{date}에 {shift_type}을 원하고, 그 이유는 다음과 같습니다: {context}")
+        return {"query_chat": chat, 'query_shift': shift, 'query_preference': preference, 'query_others': others, 'model': models_to_try[0], 'month': month, 'shift': shift}
+
     for i, client in enumerate(models_to_try):
         try:
             print(f"Query Analyzer: {i+1}차 모델 시도 중...")
