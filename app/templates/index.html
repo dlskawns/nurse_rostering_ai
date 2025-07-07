@@ -650,6 +650,34 @@
             background: black;
         }
 
+        /* OFF 희망사항 오버레이 스타일 */
+        .off-request-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(255, 140, 0, 0.8),
+                rgba(255, 140, 0, 0.8) 3px,
+                rgba(255, 165, 0, 0.8) 3px,
+                rgba(255, 165, 0, 0.8) 6px
+            );
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .wish-cell.off-weighted {
+            background: repeating-linear-gradient(
+                45deg,
+                #FF8C00,
+                #FF8C00 3px,
+                #FFA500 3px,
+                #FFA500 6px
+            );
+        }
+
         .shift-marker {
             width: 12px;
             height: 12px;
@@ -675,6 +703,17 @@
         .shift-N { background-color: #4169E1; }
         .shift-OFF { background-color: #90EE90; }
         .shift-custom { background-color: #FFB6C1; }
+
+        /* OFF 희망사항 범례 스타일 */
+        .off-request {
+            background: repeating-linear-gradient(
+                45deg,
+                #FF8C00,
+                #FF8C00 3px,
+                #FFA500 3px,
+                #FFA500 6px
+            );
+        }
 
         /* 빈 셀은 검은색 유지 */
         .wish-cell:empty {
@@ -793,6 +832,10 @@
                                                 <div class="legend-item">
                                                     <div class="legend-color shift-OFF"></div>
                                                     <span>OFF</span>
+                                                </div>
+                                                <div class="legend-item">
+                                                    <div class="legend-color off-request"></div>
+                                                    <span>OFF 희망</span>
                                                 </div>
                                                 <div class="legend-item">
                                                     <div class="legend-color shift-custom"></div>
@@ -1493,7 +1536,20 @@
         function generateCellContent(shifts, dateStr) {
             let cellHtml = '<div class="wish-cell">';
             
+            // OFF 희망사항 확인 및 주황색 빗금 표시
+            let hasOffRequest = false;
+            if (shifts.OFF) {
+                const offDates = Array.isArray(shifts.OFF) ? shifts.OFF : Object.keys(shifts.OFF);
+                if (offDates.includes(dateStr)) {
+                    hasOffRequest = true;
+                    cellHtml += '<div class="off-request-overlay" title="OFF 희망"></div>';
+                }
+            }
+            
+            // 기존 shift 마커들 생성
             for (const [shiftType, dates] of Object.entries(shifts)) {
+                if (shiftType.toUpperCase() === 'OFF') continue; // OFF는 이미 처리됨
+                
                 const dateList = Array.isArray(dates) ? dates : Object.keys(dates);
                 if (dateList.includes(dateStr)) {
                     const shiftClass = getShiftClass(shiftType);
@@ -1558,4 +1614,4 @@
         }
     </script>
 </body>
-</html> 
+</html>
