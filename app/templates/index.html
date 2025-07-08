@@ -992,7 +992,19 @@
             background: #6c757d;
             cursor: not-allowed;
         }
-    </style>
+        /* 주말·공휴일 강조 */
+        .weekend-cell,          /* 데이터 셀 */
+        .weekend-header {       /* 헤더 셀(날짜 번호) */
+        box-shadow: inset 0 0 0 2px #ff4d4d;   /* 빨간 안쪽 테두리 */
+        }
+        /* holiday-cell 정의를 이것으로 교체 */
+        .wish-table td.holiday-cell{
+        border: 2px solid #e74c3c;        /* 빨간 굵은 테두리 */
+        box-sizing: border-box;           /* 내용이 눌리지 않게 */
+        }
+
+</style>
+
 </head>
 <body>
     <div id="mySidebar" class="sidebar">
@@ -1196,7 +1208,7 @@
             </div>
         </div>
     </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/date-holidays@3/dist/umd/date-holidays.min.js"></script>
     <script>
         let fullNurseSchema = [];
         let wantedList = [];
@@ -1208,6 +1220,25 @@
         let calendarData = {}; // {date: {shift: 'D', reason: 'text'}}
         let modalSelectedDate = null;
         let modalSelectedShift = null;
+
+        /* ✅ 새 전역 변수 */
+        let holidayDates = [];          // ISO 문자열 리스트 ["2025-06-06", …]
+
+        /* ✅ 휴일/주말 날짜를 서버에서 받아오는 함수  */
+        async function loadHolidayDates(year, month) {
+                try {
+                    const res = await fetch(`/dates/holidays?year=${year}&month=${month}`);
+                    if (!res.ok) throw new Error('휴일 정보를 가져오지 못했습니다.');
+                    /* 리스트 → Set  (전역) */
+                    holidayDates = new Set(await res.json());       // ⬅️ 이 한 줄
+                    console.log('🟥 holidayDates =', holidayDates);
+                } catch (err) {
+                    console.error(err);
+                    holidayDates = new Set();                       // 실패 시 비워 두기
+                }
+                }
+
+
 
         document.addEventListener('DOMContentLoaded', async () => {
             console.log('DOM 로드 완료, 초기화 시작');
@@ -1845,6 +1876,8 @@
                     throw new Error('희망사항 데이터를 불러올 수 없습니다.');
                 }
                 const wishData = await wishResponse.json();
+                /* ✅ (2) 휴일 데이터 */
+                await loadHolidayDates(activeYear, activeMonth);
                 // 테이블 생성
                 renderWishTable(wishData);
 
@@ -1854,6 +1887,24 @@
                     `<div class="loading-status" style="color: #dc3545;">오류: ${error.message}</div>`;
             }
         }
+/* 공휴일 Set ↩︎  ex) '2025-10-03' */
+function getKoreanHolidays(year) {
+  const hd = new Holidays('KR');           // ISO-3166 KR
+  //   ①  양·음력 모두 포함
+  //   ②  'substitutes': 대체휴일 포함 여부 → default = true
+  const list = hd.getHolidays(year);
+
+  // hd.getHolidays(year) 는
+  //   [{date:'2025-01-01', type:'public', name:'신정', ...}, ...]
+  return new Set(list.map(o => o.date));   // Set<YYYY-MM-DD>
+}
+
+// /* 주말 또는 공휴일 여부 */
+// function isWeekendOrHoliday(dateObj, holidaySet) {
+//   if ([0,6].includes(dateObj.getDay())) return true;             // 토·일
+//   return holidaySet.has(dateObj.toISOString().slice(0,10));      // 공휴일
+// }
+
 
 /* ───────── renderWishTable  ───────── */
 async function renderWishTable() {
@@ -1886,6 +1937,7 @@ async function renderWishTable() {
   });
 
   /* 2) 테이블 뼈대 */
+
   const daysInMonth = new Date(activeYear, activeMonth, 0).getDate();
   let html = '<table class="wish-table"><thead><tr><th>간호사</th>';
   for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
@@ -1901,8 +1953,9 @@ async function renderWishTable() {
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${activeYear}-${String(activeMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const isOff = offDates.includes(dateStr);
-
-      html += `<td>${
+      const isHol  = holidayDates.has(dateStr);         // 🆕 휴일·주말?
+      const cellClass = isHol ? 'holiday-cell' : '';    // 🆕
+      html += `<td class="${cellClass}">${
         isOff
           ? `<div class="wish-cell off-weighted">
                  <div class="shift-marker shift-OFF diagonal" title="OFF"></div>
@@ -2024,7 +2077,8 @@ async function renderWishTable() {
                             const day = parseInt(dateStr);
                             formattedDate = `${activeYear}-${String(activeMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                         }
-                        
+                        console.log('🟡 formattedDate =', formattedDate);
+                        console.log('🟡 shiftType =', shiftType);
                         calendarData[formattedDate] = {
                             shift: shiftType,
                             reason: '기존 데이터에서 로드됨'

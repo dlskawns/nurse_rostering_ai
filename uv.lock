@@ -485,6 +485,18 @@ wheels = [
 ]
 
 [[package]]
+name = "holidays"
+version = "0.76"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b8/07/3328cb584fd0e4ca02c007ad66ae7d4ebb6e34ef3be96d089dbb7cbe884f/holidays-0.76.tar.gz", hash = "sha256:41a35fe7693c0306b95c86e1103d1d3ec7dfa873540c651bbdc35f604056efe8", size = 693054 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e6/b0/de2bdc19367109936d8f321068723d473c825ab53bd7490779b6ad519989/holidays-0.76-py3-none-any.whl", hash = "sha256:c57b1c258b6697832c29b8f09f18ca2f69c3200c0762a5d606efc76127a06595", size = 1124485 },
+]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -941,6 +953,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "fastapi", extra = ["standard"] },
     { name = "google-genai" },
+    { name = "holidays" },
     { name = "langchain-google-genai" },
     { name = "langchain-mcp-adapters" },
     { name = "langchain-openai" },
@@ -963,6 +976,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=45.0.5" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "google-genai", specifier = ">=1.19.0" },
+    { name = "holidays", specifier = ">=0.76" },
     { name = "langchain-google-genai", specifier = ">=2.1.5" },
     { name = "langchain-mcp-adapters", specifier = ">=0.1.7" },
     { name = "langchain-openai", specifier = ">=0.3.27" },
