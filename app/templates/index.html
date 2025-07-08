@@ -1208,7 +1208,6 @@
             </div>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/date-holidays@3/dist/umd/date-holidays.min.js"></script>
     <script>
         let fullNurseSchema = [];
         let wantedList = [];
@@ -1922,7 +1921,7 @@ async function renderWishTable() {
   const offMap = new Map();
   wishDataArr.forEach(w => {
     const shifts = w.data?.shift ?? {};
-    const offRaw  = shifts.OFF;
+    const offRaw  = shifts.O;
     if (!offRaw) return;                               // OFF 요청이 없으면 패스
 
     let list = Array.isArray(offRaw) ? offRaw          // 배열(신규 형식)
@@ -1983,8 +1982,8 @@ async function renderWishTable() {
                 case 'N':
                 case 'NIGHT':
                     return 'shift-N';
-                case 'OFF':
-                    return 'shift-OFF';
+                case 'O':
+                    return 'shift-O';
                 default:
                     return 'shift-custom';
             }
@@ -2030,7 +2029,7 @@ async function renderWishTable() {
                     {shift_id: 'D', name: 'Day', color: '#87CEEB'},
                     {shift_id: 'E', name: 'Evening', color: '#DDA0DD'},
                     {shift_id: 'N', name: 'Night', color: '#4169E1'},
-                    {shift_id: 'OFF', name: 'Off', color: '#90EE90'}
+                    {shift_id: 'O', name: 'Off', color: '#90EE90'}
                 ];
             }
         }

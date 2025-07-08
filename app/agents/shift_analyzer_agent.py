@@ -84,7 +84,7 @@ class shiftAnalyzerPrompt:
             최종 가중치 = Importance Score × Type Modifier
 
             3. 필수 매핑 규칙
-            * 'Day shift' → "D", 'Evening' → "E", 'Night' → "N", 'Off' → "OFF"
+            * 'Day shift' → "D", 'Evening' → "E", 'Night' → "N", 'Off' → "O"
             * weight 범위 : 0 ~ 5 (소수점 허용)
 
             4. 출력 JSON 스키마
@@ -99,7 +99,7 @@ class shiftAnalyzerPrompt:
                 "D"  : {{ "1":2.5, "3":2.5, ... }},
                 "E"  : {{ ... }},
                 "N"  : {{ ... }},
-                "OFF": {{ ... }}
+                "O": {{ ... }}
             }}
             }}
             ```
@@ -123,7 +123,7 @@ class shiftAnalyzerPrompt:
                 "request_type_reason": "특정 날짜 OFF 요청",
                 "request_importance": 3,
                 "request_importance_reason": "자녀 학교행사 → Score 3",
-                "result": {{ "OFF": {{ "12": 3.0 }} }}
+                "result": {{ "O": {{ "12": 3.0 }} }}
                 }}
 
             이 지침을 충실히 따르세요. 추가 설명·주석은 포함하지 마십시오.
@@ -153,7 +153,7 @@ class shiftAnalyzerPrompt:
                 "request_type_reason": "발표회로 인해 OFF를 요청하고 있음",
                 "request_importance": "3",
                 "request_importance_reason": "자녀 학교행사 등에 포함되어 3의 가중치를 선정",
-                "result":{{"shift": "OFF", "date":[12], "score":[3.0]}}}}
+                "result":{{"shift": "O", "date":[12], "score":[3.0]}}}}
 
             """
                 
@@ -231,7 +231,7 @@ async def shift_analyzer(state):
                     # 기본값 설정
                     from types import SimpleNamespace
                     sr = SimpleNamespace()
-                    sr.result = {"shift": "OFF", "date": [], "score": []}
+                    sr.result = {"shift": "O", "date": [], "score": []}
                     break
             else:
                 # 다른 에러는 즉시 백업 모델로 시도
@@ -243,7 +243,7 @@ async def shift_analyzer(state):
                     # 기본값 설정
                     from types import SimpleNamespace
                     sr = SimpleNamespace()
-                    sr.result = {"shift": "OFF", "date": [], "score": []}
+                    sr.result = {"shift": "O", "date": [], "score": []}
                     break
     
     return {"shift_result": [sr.result]}

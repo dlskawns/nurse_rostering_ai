@@ -56,7 +56,7 @@ class queryAnalyzerPrompt:
                 | Day shift | "D" |
                 | Evening   | "E" |
                 | Night     | "N" |
-                | Off/휴무    | "OFF" |
+                | Off/휴무    | "O" |
                 | 날짜 구분     | `M/D`  또는 `M월 D일` 등 모두 허용, 출력은 원문 그대로 보존 |
 
             # CONTEXT:
@@ -68,7 +68,7 @@ class queryAnalyzerPrompt:
                 "Shift": [
                     "5/5은 쉬고 싶고",
                     "5/19는 N,
-                    "5/20은 OFF"
+                    "5/20은 O"
                 ],
                 "Preference": [
                     "정간호사랑은 겹치기 싫어요"
