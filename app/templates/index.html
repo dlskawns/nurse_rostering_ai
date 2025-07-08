@@ -697,6 +697,301 @@
             color: #6c757d;
             font-style: italic;
         }
+        
+        /* 캘린더 스타일 */
+        .calendar-container {
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .calendar-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .calendar-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #495057;
+            margin: 0 0 15px 0;
+        }
+        
+        .shift-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .shift-selector-label {
+            font-weight: 500;
+            margin-right: 10px;
+            align-self: center;
+            color: #495057;
+        }
+        
+        .shift-btn {
+            padding: 6px 12px;
+            border: 2px solid transparent;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            min-width: 40px;
+            font-size: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .shift-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        
+        .shift-btn.selected {
+            border-color: #007bff;
+            background: #007bff;
+            color: white;
+        }
+        
+        .calendar-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        .calendar-table th,
+        .calendar-table td {
+            border: 1px solid #dee2e6;
+            text-align: center;
+            vertical-align: middle;
+            height: 40px;
+            min-width: 40px;
+        }
+        
+        .calendar-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            font-size: 12px;
+        }
+        
+        .calendar-table td {
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        
+        .calendar-table td:hover {
+            background: #e9ecef;
+        }
+        
+        .calendar-table td.other-month {
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .calendar-table td.other-month:hover {
+            background: transparent;
+        }
+        
+        .calendar-date {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+        }
+        
+        .calendar-shift-marker {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            font-size: 8px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .calendar-submit-btn {
+            width: 100%;
+            padding: 10px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        
+        .calendar-submit-btn:hover {
+            background: #218838;
+        }
+        
+        .calendar-submit-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        /* 모달 스타일 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .modal-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #495057;
+            margin: 0;
+        }
+        
+        .modal-body {
+            margin-bottom: 20px;
+        }
+        
+        .modal-shifts {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .modal-shift-btn {
+            padding: 8px 16px;
+            border: 2px solid transparent;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .modal-shift-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        
+        .modal-shift-btn.selected {
+            border-color: #007bff;
+            background: #007bff;
+            color: white;
+        }
+        
+        .reason-section {
+            margin-top: 20px;
+        }
+        
+        .reason-option {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .reason-option input[type="radio"] {
+            margin-right: 8px;
+        }
+        
+        .reason-option label {
+            font-weight: 500;
+            color: #495057;
+            cursor: pointer;
+        }
+        
+        .reason-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            margin-top: 8px;
+            resize: vertical;
+            min-height: 60px;
+        }
+        
+        .reason-input:disabled {
+            background: #e9ecef;
+            cursor: not-allowed;
+        }
+        
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .modal-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+        
+        .modal-btn.cancel {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .modal-btn.cancel:hover {
+            background: #545b62;
+        }
+        
+        .modal-btn.confirm {
+            background: #007bff;
+            color: white;
+        }
+        
+        .modal-btn.confirm:hover {
+            background: #0056b3;
+        }
+        
+        .modal-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -805,6 +1100,10 @@
                                                     <span>OFF</span>
                                                 </div>
                                                 <div class="legend-item">
+                                                    <div class="legend-color off-weighted"></div>
+                                                    <span>OFF 가중</span>
+                                                </div>
+                                                <div class="legend-item">
                                                     <div class="legend-color shift-custom"></div>
                                                     <span>기타</span>
                                                 </div>
@@ -829,6 +1128,72 @@
             <div id="submit-section" class="submit-container" style="display: none;">
                  <button id="final-submit-btn" onclick="finalSubmit()">최종 제출</button>
             </div>
+            
+            <!-- 캘린더 컨테이너 -->
+            <div id="calendar-container" class="calendar-container">
+                <div class="calendar-header">
+                    <h3 id="calendar-title" class="calendar-title">희망 근무 캘린더</h3>
+                    
+                    <!-- 근무 코드 선택기 -->
+                    <div class="shift-selector">
+                        <span class="shift-selector-label">근무 코드:</span>
+                        <div id="shift-buttons-container">
+                            <!-- 동적으로 생성됨 -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 캘린더 테이블 -->
+                <table class="calendar-table">
+                    <thead>
+                        <tr>
+                            <th>일</th>
+                            <th>월</th>
+                            <th>화</th>
+                            <th>수</th>
+                            <th>목</th>
+                            <th>금</th>
+                            <th>토</th>
+                        </tr>
+                    </thead>
+                    <tbody id="calendar-body">
+                        <!-- 동적으로 생성됨 -->
+                    </tbody>
+                </table>
+                
+                <!-- 희망 내용 반영하기 버튼 -->
+                <button id="calendar-submit-btn" class="calendar-submit-btn" onclick="submitCalendarData()">
+                    희망 내용 반영하기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 모달 오버레이 -->
+    <div id="modal-overlay" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title" class="modal-title">날짜 선택</h3>
+            </div>
+            <div class="modal-body">
+                <!-- 근무 코드 선택 -->
+                <div class="modal-shifts" id="modal-shifts">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+                
+                <!-- 사유 선택 -->
+                <div class="reason-section">
+                    <div class="reason-option">
+                        <input type="radio" id="reason-direct" name="reason-type" value="direct" checked>
+                        <label for="reason-direct">사유 직접 입력하기</label>
+                    </div>
+                    <textarea id="reason-input" class="reason-input" placeholder="희망 사유를 입력해주세요..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn cancel" onclick="closeModal()">취소</button>
+                <button id="modal-confirm-btn" class="modal-btn confirm" onclick="confirmModal()">입력</button>
+            </div>
         </div>
     </div>
 
@@ -836,15 +1201,41 @@
         let fullNurseSchema = [];
         let wantedList = [];
         let activeYear, activeMonth;
+        
+        // 캘린더 관련 변수들
+        let availableShifts = [];
+        let selectedShift = null;
+        let calendarData = {}; // {date: {shift: 'D', reason: 'text'}}
+        let modalSelectedDate = null;
+        let modalSelectedShift = null;
 
         document.addEventListener('DOMContentLoaded', async () => {
+            console.log('DOM 로드 완료, 초기화 시작');
+            
             // Setup sidebar and basic listeners
             document.getElementById("mySidebar").style.width = "250px";
             document.getElementById("main").style.marginLeft = "250px";
             document.getElementById('wanted-input').addEventListener('keydown', handleKeydown);
             
-            await fetchNurseSchema();
-            await initializeBookmarks();
+            try {
+                console.log('간호사 스키마 로드 시작');
+                await fetchNurseSchema();
+                console.log('간호사 스키마 로드 완료');
+                
+                // console.log('shifts 데이터 로드 시작');
+                // await loadShifts();
+                // console.log('shifts 데이터 로드 완료');
+                
+                console.log('북마크 초기화 시작');
+                await initializeBookmarks();
+                console.log('북마크 초기화 완료');
+            } catch (error) {
+                console.error('초기화 중 오류 발생:', error);
+                const statusMessage = document.getElementById('status-message');
+                const pageStatusDiv = document.getElementById('page-status');
+                statusMessage.textContent = '초기화 중 오류가 발생했습니다: ' + error.message;
+                pageStatusDiv.style.display = 'flex';
+            }
         });
 
         function handleKeydown(event) {
@@ -860,28 +1251,41 @@
             const bookmarksContainer = document.getElementById('bookmarks-container');
             
             try {
+                console.log('wanted 데이터를 불러오는 중...');
+                
                 // 모든 wanted 데이터를 가져옴
                 const wantedResponse = await fetch('/api/wanted/all');
-                if (!wantedResponse.ok) throw new Error('Wanted 목록을 불러올 수 없습니다.');
+                console.log('Wanted API 응답 상태:', wantedResponse.status, wantedResponse.statusText);
+                
+                if (!wantedResponse.ok) {
+                    const errorText = await wantedResponse.text();
+                    console.error('Wanted API 에러 응답:', errorText);
+                    throw new Error('Wanted 목록을 불러올 수 없습니다: ' + wantedResponse.status);
+                }
+                
                 wantedList = await wantedResponse.json();
+                console.log('불러온 wanted 목록:', wantedList);
 
                 if (wantedList.length === 0) {
+                    console.log('wanted 목록이 비어있음');
                     statusMessage.textContent = 'wanted 작성 요청 전입니다. 수간호사에게 요청해주세요.';
                     pageStatusDiv.style.display = 'flex';
                     bookmarksContainer.innerHTML = '';
                     return;
                 }
 
+                console.log('북마크 렌더링 시작');
                 // 북마크 렌더링
                 pageStatusDiv.style.display = 'none';
                 renderBookmarks();
                 
                 // 첫 번째 wanted 자동 선택
                 if (wantedList.length > 0) {
+                    console.log('첫 번째 스케줄 선택:', wantedList[0]);
                     await switchActiveSchedule(wantedList[0].year, wantedList[0].month);
                 }
             } catch (error) {
-                console.error(error);
+                console.error('initializeBookmarks 오류:', error);
                 statusMessage.textContent = '오류가 발생했습니다: ' + error.message;
                 pageStatusDiv.style.display = 'flex';
             }
@@ -923,6 +1327,15 @@
             });
 
             await checkWantedStatus();
+            
+            // 현재 두 번째 탭이 활성화되어 있으면 희망사항 현황도 업데이트
+            const secondTabButton = document.querySelectorAll('.tab-button')[1];
+            if (secondTabButton && secondTabButton.classList.contains('active')) {
+                loadWishStatus();
+            }
+            
+            // 캘린더 업데이트
+            await updateCalendar();
         }
 
         async function checkWantedStatus() {
@@ -1138,15 +1551,23 @@
 
         async function fetchNurseSchema() {
              try {
+                console.log('간호사 스키마 API 호출 중...');
                 const response = await fetch('/api/nurses');
+                console.log('간호사 API 응답 상태:', response.status, response.statusText);
+                
                  if (!response.ok) {
-                    if (response.status === 401) window.location.href = '/login';
+                    if (response.status === 401) {
+                        console.log('인증 실패, 로그인 페이지로 리다이렉트');
+                        window.location.href = '/login';
+                        return;
+                    }
                     throw new Error('간호사 정보를 불러오는데 실패했습니다.');
                 }
                 fullNurseSchema = await response.json();
+                console.log('불러온 간호사 스키마:', fullNurseSchema);
             } catch(error) {
-                console.error(error);
-                alert(error.message);
+                console.error('fetchNurseSchema 오류:', error);
+                throw error;  // 상위로 오류 전파
             }
         }
 
@@ -1424,7 +1845,6 @@
                     throw new Error('희망사항 데이터를 불러올 수 없습니다.');
                 }
                 const wishData = await wishResponse.json();
-
                 // 테이블 생성
                 renderWishTable(wishData);
 
@@ -1435,85 +1855,67 @@
             }
         }
 
-        // 희망사항 테이블 렌더링
-        function renderWishTable(wishData) {
-            const container = document.getElementById('wish-table-content');
-            
-            if (!wishData || wishData.length === 0) {
-                container.innerHTML = '<div class="loading-status">해당 월에 제출된 희망사항이 없습니다.</div>';
-                return;
-            }
+/* ───────── renderWishTable  ───────── */
+async function renderWishTable() {
+  const container = document.getElementById('wish-table-content');
 
-            // 해당 월의 일수 계산
-            const daysInMonth = new Date(activeYear, activeMonth, 0).getDate();
-            
-            // 테이블 헤더 생성
-            let tableHtml = '<table class="wish-table"><thead><tr><th>간호사</th>';
-            for (let day = 1; day <= daysInMonth; day++) {
-                tableHtml += `<th>${day}</th>`;
-            }
-            tableHtml += '</tr></thead><tbody>';
+  /* 0) 이번 달 전체 wishData를 한 번만 가져오기 */
+  const res = await fetch(`/api/preferences/all?year=${activeYear}&month=${activeMonth}`);
+  if (!res.ok) {
+    container.innerHTML = '<div class="loading-status">희망사항을 불러올 수 없습니다.</div>';
+    return;
+  }
+  const wishDataArr = await res.json();               // [{nurse_id, preference_data:{shift:{...}}}, …]
+  
+  /* 1) nurse_id → OFF-날짜[] 맵 만들기 */
+  const offMap = new Map();
+  wishDataArr.forEach(w => {
+    const shifts = w.data?.shift ?? {};
+    const offRaw  = shifts.OFF;
+    if (!offRaw) return;                               // OFF 요청이 없으면 패스
 
-            // 간호사별 희망사항 데이터 정리
-            const nurseWishMap = new Map();
-            wishData.forEach(wish => {
-                if (wish.preference_data && wish.preference_data.shift) {
-                    const nurseName = getNurseNameById(wish.nurse_id);
-                    if (nurseName) {
-                        nurseWishMap.set(wish.nurse_id, {
-                            name: nurseName,
-                            shifts: wish.preference_data.shift
-                        });
-                    }
-                }
-            });
+    let list = Array.isArray(offRaw) ? offRaw          // 배열(신규 형식)
+                                     : Object.keys(offRaw); // 객체(구 형식)
 
-            // 모든 간호사에 대해 행 생성 (희망사항이 없는 간호사도 포함)
-            fullNurseSchema.forEach(nurse => {
-                const nurseData = nurseWishMap.get(nurse.nurse_id);
-                tableHtml += `<tr><td>${nurse.name}<br><small style="color: #6c757d;">${nurse.experience}년차</small></td>`;
-                
-                for (let day = 1; day <= daysInMonth; day++) {
-                    const dateStr = `${activeYear}-${String(activeMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    tableHtml += '<td>';
-                    
-                    if (nurseData && nurseData.shifts) {
-                        const cellContent = generateCellContent(nurseData.shifts, dateStr);
-                        tableHtml += cellContent;
-                    } else {
-                        tableHtml += '<div class="wish-cell"></div>';
-                    }
-                    
-                    tableHtml += '</td>';
-                }
-                tableHtml += '</tr>';
-            });
+    // ‘10’ 처럼 숫자만 있는 경우를 YYYY-MM-DD 로 보정
+    list = list.map(d => d.includes('-')
+                     ? d
+                     : `${activeYear}-${String(activeMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
 
-            tableHtml += '</tbody></table>';
-            container.innerHTML = tableHtml;
-        }
+    offMap.set(w.nurse_id, list);                      // 예) ['2024-07-10', '2024-07-14']
+  });
 
-        // 간호사 ID로 이름 찾기
-        function getNurseNameById(nurseId) {
-            const nurse = fullNurseSchema.find(n => n.nurse_id === nurseId);
-            return nurse ? nurse.name : null;
-        }
+  /* 2) 테이블 뼈대 */
+  const daysInMonth = new Date(activeYear, activeMonth, 0).getDate();
+  let html = '<table class="wish-table"><thead><tr><th>간호사</th>';
+  for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
+  html += '</tr></thead><tbody>';
 
-        // 셀 내용 생성 (shift 마커들)
-        function generateCellContent(shifts, dateStr) {
-            let cellHtml = '<div class="wish-cell">';
-            
-            for (const [shiftType, dates] of Object.entries(shifts)) {
-                const dateList = Array.isArray(dates) ? dates : Object.keys(dates);
-                if (dateList.includes(dateStr)) {
-                    const shiftClass = getShiftClass(shiftType);
-                    cellHtml += `<div class="shift-marker ${shiftClass} diagonal" title="${shiftType}"></div>`;
-                }
-            }
-            
-            cellHtml += '</div>';
-            return cellHtml;
-        }
+  /* 3) 간호사 행 */
+  fullNurseSchema.forEach(nurse => {
+    const offDates = offMap.get(nurse.nurse_id) || []; // 없으면 빈 배열
+
+    html += `<tr>
+               <td>${nurse.name}<br><small style="color:#6c757d;">${nurse.experience}년차</small></td>`;
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${activeYear}-${String(activeMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isOff = offDates.includes(dateStr);
+
+      html += `<td>${
+        isOff
+          ? `<div class="wish-cell off-weighted">
+                 <div class="shift-marker shift-OFF diagonal" title="OFF"></div>
+             </div>`
+          : '<div class="wish-cell"></div>'
+      }</td>`;
+    }
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
 
         // shift 타입에 따른 CSS 클래스 반환
         function getShiftClass(shiftType) {
@@ -1535,17 +1937,434 @@
             }
         }
 
-        // switchActiveSchedule 함수 수정 - 탭 상태에 따라 희망사항 현황도 업데이트
-        const originalSwitchActiveSchedule = switchActiveSchedule;
-        switchActiveSchedule = async function(year, month) {
-            await originalSwitchActiveSchedule(year, month);
-            
-            // 현재 두 번째 탭이 활성화되어 있으면 희망사항 현황도 업데이트
-            const secondTabButton = document.querySelectorAll('.tab-button')[1];
-            if (secondTabButton && secondTabButton.classList.contains('active')) {
-                loadWishStatus();
+
+        
+        // 캘린더 업데이트
+        async function updateCalendar() {
+            if (!activeYear || !activeMonth) {
+                document.getElementById('calendar-container').style.display = 'none';
+                return;
             }
-        };
+            
+            // shifts 데이터 먼저 로드
+            await loadShifts();
+            
+            // 캘린더 항상 표시하도록 변경 (기존 조건 제거)
+            try {
+                await loadCalendarData();
+                renderShiftSelector();
+                renderCalendar();
+                document.getElementById('calendar-container').style.display = 'block';
+            } catch (error) {
+                console.error('캘린더 업데이트 오류:', error);
+                document.getElementById('calendar-container').style.display = 'none';
+            }
+        }
+        
+        // Shifts 데이터 로드 함수 추가
+        async function loadShifts() {
+            try {
+                const response = await fetch('/api/shifts');
+                if (!response.ok) {
+                    throw new Error('Shifts 데이터를 가져올 수 없습니다.');
+                }
+                availableShifts = await response.json();
+                console.log('로드된 shifts:', availableShifts);
+            } catch (error) {
+                console.error('Shifts 로딩 실패:', error);
+                // 기본 shifts로 fallback
+                availableShifts = [
+                    {shift_id: 'D', name: 'Day', color: '#87CEEB'},
+                    {shift_id: 'E', name: 'Evening', color: '#DDA0DD'},
+                    {shift_id: 'N', name: 'Night', color: '#4169E1'},
+                    {shift_id: 'OFF', name: 'Off', color: '#90EE90'}
+                ];
+            }
+        }
+        
+        // 캘린더 초기화
+        async function initializeCalendar() {
+            // loadShifts는 updateCalendar에서 이미 호출되므로 중복 제거
+            console.log('캘린더 초기화 시작');
+            await loadCalendarData();
+            renderShiftSelector();
+            renderCalendar();
+            console.log('캘린더 초기화 완료');
+        }
+        
+        // 기존 선호도 데이터를 캘린더 데이터로 변환
+        async function loadCalendarData() {
+            calendarData = {};
+            
+            try {
+                const response = await fetch(`/api/preferences/latest?year=${activeYear}&month=${activeMonth}`);
+                if (!response.ok) {
+                    console.log('선호도 데이터가 없습니다.');
+                    return;
+                }
+                
+                const data = await response.json();
+                if (!data.preference_data || !data.preference_data.shift) {
+                    console.log('shift 데이터가 없습니다.');
+                    return;
+                }
+                
+                // 기존 shift 데이터를 캘린더 형식으로 변환
+                const shifts = data.preference_data.shift;
+                for (const [shiftType, dates] of Object.entries(shifts)) {
+                    const dateList = Array.isArray(dates) ? dates : Object.keys(dates);
+                    for (const dateStr of dateList) {
+                        // 날짜 형식 처리 개선
+                        let formattedDate;
+                        if (dateStr.includes('-')) {
+                            // 이미 YYYY-MM-DD 형식인 경우
+                            formattedDate = dateStr;
+                        } else {
+                            // 단순 일자인 경우 (예: "15")
+                            const day = parseInt(dateStr);
+                            formattedDate = `${activeYear}-${String(activeMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        }
+                        
+                        calendarData[formattedDate] = {
+                            shift: shiftType,
+                            reason: '기존 데이터에서 로드됨'
+                        };
+                    }
+                }
+                console.log('로드된 캘린더 데이터:', calendarData);
+            } catch (error) {
+                console.error('캘린더 데이터 로드 오류:', error);
+            }
+        }
+        
+        // Shift 선택기 렌더링
+        function renderShiftSelector() {
+            const container = document.getElementById('shift-buttons-container');
+            container.innerHTML = '';
+            
+            availableShifts.forEach(shift => {
+                const btn = document.createElement('button');
+                btn.className = 'shift-btn';
+                btn.textContent = shift.shift_id;
+                btn.style.background = shift.color;
+                btn.style.color = isLightColor(shift.color) ? '#000' : '#fff';
+                btn.onclick = () => selectShift(shift.shift_id);
+                
+                if (selectedShift === shift.shift_id) {
+                    btn.classList.add('selected');
+                }
+                
+                container.appendChild(btn);
+            });
+        }
+        
+        // 색상이 밝은지 판단
+        function isLightColor(color) {
+            const rgb = parseInt(color.slice(1), 16);
+            const r = (rgb >> 16) & 0xff;
+            const g = (rgb >>  8) & 0xff;
+            const b = (rgb >>  0) & 0xff;
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            return brightness > 155;
+        }
+        
+        // Shift 선택
+        function selectShift(shiftId) {
+            selectedShift = shiftId;
+            renderShiftSelector(); // 버튼 상태 업데이트
+        }
+        
+        // 캘린더 렌더링
+        function renderCalendar() {
+            const title = document.getElementById('calendar-title');
+            const tbody = document.getElementById('calendar-body');
+            
+            title.textContent = `${activeYear}년 ${activeMonth}월 희망 근무 캘린더`;
+            tbody.innerHTML = '';
+            
+            const firstDay = new Date(activeYear, activeMonth - 1, 1);
+            const lastDay = new Date(activeYear, activeMonth, 0);
+            const daysInMonth = lastDay.getDate();
+            const startDay = firstDay.getDay();
+            
+            let week = [];
+            let currentWeek = document.createElement('tr');
+            
+            // 이전 달 날짜들로 첫 주 채우기
+            for (let i = 0; i < startDay; i++) {
+                const td = document.createElement('td');
+                td.className = 'other-month';
+                const prevDate = new Date(firstDay);
+                prevDate.setDate(prevDate.getDate() - (startDay - i));
+                td.innerHTML = `<div class="calendar-date">${prevDate.getDate()}</div>`;
+                currentWeek.appendChild(td);
+            }
+            
+            // 현재 달 날짜들
+            for (let day = 1; day <= daysInMonth; day++) {
+                const td = document.createElement('td');
+                const dateStr = `${activeYear}-${String(activeMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                td.innerHTML = `<div class="calendar-date">${day}</div>`;
+                td.onclick = () => openModal(dateStr, day);
+                
+                // 기존 데이터가 있으면 표시
+                if (calendarData[dateStr]) {
+                    const shift = availableShifts.find(s => s.shift_id === calendarData[dateStr].shift);
+                    if (shift) {
+                        const marker = document.createElement('div');
+                        marker.className = 'calendar-shift-marker';
+                        marker.textContent = shift.shift_id;
+                        marker.style.background = shift.color;
+                        marker.style.color = isLightColor(shift.color) ? '#000' : '#fff';
+                        marker.title = calendarData[dateStr].reason;
+                        td.querySelector('.calendar-date').appendChild(marker);
+                    }
+                }
+                
+                currentWeek.appendChild(td);
+                
+                // 주 완성시 테이블에 추가
+                if (currentWeek.children.length === 7) {
+                    tbody.appendChild(currentWeek);
+                    currentWeek = document.createElement('tr');
+                }
+            }
+            
+            // 다음 달 날짜들로 마지막 주 채우기
+            const remainingCells = 7 - currentWeek.children.length;
+            for (let i = 1; i <= remainingCells; i++) {
+                const td = document.createElement('td');
+                td.className = 'other-month';
+                td.innerHTML = `<div class="calendar-date">${i}</div>`;
+                currentWeek.appendChild(td);
+            }
+            
+            if (currentWeek.children.length > 0) {
+                tbody.appendChild(currentWeek);
+            }
+        }
+        
+        // 모달 열기
+        function openModal(dateStr, day) {
+            modalSelectedDate = dateStr;
+            modalSelectedShift = null;
+            
+            document.getElementById('modal-title').textContent = `${activeYear}년 ${activeMonth}월 ${day}일`;
+            
+            // 모달 shift 버튼들 렌더링
+            renderModalShifts();
+            
+            // 기존 데이터가 있으면 설정
+            if (calendarData[dateStr]) {
+                modalSelectedShift = calendarData[dateStr].shift;
+                document.getElementById('reason-input').value = calendarData[dateStr].reason || '';
+                renderModalShifts(); // 선택 상태 업데이트
+            } else {
+                document.getElementById('reason-input').value = '';
+            }
+            
+            document.getElementById('modal-overlay').style.display = 'flex';
+        }
+        
+        // 모달 shift 버튼들 렌더링
+        function renderModalShifts() {
+            const container = document.getElementById('modal-shifts');
+            container.innerHTML = '';
+            
+            availableShifts.forEach(shift => {
+                const btn = document.createElement('button');
+                btn.className = 'modal-shift-btn';
+                btn.textContent = shift.name;
+                btn.style.background = shift.color;
+                btn.style.color = isLightColor(shift.color) ? '#000' : '#fff';
+                btn.onclick = () => selectModalShift(shift.shift_id);
+                
+                if (modalSelectedShift === shift.shift_id) {
+                    btn.classList.add('selected');
+                }
+                
+                container.appendChild(btn);
+            });
+        }
+        
+        // 모달에서 shift 선택
+        function selectModalShift(shiftId) {
+            modalSelectedShift = shiftId;
+            renderModalShifts(); // 버튼 상태 업데이트
+        }
+        
+        // 모달 닫기
+        function closeModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            modalSelectedDate = null;
+            modalSelectedShift = null;
+        }
+        
+        // 모달 확인
+        function confirmModal() {
+            if (!modalSelectedShift) {
+                alert('근무 코드를 선택해주세요.');
+                return;
+            }
+            
+            const reason = document.getElementById('reason-input').value.trim();
+            if (!reason) {
+                alert('사유를 입력해주세요.');
+                return;
+            }
+            
+            // 캘린더 데이터에 저장
+            calendarData[modalSelectedDate] = {
+                shift: modalSelectedShift,
+                reason: reason
+            };
+            
+            // 캘린더 다시 렌더링
+            renderCalendar();
+            
+            // 모달 닫기
+            closeModal();
+        }
+        
+        // 캘린더 데이터 제출
+        async function submitCalendarData() {
+            if (Object.keys(calendarData).length === 0) {
+                alert('선택된 날짜가 없습니다.');
+                return;
+            }
+            
+            // case와 request 배열 구성
+            const cases = [];
+            const requests = [];
+            
+            for (const [dateStr, data] of Object.entries(calendarData)) {
+                const date = new Date(dateStr);
+                const day = date.getDate();
+                
+                cases.push({
+                    date: dateStr,
+                    shift: data.shift
+                });
+                
+                requests.push(`${day}일은 ${data.shift}를 원하며 이유는 ${data.reason}입니다`);
+            }
+            
+            // 전체 요청 텍스트 구성
+            // const fullRequest = requests.join('. ');
+            const fullRequest = requests;
+            
+            // submitRequest와 유사한 로직으로 처리
+            const loader = document.getElementById('cute-loader');
+            const resultContainer = document.getElementById('result-container');
+            const nurseCharacter = document.getElementById('nurse-character');
+            const loadingMessage = document.getElementById('loading-message');
+            const loadingSubtitle = document.getElementById('loading-subtitle');
+            
+            const payload = { 
+                request: fullRequest, 
+                schema: fullNurseSchema, 
+                case: cases 
+            };
+            
+            // result-container를 먼저 표시하고 그 안에 로딩 표시
+            resultContainer.style.display = 'block';
+            loader.style.display = 'flex';
+            
+            // 1단계: 요청 분석중... (조사하는 애니메이션)
+            nurseCharacter.className = 'nurse-character investigating';
+            loadingMessage.textContent = '캘린더 데이터 분석중...';
+            loadingSubtitle.textContent = '고양이 간호사가 일정을 정리하고 있어요! 📅';
+            
+            // 돋보기 추가
+            const magnifyingGlass = document.createElement('div');
+            magnifyingGlass.className = 'magnifying-glass';
+            nurseCharacter.appendChild(magnifyingGlass);
+
+            try {
+                // 3초 후 2단계로 전환
+                setTimeout(() => {
+                    // 돋보기 제거
+                    const oldMagnifyingGlass = nurseCharacter.querySelector('.magnifying-glass');
+                    if (oldMagnifyingGlass) {
+                        oldMagnifyingGlass.remove();
+                    }
+                    
+                    // 2단계: 요청 정리중... (문서 정리하는 애니메이션)
+                    nurseCharacter.className = 'nurse-character organizing';
+                    loadingMessage.textContent = '요청 정리중...';
+                    loadingSubtitle.textContent = '고양이 간호사가 깔끔하게 정리하고 있어요! 📋';
+                    
+                    // 서류 추가
+                    const papers = document.createElement('div');
+                    papers.className = 'papers';
+                    papers.innerHTML = '<div class="paper"></div><div class="paper"></div><div class="paper"></div>';
+                    nurseCharacter.appendChild(papers);
+                }, 3000);
+
+                const response = await fetch('/roster/invoke', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'API 요청에 실패했습니다.');
+
+                console.log('activeYear:', activeYear, 'activeMonth:', activeMonth);
+                console.log('API 응답 데이터:', data);
+
+                if (!activeYear || !activeMonth) {
+                    throw new Error('년도와 월 정보가 없습니다. 먼저 스케줄을 선택해주세요.');
+                }
+
+                const preferencePayload = {
+                    year: activeYear,
+                    month: activeMonth,
+                    data: { ...data.response, request: fullRequest }
+                };
+
+                console.log('전송할 데이터:', JSON.stringify(preferencePayload, null, 2));
+
+                const saveResponse = await fetch('/api/preferences', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(preferencePayload)
+                });
+
+                if (!saveResponse.ok) {
+                    const errorData = await saveResponse.json();
+                    console.error('저장 에러:', errorData);
+                    throw new Error(`저장 실패: ${errorData.detail || saveResponse.statusText}`);
+                }
+
+                // 로딩 숨기고 결과 표시
+                loader.style.display = 'none';
+                displayResults(preferencePayload.data);
+                
+                // 텍스트 입력 필드도 업데이트
+                document.getElementById('wanted-input').value = fullRequest;
+                
+                alert('캘린더 데이터가 성공적으로 반영되었습니다.');
+
+            } catch (error) {
+                console.error('Error:', error);
+                loader.style.display = 'none';
+                document.getElementById('result-display').textContent = `오류가 발생했습니다: ${error.message}`;
+                alert('오류가 발생했습니다: ' + error.message);
+            } finally {
+                // 애니메이션 정리
+                setTimeout(() => {
+                    // 모든 추가 요소 제거
+                    const magnifyingGlass = nurseCharacter.querySelector('.magnifying-glass');
+                    const papers = nurseCharacter.querySelector('.papers');
+                    if (magnifyingGlass) magnifyingGlass.remove();
+                    if (papers) papers.remove();
+                    
+                    // 클래스 초기화
+                    nurseCharacter.className = 'nurse-character';
+                }, 500);
+            }
+        }
     </script>
     <script>
         function toggleNav() {

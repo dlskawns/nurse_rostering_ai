@@ -1355,7 +1355,10 @@
                 generateBtn.disabled = false;
             }
         }
-
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
         // wanted 데이터에 따라 마감일 상태를 설정하는 함수
         function setDeadlineStateFromWantedData(wantedData) {
             const noDeadlineCheckbox = document.getElementById('no-deadline-checkbox');
