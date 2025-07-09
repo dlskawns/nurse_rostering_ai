@@ -979,21 +979,45 @@ async def validate_roster(
         # Find violations
         violation_details = system._find_violations()
         
-        # Format violation messages
+        # Format violation messages and extract detailed info
         violation_messages = set()
+        detailed_violations = []
+        
         for v in violation_details:
             if v['type'] == 'shift_requirement':
                 violation_messages.add(f"{v['day']+1}일: {v['shift']} 근무 인원 미달 (필요: {v['required']}, 배정: {v['actual']})")
+                detailed_violations.append({
+                    'type': 'shift_requirement',
+                    'day': v['day'],
+                    'shift': v['shift'],
+                    'required': v['required'],
+                    'actual': v['actual']
+                })
             elif v['type'] == 'consecutive':
                 nurse_name = system.nurses[v['nurse_idx']].name
                 violation_messages.add(f"{nurse_name}: 최대 연속 근무일 초과")
+                detailed_violations.append({
+                    'type': 'consecutive',
+                    'nurse_idx': v['nurse_idx'],
+                    'nurse_name': nurse_name,
+                    'day': v['day']
+                })
             elif v['type'] == 'night':
                 nurse_name = system.nurses[v['nurse_idx']].name
                 violation_messages.add(f"{nurse_name}: 야간 근무 제약 위반")
+                detailed_violations.append({
+                    'type': 'night',
+                    'nurse_idx': v['nurse_idx'],
+                    'nurse_name': nurse_name,
+                    'day': v['day']
+                })
         
         violations = sorted(list(violation_messages))
         
-        return {"violations": violations}
+        return {
+            "violations": violations,
+            "detailed_violations": detailed_violations
+        }
         
     except Exception as e:
         print(f"위반사항 계산 중 오류 발생: {e}")

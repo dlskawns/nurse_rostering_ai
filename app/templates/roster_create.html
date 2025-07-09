@@ -488,6 +488,60 @@
         .shift-N { background-color: #6A5ACD !important; color: white; }
         .shift-O { background-color: #F5F5F5 !important; color: #333; }
         
+        /* 위반사항 시각화 스타일 */
+        .violation-cell {
+            border: 3px solid #dc3545 !important;
+            box-shadow: 0 0 5px rgba(220, 53, 69, 0.5) !important;
+            animation: violation-pulse 2s infinite;
+        }
+        
+        .violation-footer-cell {
+            background-color: #f8d7da !important;
+            border: 2px solid #dc3545 !important;
+            color: #721c24 !important;
+            font-weight: bold !important;
+        }
+        
+        .violation-night-sequence {
+            border: 3px solid #ff6b35 !important;
+            box-shadow: 0 0 5px rgba(255, 107, 53, 0.5) !important;
+        }
+        
+        .monthly-limit-exceeded {
+            background: repeating-linear-gradient(
+                45deg,
+                #ff6b35,
+                #ff6b35 4px,
+                rgba(255, 107, 53, 0.3) 4px,
+                rgba(255, 107, 53, 0.3) 8px
+            ) !important;
+            border: 3px solid #d32f2f !important;
+            box-shadow: 0 0 8px rgba(211, 47, 47, 0.7) !important;
+            animation: monthly-limit-pulse 3s infinite;
+        }
+        
+        @keyframes monthly-limit-pulse {
+            0%, 100% { 
+                border-color: #d32f2f;
+                box-shadow: 0 0 8px rgba(211, 47, 47, 0.7);
+            }
+            50% { 
+                border-color: #ff1744;
+                box-shadow: 0 0 12px rgba(255, 23, 68, 0.9);
+            }
+        }
+        
+        @keyframes violation-pulse {
+            0%, 100% { 
+                border-color: #dc3545;
+                box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
+            }
+            50% { 
+                border-color: #ff1744;
+                box-shadow: 0 0 10px rgba(255, 23, 68, 0.8);
+            }
+        }
+        
         /* 상단 근무 코드 선택기 */
         .shift-selector {
             display: flex;
@@ -1732,10 +1786,11 @@
                         console.log('위반사항 검증 결과:', validateResult.violations);
                         
                         // 위반사항 표시
-                        updateViolationsDisplay(validateResult.violations || []);
+                        updateViolationsDisplay(validateResult.violations || [], validateResult.detailed_violations || []);
                         
                         // generatedRosterData에도 위반사항 정보 업데이트
                         generatedRosterData.violations = validateResult.violations || [];
+                        generatedRosterData.detailed_violations = validateResult.detailed_violations || [];
                     } else {
                         console.warn('위반사항 검증에 실패했습니다.');
                         updateViolationsDisplay([]);
@@ -1839,12 +1894,11 @@
                         console.log('발행된 근무표 위반사항 검증 결과:', validateResult.violations);
                         
                         // 위반사항 표시
-                        updateViolationsDisplay(validateResult.violations || []);
+                        updateViolationsDisplay(validateResult.violations || [], validateResult.detailed_violations || []);
                         
                         // generatedRosterData에도 위반사항 정보 업데이트
-                        if (generatedRosterData) {
-                            generatedRosterData.violations = validateResult.violations || [];
-                        }
+                        generatedRosterData.violations = validateResult.violations || [];
+                        generatedRosterData.detailed_violations = validateResult.detailed_violations || [];
                     } else {
                         console.warn('발행된 근무표 위반사항 검증에 실패했습니다.');
                         updateViolationsDisplay(rosterData.violations || []);
@@ -2325,16 +2379,218 @@
             }
         }
 
-        function updateViolationsDisplay(violations) {
+        function updateViolationsDisplay(violations, detailedViolations = []) {
             const violationsList = document.getElementById('violations-list');
             const violationsCount = document.getElementById('violations-count');
             
             violationsCount.textContent = violations.length;
             
+            // 기존 위반사항 스타일 제거
+            clearViolationStyles();
+            
             if (violations.length === 0) {
                 violationsList.innerHTML = '<li style="color: #28a745;">모든 제약 조건을 충족했습니다! ✓</li>';
             } else {
-                violationsList.innerHTML = violations.map(v => `<li>${v}</li>`).join('');
+                let violationsHtml = violations.map(v => `<li>${v}</li>`).join('');
+                
+                // 시각화 안내 메시지 추가
+                if (detailedViolations && detailedViolations.length > 0) {
+                    violationsHtml += `
+                        <li style="color: #6c757d; font-style: italic; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 8px;">
+                            💡 위반된 셀은 근무표에 <span style="color: #dc3545; font-weight: bold;">빨간색 테두리</span>로 표시됩니다.
+                        </li>`;
+                }
+                
+                violationsList.innerHTML = violationsHtml;
+                
+                // 위반사항 시각화 적용
+                if (detailedViolations && detailedViolations.length > 0) {
+                    applyViolationVisualization(detailedViolations);
+                }
+            }
+        }
+        
+        function clearViolationStyles() {
+            // 모든 위반사항 스타일 클래스 제거
+            document.querySelectorAll('.violation-cell, .violation-footer-cell, .violation-night-sequence, .monthly-limit-exceeded')
+                .forEach(cell => {
+                    cell.classList.remove('violation-cell', 'violation-footer-cell', 'violation-night-sequence', 'monthly-limit-exceeded');
+                });
+        }
+        
+        function applyViolationVisualization(detailedViolations) {
+            console.log('위반사항 시각화 적용:', detailedViolations);
+            
+            detailedViolations.forEach(violation => {
+                if (violation.type === 'shift_requirement') {
+                    // 일별 통계 부분에 인원 미달 표시
+                    highlightShiftRequirementViolation(violation);
+                } else if (violation.type === 'consecutive' || violation.type === 'night') {
+                    // 간호사별 셀에 위반사항 표시
+                    highlightNurseViolation(violation);
+                }
+            });
+        }
+        
+        function highlightShiftRequirementViolation(violation) {
+            const shiftMap = {'D': 0, 'E': 1, 'N': 2, 'O': 3};
+            const shiftIndex = shiftMap[violation.shift];
+            const dayIndex = violation.day + 1; // 1-based indexing for table
+            
+            // tfoot의 해당 shift 행에서 해당 날짜 셀 찾기
+            const footerRows = document.querySelectorAll('tfoot tr');
+            if (footerRows && footerRows[shiftIndex]) {
+                const cells = footerRows[shiftIndex].querySelectorAll('td');
+                if (cells && cells[dayIndex]) {
+                    cells[dayIndex].classList.add('violation-footer-cell');
+                    cells[dayIndex].title = `인원 미달: 필요 ${violation.required}명, 배정 ${violation.actual}명`;
+                }
+            }
+        }
+        
+        function highlightNurseViolation(violation) {
+            const nurseIndex = violation.nurse_idx;
+            const dayIndex = violation.day - 1;
+            
+            // 해당 간호사의 해당 날짜 셀 찾기
+            const cell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${dayIndex}"]`);
+            if (cell) {
+                if (violation.type === 'night') {
+                    cell.classList.add('violation-night-sequence');
+                    cell.title = `야간 근무 제약 위반: ${violation.nurse_name}`;
+                    
+                    // 야간 근무 후 OFF 패턴 위반 시각화
+                    highlightNightShiftViolation(nurseIndex, dayIndex);
+                    
+                    // 월별 야간 근무 한도 초과 체크
+                    highlightMonthlyNightLimit(nurseIndex);
+                    
+                } else if (violation.type === 'consecutive') {
+                    cell.classList.add('violation-cell');
+                    cell.title = `연속 근무일 초과: ${violation.nurse_name}`;
+                    
+                    // 연속 근무 위반의 경우 관련된 이전 날짜들도 표시
+                    highlightConsecutiveWorkDays(nurseIndex, dayIndex);
+                }
+            }
+        }
+        
+        function highlightConsecutiveWorkDays(nurseIndex, violationDay) {
+            // 최대 연속 근무일 수 (기본값 7일로 가정, 실제로는 config에서 가져와야 함)
+            const maxConsecutiveDays = 7;
+            
+            // 위반 날짜 이전의 연속 근무일들 찾기
+            let consecutiveDays = 0;
+            for (let day = violationDay; day >= 0; day--) {
+                const cell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${day}"]`);
+                if (cell && cell.textContent.trim() !== 'O') { // OFF가 아닌 경우
+                    consecutiveDays++;
+                    if (consecutiveDays > maxConsecutiveDays) {
+                        // 초과한 날짜들에 약한 위반 표시
+                        cell.classList.add('violation-cell');
+                    }
+                } else {
+                    break; // 연속이 끊어짐
+                }
+            }
+        }
+        
+        function highlightNightShiftViolation(nurseIndex, violationDay) {
+            // 야간 근무 후 충분한 OFF가 없는 경우를 찾아서 시각화
+            
+            // 전체 스케줄 확인 범위를 넓힘
+            const schedule = editedRosterData[nurseIndex]?.schedule || [];
+            
+            // 3회 연속 야간 근무 후 2회 OFF 패턴 확인
+            for (let day = 0; day < schedule.length - 4; day++) {
+                // 3일 연속 N 패턴 찾기
+                if (schedule[day] === 'N' && schedule[day + 1] === 'N' && schedule[day + 2] === 'N') {
+                    // 3일 연속 야간 근무 후 최소 2일 OFF 확인
+                    let offCount = 0;
+                    let maxCheckDays = Math.min(2, schedule.length - day - 3); // 최대 2일 체크
+                    
+                    for (let checkDay = day + 3; checkDay < day + 3 + maxCheckDays; checkDay++) {
+                        if (schedule[checkDay] === 'O') {
+                            offCount++;
+                        }
+                    }
+                    
+                    // 2일 OFF가 충족되지 않으면 위반 표시
+                    if (offCount < 2) {
+                        // 3일 연속 야간 근무 표시
+                        for (let nightDay = day; nightDay <= day + 2; nightDay++) {
+                            const nightCell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${nightDay}"]`);
+                            if (nightCell) {
+                                nightCell.classList.add('violation-night-sequence');
+                                nightCell.title = `3회 연속 야간 근무 위반: 후 2일 OFF 필요`;
+                            }
+                        }
+                        
+                        // 후속 날짜들 중 OFF가 아닌 날들 표시
+                        for (let checkDay = day + 3; checkDay < day + 5 && checkDay < schedule.length; checkDay++) {
+                            if (schedule[checkDay] !== 'O') {
+                                const violationCell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${checkDay}"]`);
+                                if (violationCell) {
+                                    violationCell.classList.add('violation-night-sequence');
+                                    violationCell.title = `야간 근무 후 OFF 미준수: 3회 연속 N 후 ${offCount}/2일만 OFF`;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 2회 연속 야간 근무 후 OFF 패턴도 확인 (설정에 따라)
+                if (schedule[day] === 'N' && schedule[day + 1] === 'N') {
+                    // 연속 야간 근무 다음날이 OFF가 아닌 경우
+                    if (day + 2 < schedule.length && schedule[day + 2] !== 'O') {
+                        const violationCell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${day + 2}"]`);
+                        if (violationCell) {
+                            violationCell.classList.add('violation-night-sequence');
+                            violationCell.title = `연속 야간 근무 후 휴무 미준수: 2회 연속 N 후 OFF 필요`;
+                        }
+                    }
+                }
+            }
+            
+            // 야간 근무 후 주간 근무 금지 패턴 확인
+            for (let day = 0; day < schedule.length - 1; day++) {
+                if (schedule[day] === 'N' && schedule[day + 1] === 'D') {
+                    const dayCell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${day + 1}"]`);
+                    if (dayCell) {
+                        dayCell.classList.add('violation-night-sequence');
+                        dayCell.title = `야간 근무 후 주간 근무 금지 위반: N 다음날 D 근무 불가`;
+                    }
+                }
+            }
+        }
+
+        // 월별 야간 근무 한도 초과 확인 및 시각화
+        function highlightMonthlyNightLimit(nurseIndex) {
+            const schedule = editedRosterData[nurseIndex]?.schedule || [];
+            const maxNightShifts = 15; // 기본값, 실제로는 config에서 가져와야 함
+            
+            // 월별 총 야간 근무 수 계산
+            let totalNightShifts = 0;
+            schedule.forEach(shift => {
+                if (shift === 'N') {
+                    totalNightShifts++;
+                }
+            });
+            
+            // 한도 초과 시 모든 야간 근무 셀에 특별 표시
+            if (totalNightShifts > maxNightShifts) {
+                schedule.forEach((shift, dayIndex) => {
+                    if (shift === 'N') {
+                        const nightCell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${dayIndex}"]`);
+                        if (nightCell) {
+                            nightCell.classList.add('monthly-limit-exceeded');
+                            nightCell.title = `월별 야간 근무 한도 초과: ${totalNightShifts}/${maxNightShifts}`;
+                            
+                            // 추가 시각적 표시를 위한 특별 클래스
+                            nightCell.classList.add('monthly-limit-exceeded');
+                        }
+                    }
+                });
             }
         }
 
@@ -2363,7 +2619,7 @@
                 
                 if (response.ok) {
                     const result = await response.json();
-                    updateViolationsDisplay(result.violations || []);
+                    updateViolationsDisplay(result.violations || [], result.detailed_violations || []);
                 }
             } catch (error) {
                 console.error('위반사항 검증 실패:', error);
@@ -2592,12 +2848,11 @@
                         console.log('버전별 근무표 위반사항 검증 결과:', validateResult.violations);
                         
                         // 위반사항 표시
-                        updateViolationsDisplay(validateResult.violations || []);
+                        updateViolationsDisplay(validateResult.violations || [], validateResult.detailed_violations || []);
                         
                         // generatedRosterData에도 위반사항 정보 업데이트
-                        if (generatedRosterData) {
-                            generatedRosterData.violations = validateResult.violations || [];
-                        }
+                        generatedRosterData.violations = validateResult.violations || [];
+                        generatedRosterData.detailed_violations = validateResult.detailed_violations || [];
                     } else {
                         console.warn('버전별 근무표 위반사항 검증에 실패했습니다.');
                         updateViolationsDisplay(rosterData.violations || []);
