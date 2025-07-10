@@ -214,6 +214,19 @@
             color: #333;
         }
 
+        .edit-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .edit-btn:hover {
+            background: #218838;
+        }
+
         /* Toggle Switch */
         .toggle-switch {
             position: relative;
@@ -310,6 +323,8 @@
                                     <th>색상</th>
                                     <th>시간 설정</th>
                                     <th>타입</th>
+                                    <th>스케줄 포함</th>
+                                    <th>수정</th>
                                 </tr>
                             </thead>
                             <tbody id="shiftsTableBody">
@@ -492,6 +507,16 @@
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label>스케줄 생성시 포함하기</label>
+                    <div class="control">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="auto_schedule" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="modal-buttons">
                     <button type="button" class="btn-cancel" onclick="closeAddShiftModal()">취소</button>
                     <button type="submit" class="btn-save">저장하기</button>
@@ -541,7 +566,13 @@
                         <td>${shift.name}</td>
                         <td><div class="shift-color-box" style="background-color: ${shift.color}"></div></td>
                         <td>${shift.time_display || '정보 없음'}</td>
-                        <td>${shift.shift_type || '정보 없음'}</td>
+                        <td>${shift.type || '정보 없음'}</td>
+                        <td>${shift.auto_schedule ? '예' : '아니오'}</td>
+                        <td>
+                            <button class="edit-btn" onclick="openEditShiftModal('${shift.shift_id}')">
+                                <i class="fa fa-edit"></i> 수정
+                            </button>
+                        </td>
                     `;
                     tbody.appendChild(row);
                 });
@@ -553,11 +584,72 @@
         // Modal management
         function openAddShiftModal() {
             document.getElementById('addShiftModal').style.display = 'block';
+            document.getElementById('addShiftForm').reset();
+            document.querySelector('#addShiftModal h2').textContent = '근무코드 추가하기';
+            document.querySelector('#addShiftModal .btn-save').textContent = '저장하기';
+        }
+
+        function openEditShiftModal(shiftId) {
+            // Load shift data for editing
+            fetch('/api/shifts')
+                .then(response => response.json())
+                .then(shifts => {
+                    const shift = shifts.find(s => s.shift_id === shiftId);
+                    if (shift) {
+                        // Populate form with existing data
+                        document.getElementById('shiftId').value = shift.shift_id;
+                        document.getElementById('shiftId').readOnly = true; // Can't change shift_id
+                        document.getElementById('shiftName').value = shift.name;
+                        document.getElementById('shiftColor').value = shift.color;
+                        
+                        // Set time type
+                        if (shift.allday) {
+                            document.getElementById('allDay').checked = true;
+                        } else if (shift.duration) {
+                            document.getElementById('customHours').checked = true;
+                            document.getElementById('hours').value = shift.duration;
+                        } else {
+                            document.getElementById('timeRange').checked = true;
+                            document.getElementById('startTime').value = shift.start_time || '09:00';
+                            document.getElementById('endTime').value = shift.end_time || '18:00';
+                        }
+                        
+                        // Set shift type
+                        if (shift.type === 'off') {
+                            document.getElementById('offType').checked = true;
+                        } else {
+                            document.getElementById('workType').checked = true;
+                        }
+                        
+                        // Set auto_schedule
+                        document.querySelector('input[name="auto_schedule"]').checked = shift.auto_schedule === 1;
+                        
+                        // Update modal title and button
+                        document.querySelector('#addShiftModal h2').textContent = '근무코드 수정하기';
+                        document.querySelector('#addShiftModal .btn-save').textContent = '수정하기';
+                        
+                        // Show modal
+                        document.getElementById('addShiftModal').style.display = 'block';
+                        
+                        // Trigger time type change to show correct inputs
+                        const checkedTimeType = document.querySelector('input[name="time_type"]:checked');
+                        if (checkedTimeType) {
+                            checkedTimeType.dispatchEvent(new Event('change'));
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('근무코드 로딩 실패:', error);
+                    alert('근무코드 정보를 불러오는데 실패했습니다.');
+                });
         }
 
         function closeAddShiftModal() {
             document.getElementById('addShiftModal').style.display = 'none';
             document.getElementById('addShiftForm').reset();
+            document.getElementById('shiftId').readOnly = false; // Reset readonly
+            document.querySelector('#addShiftModal h2').textContent = '근무코드 추가하기';
+            document.querySelector('#addShiftModal .btn-save').textContent = '저장하기';
         }
 
         // Handle time type change
@@ -588,10 +680,17 @@
             for (let [key, value] of formData.entries()) {
                 data[key] = value;
             }
+            
+            // Handle auto_schedule checkbox
+            data.auto_schedule = document.querySelector('input[name="auto_schedule"]').checked ? 1 : 0;
+
+            const isEdit = document.getElementById('shiftId').readOnly;
+            const url = isEdit ? '/api/shifts/update' : '/api/shifts/add';
+            const method = 'POST';
 
             try {
-                const response = await fetch('/api/shifts/add', {
-                    method: 'POST',
+                const response = await fetch(url, {
+                    method: method,
                     headers: {
                         'Content-Type': 'application/json'
                     },
@@ -599,16 +698,17 @@
                 });
 
                 if (response.ok) {
-                    alert('근무코드가 추가되었습니다.');
+                    const message = isEdit ? '근무코드가 수정되었습니다.' : '근무코드가 추가되었습니다.';
+                    alert(message);
                     closeAddShiftModal();
                     loadShifts(); // Reload shifts table
                 } else {
                     const error = await response.json();
-                    alert('추가에 실패했습니다: ' + (error.detail || '알 수 없는 오류'));
+                    alert((isEdit ? '수정' : '추가') + '에 실패했습니다: ' + (error.detail || '알 수 없는 오류'));
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('추가에 실패했습니다.');
+                alert((isEdit ? '수정' : '추가') + '에 실패했습니다.');
             }
         });
 

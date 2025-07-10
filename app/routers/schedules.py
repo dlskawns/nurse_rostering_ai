@@ -534,7 +534,6 @@ def _format_time_display(shift):
     elif shift.start_time and shift.end_time:
         return f'{shift.start_time} ~ {shift.end_time}'
     elif shift.type:
-        print(shift.type)
         return shift.type
 
 class ShiftAddRequest(BaseModel):
@@ -593,6 +592,47 @@ async def add_shift(
             "name": new_shift.name,
             "color": new_shift.color,
             "time_display": _format_time_display(new_shift)
+        }
+    }
+
+@router.post("/shifts/update")
+async def update_shift(
+    req: ShiftAddRequest,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # 기존 시프트 찾기
+    existing_shift = db.query(Shift).filter(
+        Shift.shift_id == req.shift_id,
+        Shift.group_id == current_user.group_id
+    ).first()
+    
+    if not existing_shift:
+        raise HTTPException(status_code=404, detail="해당 근무코드를 찾을 수 없습니다.")
+    
+    # 시프트 정보 업데이트
+    existing_shift.name = req.name
+    existing_shift.color = req.color
+    existing_shift.start_time = req.start_time
+    existing_shift.end_time = req.end_time
+    existing_shift.type = req.type
+    existing_shift.duration = req.duration
+    existing_shift.allday = req.allday
+    existing_shift.auto_schedule = req.auto_schedule
+    
+    db.commit()
+    db.refresh(existing_shift)
+    
+    return {
+        "message": "근무코드가 성공적으로 수정되었습니다.",
+        "shift": {
+            "shift_id": existing_shift.shift_id,
+            "name": existing_shift.name,
+            "color": existing_shift.color,
+            "time_display": _format_time_display(existing_shift)
         }
     }
 
