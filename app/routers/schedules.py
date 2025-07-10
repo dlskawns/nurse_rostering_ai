@@ -505,17 +505,96 @@ async def get_shifts(
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # 모든 시프트 정보 조회
-    shifts = db.query(Shift).all()
+    # 현재 사용자의 그룹에 해당하는 시프트 정보 조회
+    shifts = db.query(Shift).filter(Shift.group_id == current_user.group_id).all()
     
     return [
         {
             "shift_id": shift.shift_id,
             "name": shift.name,
-            "color": shift.color
+            "color": shift.color,
+            "start_time": shift.start_time,
+            "end_time": shift.end_time,
+            "type": shift.type,
+            "allday": shift.allday,
+            "auto_schedule": shift.auto_schedule,
+            # "time_type": shift.time_type,
+            "duration": shift.duration,
+            "time_display": _format_time_display(shift)
         }
         for shift in shifts
     ]
+
+def _format_time_display(shift):
+    """근무 시간 정보를 표시용으로 포맷팅"""
+    if shift.allday == 1:
+        return '종일'
+    elif shift.duration:
+        return f'{shift.duration}시간'
+    elif shift.start_time and shift.end_time:
+        return f'{shift.start_time} ~ {shift.end_time}'
+    elif shift.type:
+        print(shift.type)
+        return shift.type
+
+class ShiftAddRequest(BaseModel):
+    shift_id: str
+    name: str
+    color: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    type: str = "work"
+    # time_type: str = "range"
+    duration: Optional[int] = None
+    allday: Optional[int] = 0
+    auto_schedule: Optional[int] = 1
+
+@router.post("/shifts/add")
+async def add_shift(
+    req: ShiftAddRequest,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # 중복 shift_id 체크 (같은 그룹 내에서)
+    existing_shift = db.query(Shift).filter(
+        Shift.shift_id == req.shift_id,
+        Shift.group_id == current_user.group_id
+    ).first()
+    
+    if existing_shift:
+        raise HTTPException(status_code=400, detail="이미 존재하는 근무코드입니다.")
+    
+    # 새 시프트 생성
+    new_shift = Shift(
+        shift_id=req.shift_id,
+        group_id=current_user.group_id,
+        name=req.name,
+        color=req.color,
+        start_time=req.start_time,
+        end_time=req.end_time,
+        type=req.type,
+        # time_type=req.time_type,
+        duration=req.duration,
+        allday=req.allday,
+        auto_schedule=req.auto_schedule
+    )
+    
+    db.add(new_shift)
+    db.commit()
+    db.refresh(new_shift)
+    
+    return {
+        "message": "근무코드가 성공적으로 추가되었습니다.",
+        "shift": {
+            "shift_id": new_shift.shift_id,
+            "name": new_shift.name,
+            "color": new_shift.color,
+            "time_display": _format_time_display(new_shift)
+        }
+    }
 
 # [Roster] - 근무표 생성
 @router.post("/roster/generate")

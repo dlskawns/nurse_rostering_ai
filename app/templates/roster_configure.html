@@ -51,6 +51,169 @@
             align-items: center;
             gap: 15px;
         }
+        
+        /* Tab styles */
+        .tab-container {
+            margin-bottom: 30px;
+        }
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .tab-button {
+            padding: 15px 30px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+        .tab-button.active {
+            color: #2196F3;
+            border-bottom-color: #2196F3;
+        }
+        .tab-button:hover {
+            color: #2196F3;
+            background-color: #f8f9fa;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Shift codes table */
+        .shift-codes-section {
+            background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        .add-shift-btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .add-shift-btn:hover {
+            background: #1976D2;
+        }
+        .shifts-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .shifts-table th,
+        .shifts-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .shifts-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .shift-color-box {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            display: inline-block;
+            border: 1px solid #ddd;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 600px;
+            position: relative;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: black;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .radio-group {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .time-inputs {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .time-inputs input {
+            width: 120px;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 30px;
+        }
+        .modal-buttons button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .btn-save {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-cancel {
+            background: #f5f5f5;
+            color: #333;
+        }
+
         /* Toggle Switch */
         .toggle-switch {
             position: relative;
@@ -123,112 +286,330 @@
     <div id="main">
         <div class="container">
             <h1>근무표 환경설정</h1>
-            <form id="configForm">
-            <div class="config-container">
-                <!-- Shift 설정 -->
-                <section class="config-section">
-                    <h2>Shift 설정</h2>
-                    <div class="config-item">
-                        <span class="label">일별 필수 D 수</span>
-                        <input type="number" name="day_req" value="{{ config.day_req if config else 3 }}">
-                    </div>
-                    <div class="config-item">
-                        <span class="label">일별 필수 E 수</span>
-                        <input type="number" name="eve_req" value="{{ config.eve_req if config else 3 }}">
-                    </div>
-                    <div class="config-item">
-                        <span class="label">일별 필수 N 수</span>
-                        <input type="number" name="nig_req" value="{{ config.nig_req if config else 2 }}">
-                    </div>
-                    <div class="config-item">
-                        <span class="label">Shift 내 책임 최소 경력 (년차)</span>
-                        <input type="number" name="min_exp_per_shift" value="{{ config.min_exp_per_shift if config else 3 }}">
-                    </div>
-                    <div class="config-item">
-                        <span class="label">책임 간호 인원 (명)</span>
-                        <input type="number" name="req_exp_nurses" value="{{ config.req_exp_nurses if config else 1 }}">
-                    </div>
-                    <div class="config-item">
-                        <span class="label">병동 환자수</span>
-                        <input type="number" name="patient_amount" value="{{ config.patient_amount if config else 40 }}">
-                    </div>
-                     <div class="config-item">
-                        <span class="label">월 OFF 수</span>
-                        <input type="number" name="off_days" value="{{ config.off_days if config else 8 }}">
-                    </div>
-                    <div class="config-item">
-                        <span class="label">주말 비중</span>
-                        <div class="control"><input type="number" name="weekend_shift_ratio" value="{{ config.weekend_shift_ratio if config else 1.0 }}" step="0.1"></div>
-                    </div>
-                </section>
-                <!-- 기능 관리 -->
-                <section class="config-section">
-                    <h2>기능 관리</h2>
-                    <div class="config-item">
-                        <span class="label">최대 연속 근무일 수</span>
-                        <input type="number" name="max_conseq_work" value="{{ config.max_conseq_work if config else 5 }}">
-                    </div>
-                    <div class="config-item">
-                        <span class="label">근무 요구사항 우선순위 지수</span>
-                        <div class="range-container">
-                            <input type="range" id="shift_priority" name="shift_priority" min="0" max="1" value="{{ config.shift_priority if config else 0.5 }}" step="0.1" oninput="this.nextElementSibling.value = this.value">
-                            <output>{{ config.shift_priority if config else 0.5 }}</output>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">OFF 주 2회</span>
-                        <div class="control">
-                            <label class="toggle-switch"><input type="checkbox" name="two_offs_per_week" {% if config is none or config.two_offs_per_week %}checked{% endif %}><span class="slider"></span></label>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">N 3회 허용</span>
-                        <label class="toggle-switch"><input type="checkbox" id="n3-allow" name="three_seq_nig" {% if config is none or config.three_seq_nig %}checked{% endif %} onchange="toggleN3Off()"><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label sub-label">N 3회 후 OFF 2회</span>
-                        <label class="toggle-switch"><input type="checkbox" id="n3-off" name="two_offs_after_three_nig" {% if config is none or config.two_offs_after_three_nig %}checked{% endif %}><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">N 2회 후 OFF 2회</span>
-                        <label class="toggle-switch"><input type="checkbox" name="two_offs_after_two_nig" {% if config is none or config.two_offs_after_two_nig %}checked{% endif %}><span class="slider"></span></label>
-                    </div>
-                    <div class="config-item">
-                        <span class="label">월 최대 Night 근무 수</span>
-                        <input type="number" name="max_nig_per_month" value="{{ config.max_nig_per_month if config else 15 }}">
-                    </div>
-                    <div class="config-item">
-                        <span class="label">E → D 근무 금지</span>
-                        <label class="toggle-switch"><input type="checkbox" name="banned_day_after_eve" {% if config is none or config.banned_day_after_eve %}checked{% endif %}><span class="slider"></span></label>
-                    </div>
-                </section>
+            
+            <!-- Tab Container -->
+            <div class="tab-container">
+                <div class="tab-buttons">
+                    <button class="tab-button active" onclick="showTab('shift-codes')">근무코드 설정하기</button>
+                    <button class="tab-button" onclick="showTab('roster-config')">근무표 설정하기</button>
+                </div>
 
-                <!-- 복지 기능 관리 -->
-                <section class="config-section disabled">
-                    <h2>복지 기능 관리</h2>
-                    <fieldset disabled>
-                        <div class="config-item">
-                            <span class="label">3-4일 근무 후 OFF 1회 제공</span>
-                            <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                <!-- 근무코드 설정하기 Tab -->
+                <div id="shift-codes" class="tab-content active">
+                    <div class="shift-codes-section">
+                        <h2>근무코드 관리</h2>
+                        <button class="add-shift-btn" onclick="openAddShiftModal()">
+                            <i class="fa fa-plus"></i> 근무코드 추가하기
+                        </button>
+                        
+                        <table class="shifts-table" id="shiftsTable">
+                            <thead>
+                                <tr>
+                                    <th>근무코드</th>
+                                    <th>이름</th>
+                                    <th>색상</th>
+                                    <th>시간 설정</th>
+                                    <th>타입</th>
+                                </tr>
+                            </thead>
+                            <tbody id="shiftsTableBody">
+                                <!-- 동적으로 생성됨 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 근무표 설정하기 Tab -->
+                <div id="roster-config" class="tab-content">
+                    <form id="configForm">
+                        <div class="config-container">
+                            <!-- Shift 설정 -->
+                            <section class="config-section">
+                                <h2>Shift 설정</h2>
+                                <div class="config-item">
+                                    <span class="label">일별 필수 D 수</span>
+                                    <input type="number" name="day_req" value="{{ config.day_req if config else 3 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">일별 필수 E 수</span>
+                                    <input type="number" name="eve_req" value="{{ config.eve_req if config else 3 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">일별 필수 N 수</span>
+                                    <input type="number" name="nig_req" value="{{ config.nig_req if config else 2 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">Shift 내 책임 최소 경력 (년차)</span>
+                                    <input type="number" name="min_exp_per_shift" value="{{ config.min_exp_per_shift if config else 3 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">책임 간호 인원 (명)</span>
+                                    <input type="number" name="req_exp_nurses" value="{{ config.req_exp_nurses if config else 1 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">병동 환자수</span>
+                                    <input type="number" name="patient_amount" value="{{ config.patient_amount if config else 40 }}">
+                                </div>
+                                 <div class="config-item">
+                                    <span class="label">월 OFF 수</span>
+                                    <input type="number" name="off_days" value="{{ config.off_days if config else 8 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">주말 비중</span>
+                                    <div class="control"><input type="number" name="weekend_shift_ratio" value="{{ config.weekend_shift_ratio if config else 1.0 }}" step="0.1"></div>
+                                </div>
+                            </section>
+                            <!-- 기능 관리 -->
+                            <section class="config-section">
+                                <h2>기능 관리</h2>
+                                <div class="config-item">
+                                    <span class="label">최대 연속 근무일 수</span>
+                                    <input type="number" name="max_conseq_work" value="{{ config.max_conseq_work if config else 5 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">근무 요구사항 우선순위 지수</span>
+                                    <div class="range-container">
+                                        <input type="range" id="shift_priority" name="shift_priority" min="0" max="1" value="{{ config.shift_priority if config else 0.5 }}" step="0.1" oninput="this.nextElementSibling.value = this.value">
+                                        <output>{{ config.shift_priority if config else 0.5 }}</output>
+                                    </div>
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">OFF 주 2회</span>
+                                    <div class="control">
+                                        <label class="toggle-switch"><input type="checkbox" name="two_offs_per_week" {% if config is none or config.two_offs_per_week %}checked{% endif %}><span class="slider"></span></label>
+                                    </div>
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">N 3회 허용</span>
+                                    <label class="toggle-switch"><input type="checkbox" id="n3-allow" name="three_seq_nig" {% if config is none or config.three_seq_nig %}checked{% endif %} onchange="toggleN3Off()"><span class="slider"></span></label>
+                                </div>
+                                <div class="config-item">
+                                    <span class="label sub-label">N 3회 후 OFF 2회</span>
+                                    <label class="toggle-switch"><input type="checkbox" id="n3-off" name="two_offs_after_three_nig" {% if config is none or config.two_offs_after_three_nig %}checked{% endif %}><span class="slider"></span></label>
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">N 2회 후 OFF 2회</span>
+                                    <label class="toggle-switch"><input type="checkbox" name="two_offs_after_two_nig" {% if config is none or config.two_offs_after_two_nig %}checked{% endif %}><span class="slider"></span></label>
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">월 최대 Night 근무 수</span>
+                                    <input type="number" name="max_nig_per_month" value="{{ config.max_nig_per_month if config else 15 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">E → D 근무 금지</span>
+                                    <label class="toggle-switch"><input type="checkbox" name="banned_day_after_eve" {% if config is none or config.banned_day_after_eve %}checked{% endif %}><span class="slider"></span></label>
+                                </div>
+                            </section>
+
+                            <!-- 복지 기능 관리 -->
+                            <section class="config-section disabled">
+                                <h2>복지 기능 관리</h2>
+                                <fieldset disabled>
+                                    <div class="config-item">
+                                        <span class="label">3-4일 근무 후 OFF 1회 제공</span>
+                                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                                    </div>
+                                    <div class="config-item">
+                                        <span class="label">OFF 연달아 제공</span>
+                                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                                    </div>
+                                </fieldset>
+                            </section>
                         </div>
-                        <div class="config-item">
-                            <span class="label">OFF 연달아 제공</span>
-                            <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                        <div class="save-btn-container">
+                            <button type="submit">저장하기</button>
                         </div>
-                    </fieldset>
-                </section>
+                    </form>
+                </div>
             </div>
-             <div class="save-btn-container">
-                <button type="submit">저장하기</button>
-            </div>
+        </div>
+    </div>
+
+    <!-- Add Shift Modal -->
+    <div id="addShiftModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddShiftModal()">&times;</span>
+            <h2>근무코드 추가하기</h2>
+            <form id="addShiftForm">
+                <div class="form-group">
+                    <label for="shiftId">근무코드 *</label>
+                    <input type="text" id="shiftId" name="shift_id" required maxlength="10">
+                </div>
+                
+                <div class="form-group">
+                    <label for="shiftName">근무코드 이름 *</label>
+                    <input type="text" id="shiftName" name="name" required maxlength="20">
+                </div>
+
+                <div class="form-group">
+                    <label for="shiftColor">색상 *</label>
+                    <input type="color" id="shiftColor" name="color" value="#87CEEB" required>
+                </div>
+
+                <div class="form-group">
+                    <label>시간 설정 *</label>
+                    <div class="radio-group">
+                        <div class="radio-item">
+                            <input type="radio" id="timeRange" name="time_type" value="range" checked>
+                            <label for="timeRange">시간 범위</label>
+                        </div>
+                        <div class="radio-item">
+                            <input type="radio" id="allDay" name="time_type" value="allday">
+                            <label for="allDay">종일</label>
+                        </div>
+                        <div class="radio-item">
+                            <input type="radio" id="customHours" name="time_type" value="hours">
+                            <label for="customHours">시간 지정</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" id="timeRangeInputs">
+                    <label>시작 시간 ~ 종료 시간</label>
+                    <div class="time-inputs">
+                        <input type="time" id="startTime" name="start_time" value="09:00">
+                        <span>~</span>
+                        <input type="time" id="endTime" name="end_time" value="18:00">
+                    </div>
+                </div>
+
+                <div class="form-group" id="hoursInput" style="display: none;">
+                    <label for="hours">근무 시간 (시간)</label>
+                    <input type="number" id="hours" name="hours" min="1" max="24" value="8">
+                </div>
+
+                <div class="form-group">
+                    <label>타입 *</label>
+                    <div class="radio-group">
+                        <div class="radio-item">
+                            <input type="radio" id="workType" name="shift_type" value="work" checked>
+                            <label for="workType">근무</label>
+                        </div>
+                        <div class="radio-item">
+                            <input type="radio" id="offType" name="shift_type" value="off">
+                            <label for="offType">휴무</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-buttons">
+                    <button type="button" class="btn-cancel" onclick="closeAddShiftModal()">취소</button>
+                    <button type="submit" class="btn-save">저장하기</button>
+                </div>
             </form>
         </div>
     </div>
+
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             document.getElementById("mySidebar").style.width = "250px";
             document.getElementById("main").style.marginLeft = "250px";
             toggleN3Off();
+            loadShifts();
+        });
+
+        // Tab management
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // Remove active class from all tab buttons
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => button.classList.remove('active'));
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked button
+            event.target.classList.add('active');
+        }
+
+        // Load shifts data
+        async function loadShifts() {
+            try {
+                const response = await fetch('/api/shifts');
+                const shifts = await response.json();
+                
+                const tbody = document.getElementById('shiftsTableBody');
+                tbody.innerHTML = '';
+                
+                shifts.forEach(shift => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${shift.shift_id}</td>
+                        <td>${shift.name}</td>
+                        <td><div class="shift-color-box" style="background-color: ${shift.color}"></div></td>
+                        <td>${shift.time_display || '정보 없음'}</td>
+                        <td>${shift.shift_type || '정보 없음'}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('근무코드 로딩 실패:', error);
+            }
+        }
+
+        // Modal management
+        function openAddShiftModal() {
+            document.getElementById('addShiftModal').style.display = 'block';
+        }
+
+        function closeAddShiftModal() {
+            document.getElementById('addShiftModal').style.display = 'none';
+            document.getElementById('addShiftForm').reset();
+        }
+
+        // Handle time type change
+        document.addEventListener('change', function(e) {
+            if (e.target.name === 'time_type') {
+                const timeRangeInputs = document.getElementById('timeRangeInputs');
+                const hoursInput = document.getElementById('hoursInput');
+                
+                if (e.target.value === 'range') {
+                    timeRangeInputs.style.display = 'block';
+                    hoursInput.style.display = 'none';
+                } else if (e.target.value === 'hours') {
+                    timeRangeInputs.style.display = 'none';
+                    hoursInput.style.display = 'block';
+                } else {
+                    timeRangeInputs.style.display = 'none';
+                    hoursInput.style.display = 'none';
+                }
+            }
+        });
+
+        // Add shift form submission
+        document.getElementById('addShiftForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = {};
+            for (let [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+
+            try {
+                const response = await fetch('/api/shifts/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    alert('근무코드가 추가되었습니다.');
+                    closeAddShiftModal();
+                    loadShifts(); // Reload shifts table
+                } else {
+                    const error = await response.json();
+                    alert('추가에 실패했습니다: ' + (error.detail || '알 수 없는 오류'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('추가에 실패했습니다.');
+            }
         });
 
         function toggleN3Off() {
@@ -263,6 +644,7 @@
                 toggleBtn.classList.add('fa-angles-left');
             }
         }
+        
         async function logout() {
             await fetch('/auth/logout', { method: 'POST' });
             window.location.href = '/login';
@@ -284,7 +666,6 @@
                 data[el.name] = false;
             });
 
-
             const response = await fetch('/roster/config/save', {
                 method: 'POST',
                 headers: {
@@ -302,4 +683,4 @@
         });
     </script>
 </body>
-</html> </html> 
+</html> 

@@ -67,8 +67,18 @@ class ScheduleEntry(Base):
 class Shift(Base):
     __tablename__ = "shifts"
     shift_id = Column(VARCHAR(10), primary_key=True)
+    group_id = Column(VARCHAR(50), ForeignKey("groups.group_id"))
     name = Column(VARCHAR(20), nullable=False)
     color = Column(VARCHAR(10), nullable=False)
+    start_time = Column(VARCHAR(5), nullable=True)  # HH:MM format
+    end_time = Column(VARCHAR(5), nullable=True)    # HH:MM format
+    type = Column(VARCHAR(10), nullable=False, default='work')  # 'work' or 'off'
+    allday = Column(INTEGER, nullable=False, default=0)
+    auto_schedule = Column(INTEGER, nullable=False, default=1)
+    # time_type = Column(VARCHAR(10), nullable=False, default='range')  # 'range', 'allday', 'hours'
+    duration = Column(INTEGER, nullable=True)  # for time_type='hours'
+
+    group = relationship("Group")
 
 class ShiftPreference(Base):
     __tablename__ = "shift_preferences"
