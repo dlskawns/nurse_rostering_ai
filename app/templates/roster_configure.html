@@ -6,6 +6,7 @@
     <title>근무표 설정</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         .config-container {
             display: flex;
@@ -227,6 +228,42 @@
             background: #218838;
         }
 
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        .delete-btn:hover {
+            background: #c82333;
+        }
+
+        /* Drag and drop styles */
+        .shifts-table tbody tr {
+            cursor: move;
+        }
+        .shifts-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        .shifts-table tbody tr.sortable-ghost {
+            opacity: 0.4;
+        }
+        .shifts-table tbody tr.sortable-chosen {
+            background-color: #e3f2fd;
+        }
+        .drag-handle {
+            cursor: grab;
+            color: #666;
+            padding: 0 5px;
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
         /* Toggle Switch */
         .toggle-switch {
             position: relative;
@@ -318,13 +355,14 @@
                         <table class="shifts-table" id="shiftsTable">
                             <thead>
                                 <tr>
+                                    <th style="width: 40px;">순서</th>
                                     <th>근무코드</th>
                                     <th>이름</th>
                                     <th>색상</th>
                                     <th>시간 설정</th>
                                     <th>타입</th>
                                     <th>스케줄 포함</th>
-                                    <th>수정</th>
+                                    <th>관리</th>
                                 </tr>
                             </thead>
                             <tbody id="shiftsTableBody">
@@ -559,9 +597,17 @@
                 const tbody = document.getElementById('shiftsTableBody');
                 tbody.innerHTML = '';
                 
+                // Sort by sequence to ensure correct order
+                shifts.sort((a, b) => a.sequence - b.sequence);
+                
                 shifts.forEach(shift => {
                     const row = document.createElement('tr');
+                    row.setAttribute('data-shift-id', shift.shift_id);
+                    row.setAttribute('data-sequence', shift.sequence);
                     row.innerHTML = `
+                        <td class="drag-handle">
+                            <i class="fa fa-grip-vertical"></i>
+                        </td>
                         <td>${shift.shift_id}</td>
                         <td>${shift.name}</td>
                         <td><div class="shift-color-box" style="background-color: ${shift.color}"></div></td>
@@ -572,12 +618,98 @@
                             <button class="edit-btn" onclick="openEditShiftModal('${shift.shift_id}')">
                                 <i class="fa fa-edit"></i> 수정
                             </button>
+                            <button class="delete-btn" onclick="deleteShift('${shift.shift_id}')">
+                                <i class="fa fa-trash"></i> 삭제
+                            </button>
                         </td>
                     `;
                     tbody.appendChild(row);
                 });
+
+                // Initialize drag and drop functionality
+                initializeDragAndDrop();
             } catch (error) {
                 console.error('근무코드 로딩 실패:', error);
+            }
+        }
+
+        // Initialize drag and drop functionality
+        function initializeDragAndDrop() {
+            const tbody = document.getElementById('shiftsTableBody');
+            new Sortable(tbody, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                chosenClass: 'sortable-chosen',
+                handle: '.drag-handle',
+                onEnd: function(evt) {
+                    const shiftId = evt.item.getAttribute('data-shift-id');
+                    const newIndex = evt.newIndex;
+                    
+                    // Calculate new sequence (1-based)
+                    const newSequence = newIndex + 1;
+                    
+                    // Update sequence on server
+                    updateShiftSequence(shiftId, newSequence);
+                }
+            });
+        }
+
+        // Update shift sequence on server
+        async function updateShiftSequence(shiftId, newSequence) {
+            try {
+                const response = await fetch('/api/shifts/move', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        shift_id: shiftId,
+                        new_sequence: newSequence
+                    })
+                });
+
+                if (response.ok) {
+                    // Reload shifts to reflect new order
+                    loadShifts();
+                } else {
+                    const error = await response.json();
+                    alert('순서 변경에 실패했습니다: ' + (error.detail || '알 수 없는 오류'));
+                    // Reload to revert changes
+                    loadShifts();
+                }
+            } catch (error) {
+                console.error('Error updating sequence:', error);
+                alert('순서 변경에 실패했습니다.');
+                // Reload to revert changes
+                loadShifts();
+            }
+        }
+
+        // Delete shift function
+        async function deleteShift(shiftId) {
+            if (!confirm('정말로 이 근무코드를 삭제하시겠습니까?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/shifts/remove', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ shift_id: shiftId })
+                });
+
+                if (response.ok) {
+                    alert('근무코드가 삭제되었습니다.');
+                    loadShifts(); // Reload shifts table
+                } else {
+                    const error = await response.json();
+                    alert('삭제에 실패했습니다: ' + (error.detail || '알 수 없는 오류'));
+                }
+            } catch (error) {
+                console.error('Error deleting shift:', error);
+                alert('삭제에 실패했습니다.');
             }
         }
 

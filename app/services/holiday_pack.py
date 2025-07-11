@@ -37,4 +37,4 @@ def serialise(dates: List[date]) -> list[str]:
     return [d.isoformat() for d in dates]
 
 
-print(serialise(get_korean_public_holidays(2025, 6)) + serialise(get_weekends(2025, 6)))
+# print(serialise(get_korean_public_holidays(2025, 6)) + serialise(get_weekends(2025, 6)))

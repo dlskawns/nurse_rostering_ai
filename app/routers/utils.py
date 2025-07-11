@@ -1,49 +1,6 @@
 import time
 from collections import defaultdict
 # from mcp.server.fastmcp import FastMCP
-from app.services.holiday_pack import (
-    get_weekends,
-    get_korean_public_holidays,
-    serialise,
-)
-
-def get_weekend(year: int, month: int):
-    """
-    Get the specific month and date information for user
-    This function returns the month's weekends date information
-
-    Args:
-        year (int): A year which the user wants to know the weekend dates of. if there's no information about year, just use today based year
-        month (int): A month which the user wants to know the weekend dates of
-
-    Returns:
-        list: the weekend dates information of the month
-    """
-    
-    weekends = serialise(get_weekends(year, month))
-    return weekends
-
-def get_holidays(year: int, month: int):
-    """
-    Get the specific month's public holiday information for user
-    This function returns the month's public holiday date information
-
-    Args:
-        year (int): A year which the user wants to know the public holiday dates of 
-        month (int): A month which the user wants to know the public holiday dates of
-
-    Returns:
-        list: the public holiday dates information of the month
-    """
-    
-    holidays = serialise(get_korean_public_holidays(year, month))
-    return holidays
-
-print(get_holidays(2025, 7))
-
-
-
-
 
 
 
