@@ -629,53 +629,19 @@
                                 </div>
                             </section>
                             
-                            <!-- 나머지 설정들 -->
+                            <!-- 법규 (하드 제약) 셋팅 -->
                             <section class="config-section">
-                                <h2>기본 설정</h2>
-                                <div class="config-item">
-                                    <span class="label">Shift 내 책임 최소 경력 (년차)</span>
-                                    <input type="number" name="min_exp_per_shift" value="{{ config.min_exp_per_shift if config else 3 }}">
-                                </div>
-                                <div class="config-item">
-                                    <span class="label">책임 간호 인원 (명)</span>
-                                    <input type="number" name="req_exp_nurses" value="{{ config.req_exp_nurses if config else 1 }}">
-                                </div>
-                                <div class="config-item">
-                                    <span class="label">병동 환자수</span>
-                                    <input type="number" name="patient_amount" value="{{ config.patient_amount if config else 40 }}">
-                                </div>
-                                 <div class="config-item">
-                                    <span class="label">월 OFF 수</span>
-                                    <input type="number" name="off_days" value="{{ config.off_days if config else 8 }}">
-                                </div>
-                                <div class="config-item">
-                                    <span class="label">주말 비중</span>
-                                    <div class="control"><input type="number" name="weekend_shift_ratio" value="{{ config.weekend_shift_ratio if config else 1.0 }}" step="0.1"></div>
-                                </div>
-                            </section>
-                            
-                            <!-- 기능 관리 -->
-                            <section class="config-section">
-                                <h2>기능 관리</h2>
+                                <h2>법규 (하드 제약) 셋팅</h2>
                                 <div class="config-item">
                                     <span class="label">최대 연속 근무일 수</span>
                                     <input type="number" name="max_conseq_work" value="{{ config.max_conseq_work if config else 5 }}">
                                 </div>
                                 <div class="config-item">
-                                    <span class="label">근무 요구사항 우선순위 지수</span>
-                                    <div class="range-container">
-                                        <input type="range" id="shift_priority" name="shift_priority" min="0" max="1" value="{{ config.shift_priority if config else 0.5 }}" step="0.1" oninput="this.nextElementSibling.value = this.value">
-                                        <output>{{ config.shift_priority if config else 0.5 }}</output>
-                                    </div>
+                                    <span class="label">E → D 근무 금지</span>
+                                    <label class="toggle-switch"><input type="checkbox" name="banned_day_after_eve" {% if config is none or config.banned_day_after_eve %}checked{% endif %}><span class="slider"></span></label>
                                 </div>
                                 <div class="config-item">
-                                    <span class="label">OFF 주 2회</span>
-                                    <div class="control">
-                                        <label class="toggle-switch"><input type="checkbox" name="two_offs_per_week" {% if config is none or config.two_offs_per_week %}checked{% endif %}><span class="slider"></span></label>
-                                    </div>
-                                </div>
-                                <div class="config-item">
-                                    <span class="label">N 3회 허용</span>
+                                    <span class="label">N 연속 3회 허용</span>
                                     <label class="toggle-switch"><input type="checkbox" id="n3-allow" name="three_seq_nig" {% if config is none or config.three_seq_nig %}checked{% endif %} onchange="toggleN3Off()"><span class="slider"></span></label>
                                 </div>
                                 <div class="config-item">
@@ -687,28 +653,64 @@
                                     <label class="toggle-switch"><input type="checkbox" name="two_offs_after_two_nig" {% if config is none or config.two_offs_after_two_nig %}checked{% endif %}><span class="slider"></span></label>
                                 </div>
                                 <div class="config-item">
-                                    <span class="label">월 최대 Night 근무 수</span>
+                                    <span class="label">월 최대 N 근무 수</span>
                                     <input type="number" name="max_nig_per_month" value="{{ config.max_nig_per_month if config else 15 }}">
                                 </div>
+                            </section>
+                            
+                            <!-- 병원 내규 (소프트 제약) 셋팅 -->
+                            <section class="config-section">
+                                <h2>🏢 병원 내규 (소프트 제약) 셋팅</h2>
                                 <div class="config-item">
-                                    <span class="label">E → D 근무 금지</span>
-                                    <label class="toggle-switch"><input type="checkbox" name="banned_day_after_eve" {% if config is none or config.banned_day_after_eve %}checked{% endif %}><span class="slider"></span></label>
+                                    <span class="label">Shift 내 책임 최소 경력 (년차)</span>
+                                    <input type="number" name="min_exp_per_shift" value="{{ config.min_exp_per_shift if config else 3 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">책임 간호 인원 (명)</span>
+                                    <input type="number" name="req_exp_nurses" value="{{ config.req_exp_nurses if config else 1 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">주 2회 이상 OFF</span>
+                                    <div class="control">
+                                        <label class="toggle-switch"><input type="checkbox" name="two_offs_per_week" {% if config is none or config.two_offs_per_week %}checked{% endif %}><span class="slider"></span></label>
+                                    </div>
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">OFF 연속 배정</span>
+                                    <div class="control">
+                                        <label class="toggle-switch"><input type="checkbox" name="sequential_offs" {% if config is none or (config and config.sequential_offs) %}checked{% endif %}><span class="slider"></span></label>
+                                    </div>
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">N 개수 균등 배정</span>
+                                    <div class="control">
+                                        <label class="toggle-switch"><input type="checkbox" name="even_nights" {% if config is none or (config and config.even_nights) %}checked{% endif %}><span class="slider"></span></label>
+                                    </div>
                                 </div>
                             </section>
-
-                            <!-- 복지 기능 관리 -->
-                            <section class="config-section disabled">
-                                <h2>복지 기능 관리</h2>
-                                <fieldset disabled>
-                                    <div class="config-item">
-                                        <span class="label">3-4일 근무 후 OFF 1회 제공</span>
-                                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
+                            
+                            <!-- 기타 설정 -->
+                            <section class="config-section">
+                                <h2>기타 설정</h2>
+                                <div class="config-item">
+                                    <span class="label">병동 환자수</span>
+                                    <input type="number" name="patient_amount" value="{{ config.patient_amount if config else 40 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">월 OFF 수</span>
+                                    <input type="number" name="off_days" value="{{ config.off_days if config else 8 }}">
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">주말 비중</span>
+                                    <div class="control"><input type="number" name="weekend_shift_ratio" value="{{ config.weekend_shift_ratio if config else 1.0 }}" step="0.1"></div>
+                                </div>
+                                <div class="config-item">
+                                    <span class="label">근무 요구사항 우선순위 지수</span>
+                                    <div class="range-container">
+                                        <input type="range" id="shift_priority" name="shift_priority" min="0" max="1" value="{{ config.shift_priority if config else 0.5 }}" step="0.1" oninput="this.nextElementSibling.value = this.value">
+                                        <output>{{ config.shift_priority if config else 0.5 }}</output>
                                     </div>
-                                    <div class="config-item">
-                                        <span class="label">OFF 연달아 제공</span>
-                                        <label class="toggle-switch"><input type="checkbox"><span class="slider"></span></label>
-                                    </div>
-                                </fieldset>
+                                </div>
                             </section>
                         </div>
                         <div class="save-btn-container">
@@ -1133,6 +1135,8 @@
             
             const formData = new FormData(this);
             const data = {};
+            
+            // Process form data
             for (let [key, value] of formData.entries()) {
                 if (value === 'on') { // Handle checkboxes
                     data[key] = true;
@@ -1140,10 +1144,21 @@
                     data[key] = value;
                 }
             }
-            // Add unchecked checkboxes
-            this.querySelectorAll('input[type="checkbox"]:not(:checked)').forEach(el => {
-                data[el.name] = false;
+            
+            // Explicitly handle all checkbox fields to ensure they are included
+            const checkboxFields = [
+                'two_offs_per_week', 'three_seq_nig', 'two_offs_after_three_nig', 
+                'two_offs_after_two_nig', 'banned_day_after_eve', 'sequential_offs', 'even_nights'
+            ];
+            
+            checkboxFields.forEach(field => {
+                const checkbox = this.querySelector(`input[name="${field}"]`);
+                if (checkbox) {
+                    data[field] = checkbox.checked;
+                }
             });
+
+            console.log('저장될 데이터:', data); // 디버깅용
 
             const response = await fetch('/roster/config/save', {
                 method: 'POST',

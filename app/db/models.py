@@ -133,6 +133,8 @@ class RosterConfig(Base):
     shift_priority = Column(FLOAT)
     weekend_shift_ratio = Column(FLOAT)
     patient_amount = Column(INTEGER)
+    sequential_offs = Column(BOOLEAN)
+    even_nights = Column(BOOLEAN)
     created_at = Column(DATETIME, default=func.now())
 
     office = relationship("Office")
