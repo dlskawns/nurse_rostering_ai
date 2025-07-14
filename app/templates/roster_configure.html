@@ -318,6 +318,231 @@
         .save-btn-container button {
             width: 150px;
         }
+
+        /* Shift Class Tabs */
+        .shift-class-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .shift-class-tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+        .shift-class-tab.active {
+            color: #2196F3;
+            border-bottom-color: #2196F3;
+        }
+        .shift-class-tab:hover {
+            color: #2196F3;
+            background-color: #f8f9fa;
+        }
+        .shift-class-tab.disabled {
+            color: #ccc;
+            pointer-events: none;
+        }
+
+        /* Shift Slots Container */
+        .shift-slots-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Shift Codes Panel */
+        .shift-codes-panel {
+            background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+            margin-top: 20px;
+        }
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+        .panel-header h3 {
+            margin-top: 0;
+            margin-bottom: 0;
+        }
+        .close-panel-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #aaa;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+        .close-panel-btn:hover {
+            color: black;
+        }
+        .available-shifts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .available-shifts .shift-color-box {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            display: inline-block;
+            border: 1px solid #ddd;
+        }
+
+        /* Shift Slot Styling */
+        .shift-slot {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        .shift-slot:hover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+        .shift-slot.active {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+        .slot-label {
+            font-weight: 600;
+            min-width: 80px;
+        }
+        .main-code-display {
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-weight: bold;
+            color: white;
+            min-width: 40px;
+            text-align: center;
+            cursor: pointer;
+            border: 2px dashed transparent;
+            transition: all 0.3s ease;
+        }
+        .main-code-display:hover {
+            border-color: #2196F3;
+        }
+        .main-code-display.drag-over {
+            border-color: #2196F3;
+            background-color: #e3f2fd !important;
+        }
+        .expand-toggle {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 3px;
+            transition: background 0.2s ease;
+        }
+        .expand-toggle:hover {
+            background: rgba(0,0,0,0.1);
+        }
+        .codes-container {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            border: 1px dashed #ccc;
+            border-radius: 4px;
+            background: white;
+            margin: 10px 0;
+            width: 100%;
+        }
+        .codes-container.expanded {
+            display: flex;
+        }
+        .codes-area {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            min-height: 40px;
+            padding: 8px;
+            border: 1px dashed #ccc;
+            border-radius: 4px;
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+        .codes-area.drag-over {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+        .shift-code-chip {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            cursor: move;
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .shift-code-chip .delete-chip {
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .shift-code-chip .delete-chip:hover {
+            background: rgba(255,255,255,0.5);
+        }
+        .slot-manpower {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .slot-manpower input {
+            width: 60px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .available-shift-item {
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            cursor: grab;
+            transition: transform 0.2s ease;
+        }
+        .available-shift-item:hover {
+            transform: scale(1.05);
+        }
+        .available-shift-item:active {
+            cursor: grabbing;
+        }
+        .empty-slot-text {
+            font-style: italic;
+            color: #999;
+            padding: 10px;
+        }
+
+        /* Toggle Switch */
     </style>
 </head>
 <body>
@@ -376,21 +601,37 @@
                 <div id="roster-config" class="tab-content">
                     <form id="configForm">
                         <div class="config-container">
-                            <!-- Shift 설정 -->
+                            <!-- Shift 관리 -->
                             <section class="config-section">
-                                <h2>Shift 설정</h2>
-                                <div class="config-item">
-                                    <span class="label">일별 필수 D 수</span>
-                                    <input type="number" name="day_req" value="{{ config.day_req if config else 3 }}">
+                                <h2>Shift 관리</h2>
+                                
+                                <!-- 시프트 클래스 탭 -->
+                                <div class="shift-class-tabs">
+                                    <button class="shift-class-tab active" data-class="RN" onclick="showShiftClass('RN')">RN</button>
+                                    <button class="shift-class-tab disabled" data-class="AN" onclick="showShiftClass('AN')">AN</button>
+                                    <button class="shift-class-tab disabled" data-class="보조" onclick="showShiftClass('보조')">보조</button>
                                 </div>
-                                <div class="config-item">
-                                    <span class="label">일별 필수 E 수</span>
-                                    <input type="number" name="eve_req" value="{{ config.eve_req if config else 3 }}">
+                                
+                                <!-- 시프트 슬롯 관리 영역 -->
+                                <div class="shift-slots-container" id="shiftSlotsContainer">
+                                    <!-- 동적으로 생성됨 -->
                                 </div>
-                                <div class="config-item">
-                                    <span class="label">일별 필수 N 수</span>
-                                    <input type="number" name="nig_req" value="{{ config.nig_req if config else 2 }}">
+                                
+                                <!-- 시프트 코드 선택 영역 -->
+                                <div class="shift-codes-panel" id="shiftCodesPanel" style="display: none;">
+                                    <div class="panel-header">
+                                        <h3>근무코드 선택</h3>
+                                        <button onclick="closeShiftCodesPanel()" class="close-panel-btn">×</button>
+                                    </div>
+                                    <div class="available-shifts" id="availableShifts">
+                                        <!-- 동적으로 생성됨 -->
+                                    </div>
                                 </div>
+                            </section>
+                            
+                            <!-- 나머지 설정들 -->
+                            <section class="config-section">
+                                <h2>기본 설정</h2>
                                 <div class="config-item">
                                     <span class="label">Shift 내 책임 최소 경력 (년차)</span>
                                     <input type="number" name="min_exp_per_shift" value="{{ config.min_exp_per_shift if config else 3 }}">
@@ -412,6 +653,7 @@
                                     <div class="control"><input type="number" name="weekend_shift_ratio" value="{{ config.weekend_shift_ratio if config else 1.0 }}" step="0.1"></div>
                                 </div>
                             </section>
+                            
                             <!-- 기능 관리 -->
                             <section class="config-section">
                                 <h2>기능 관리</h2>
@@ -569,6 +811,7 @@
             document.getElementById("main").style.marginLeft = "250px";
             toggleN3Off();
             loadShifts();
+            loadShiftManage('RN'); // Load RN shift management data
         });
 
         // Tab management
@@ -884,6 +1127,10 @@
 
         document.getElementById('configForm').addEventListener('submit', async function(e) {
             e.preventDefault();
+            
+            // First save shift manage data
+            await saveShiftManage();
+            
             const formData = new FormData(this);
             const data = {};
             for (let [key, value] of formData.entries()) {
@@ -913,6 +1160,370 @@
                 alert('저장에 실패했습니다.');
             }
         });
+
+        // Shift Management Functions
+        let currentShiftClass = 'RN';
+        let shiftManageData = {};
+        let availableShifts = [];
+
+        // Show shift class tab
+        function showShiftClass(className) {
+            if (className !== 'RN') return; // Only RN is enabled for now
+            
+            // Update tab appearance
+            document.querySelectorAll('.shift-class-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`[data-class="${className}"]`).classList.add('active');
+            
+            currentShiftClass = className;
+            loadShiftManage(className);
+        }
+
+        // Load shift manage data for specific class
+        async function loadShiftManage(className) {
+            try {
+                const response = await fetch(`/api/shift-manage/${className}`);
+                const data = await response.json();
+                
+                shiftManageData[className] = data;
+                renderShiftSlots(data);
+            } catch (error) {
+                console.error('시프트 관리 데이터 로딩 실패:', error);
+                // If no data exists, create default slots
+                const defaultSlots = [
+                    { shift_slot: 1, main_code: 'D', codes: [], manpower: 3 },
+                    { shift_slot: 2, main_code: 'E', codes: [], manpower: 3 },
+                    { shift_slot: 3, main_code: 'N', codes: [], manpower: 2 }
+                ];
+                shiftManageData[className] = defaultSlots;
+                renderShiftSlots(defaultSlots);
+            }
+        }
+
+        // Render shift slots
+        function renderShiftSlots(slots) {
+            const container = document.getElementById('shiftSlotsContainer');
+            container.innerHTML = '';
+            
+            const shiftNames = {1: '교대 1', 2: '교대 2', 3: '교대 3'};
+            
+            slots.forEach(slot => {
+                const slotDiv = document.createElement('div');
+                slotDiv.className = 'shift-slot';
+                slotDiv.setAttribute('data-slot', slot.shift_slot);
+                
+                slotDiv.innerHTML = `
+                    <div class="slot-label">${shiftNames[slot.shift_slot] || '교대 ' + slot.shift_slot}</div>
+                    <div class="main-code-display" style="background-color: ${getShiftColor(slot.main_code)}" 
+                         data-slot="${slot.shift_slot}">
+                        ${slot.main_code || '미설정'}
+                    </div>
+                    <div class="slot-manpower">
+                        <span>인력:</span>
+                        <input type="number" value="${slot.manpower}" min="0" max="20" 
+                               onchange="updateManpower(${slot.shift_slot}, this.value)" onclick="event.stopPropagation()">
+                    </div>
+                `;
+                
+                // Add codes container (visible by default)
+                const codesContainer = document.createElement('div');
+                codesContainer.className = 'codes-container expanded'; // Show by default
+                codesContainer.id = `codes-container-${slot.shift_slot}`;
+                codesContainer.innerHTML = `
+                    <div class="codes-area" data-slot="${slot.shift_slot}">
+                        ${slot.codes.map(code => `
+                            <div class="shift-code-chip" style="background-color: ${getShiftColor(code)}" 
+                                 draggable="true" ondragstart="dragStart(event, '${code}', ${slot.shift_slot})">
+                                ${code}
+                                <span class="delete-chip" onclick="removeShiftCodeFromSlot(event, '${code}', ${slot.shift_slot})">×</span>
+                            </div>
+                        `).join('')}
+                        ${slot.codes.length === 0 ? '<span class="empty-slot-text">여기에 근무코드를 드래그하거나 클릭하세요</span>' : ''}
+                    </div>
+                `;
+                
+                slotDiv.appendChild(codesContainer);
+                
+                // Add drag and drop events for main code
+                const mainCodeDiv = slotDiv.querySelector('.main-code-display');
+                mainCodeDiv.addEventListener('dragover', handleDragOver);
+                mainCodeDiv.addEventListener('drop', (e) => handleMainCodeDrop(e, slot.shift_slot));
+                mainCodeDiv.addEventListener('dragenter', handleMainCodeDragEnter);
+                mainCodeDiv.addEventListener('dragleave', handleMainCodeDragLeave);
+                mainCodeDiv.addEventListener('click', () => showAvailableShiftsForMainCode(slot.shift_slot));
+                
+                // Add drop event listeners to codes-area
+                const codesArea = codesContainer.querySelector('.codes-area');
+                codesArea.addEventListener('dragover', handleDragOver);
+                codesArea.addEventListener('drop', (e) => handleDrop(e, slot.shift_slot));
+                codesArea.addEventListener('dragenter', handleDragEnter);
+                codesArea.addEventListener('dragleave', handleDragLeave);
+                codesArea.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    showAvailableShiftsForCodes(slot.shift_slot);
+                });
+                
+                container.appendChild(slotDiv);
+            });
+        }
+
+        // Get shift color by code
+        function getShiftColor(code) {
+            const shift = availableShifts.find(s => s.shift_id === code);
+            return shift ? shift.color : '#ccc';
+        }
+
+        // Update manpower
+        function updateManpower(slotNumber, value) {
+            const slotData = shiftManageData[currentShiftClass].find(s => s.shift_slot === slotNumber);
+            if (slotData) {
+                slotData.manpower = parseInt(value);
+            }
+        }
+
+        // Drag and drop functions
+        function dragStart(event, shiftCode, fromSlot) {
+            // Check if the click is on the delete button
+            if (event.target.classList.contains('delete-chip')) {
+                event.preventDefault();
+                return false;
+            }
+            
+            event.dataTransfer.setData('text/plain', shiftCode);
+            event.dataTransfer.setData('application/json', JSON.stringify({
+                shiftCode: shiftCode,
+                fromSlot: fromSlot,
+                source: 'slot'
+            }));
+        }
+
+        function dragStartFromPanel(event, shiftCode) {
+            event.dataTransfer.setData('text/plain', shiftCode);
+            event.dataTransfer.setData('application/json', JSON.stringify({
+                shiftCode: shiftCode,
+                source: 'panel'
+            }));
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+        }
+
+        function handleDragEnter(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('drag-over');
+        }
+
+        function handleDragLeave(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+
+        function handleDrop(event, toSlot) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+            
+            const dragData = JSON.parse(event.dataTransfer.getData('application/json'));
+            const shiftCode = dragData.shiftCode;
+            
+            // Remove from source slot if moving from another slot
+            if (dragData.source === 'slot' && dragData.fromSlot) {
+                removeShiftCodeFromAllSlots(shiftCode, toSlot);
+            }
+            
+            // Add to target slot codes (not main_code)
+            const toSlotData = shiftManageData[currentShiftClass].find(s => s.shift_slot === toSlot);
+            if (toSlotData && !toSlotData.codes.includes(shiftCode)) {
+                toSlotData.codes.push(shiftCode);
+            }
+            
+            // Re-render slots
+            renderShiftSlots(shiftManageData[currentShiftClass]);
+        }
+
+        // Handle main code drop
+        function handleMainCodeDrop(event, toSlot) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+
+            const dragData = JSON.parse(event.dataTransfer.getData('application/json'));
+            const shiftCode = dragData.shiftCode;
+            
+            // Remove from source if moving from another slot
+            if (dragData.source === 'slot' && dragData.fromSlot) {
+                removeShiftCodeFromAllSlots(shiftCode, dragData.fromSlot);
+            }
+            
+            // Set as main code
+            const toSlotData = shiftManageData[currentShiftClass].find(s => s.shift_slot === toSlot);
+            if (toSlotData) {
+                // Remove from all other main codes first
+                shiftManageData[currentShiftClass].forEach(slot => {
+                    if (slot.main_code === shiftCode && slot.shift_slot !== toSlot) {
+                        slot.main_code = null;
+                    }
+                });
+                
+                toSlotData.main_code = shiftCode;
+            }
+            
+            renderShiftSlots(shiftManageData[currentShiftClass]);
+        }
+
+        function handleMainCodeDragEnter(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('drag-over');
+        }
+
+        function handleMainCodeDragLeave(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+
+        // Show available shifts for main code selection
+        async function showAvailableShiftsForMainCode(slotNumber) {
+            await loadAvailableShifts();
+            
+            // Render available shifts for main code
+            const availableShiftsDiv = document.getElementById('availableShifts');
+            availableShiftsDiv.innerHTML = getUsedShifts().length > 0 ? 
+                '<h4>사용 가능한 근무코드:</h4>' : '';
+            
+            availableShifts.forEach(shift => {
+                const isUsed = isShiftUsed(shift.shift_id);
+                const shiftElement = document.createElement('div');
+                shiftElement.className = 'available-shift-item';
+                shiftElement.style.backgroundColor = shift.color;
+                shiftElement.style.opacity = isUsed ? '0.5' : '1';
+                shiftElement.draggable = true;
+                shiftElement.innerHTML = `${shift.shift_id} - ${shift.name}${isUsed ? ' (사용중)' : ''}`;
+                
+                shiftElement.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', shift.shift_id);
+                    e.dataTransfer.setData('application/json', JSON.stringify({
+                        shiftCode: shift.shift_id,
+                        source: 'panel'
+                    }));
+                });
+                
+                availableShiftsDiv.appendChild(shiftElement);
+            });
+            
+            document.getElementById('shiftCodesPanel').style.display = 'block';
+        }
+
+        // Show available shifts for codes area
+        async function showAvailableShiftsForCodes(slotNumber) {
+            await loadAvailableShifts();
+            
+            // Render available shifts for codes
+            const availableShiftsDiv = document.getElementById('availableShifts');
+            availableShiftsDiv.innerHTML = '<h4>보조 근무코드 추가:</h4>';
+            
+            availableShifts.forEach(shift => {
+                const shiftElement = document.createElement('div');
+                shiftElement.className = 'available-shift-item';
+                shiftElement.style.backgroundColor = shift.color;
+                shiftElement.draggable = true;
+                shiftElement.innerHTML = `${shift.shift_id} - ${shift.name}`;
+                
+                shiftElement.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', shift.shift_id);
+                    e.dataTransfer.setData('application/json', JSON.stringify({
+                        shiftCode: shift.shift_id,
+                        source: 'panel'
+                    }));
+                });
+                
+                availableShiftsDiv.appendChild(shiftElement);
+            });
+            
+            document.getElementById('shiftCodesPanel').style.display = 'block';
+        }
+
+        // Load available shifts
+        async function loadAvailableShifts() {
+            if (availableShifts.length === 0) {
+                try {
+                    const response = await fetch('/api/shifts');
+                    availableShifts = await response.json();
+                } catch (error) {
+                    console.error('근무코드 로딩 실패:', error);
+                }
+            }
+        }
+
+        // Check if shift is used anywhere
+        function isShiftUsed(shiftCode) {
+            return shiftManageData[currentShiftClass].some(slot => 
+                slot.main_code === shiftCode || 
+                (slot.codes && slot.codes.includes(shiftCode))
+            );
+        }
+
+        // Get all used shifts
+        function getUsedShifts() {
+            const used = [];
+            shiftManageData[currentShiftClass].forEach(slot => {
+                if (slot.main_code) used.push(slot.main_code);
+                if (slot.codes) used.push(...slot.codes);
+            });
+            return [...new Set(used)]; // Remove duplicates
+        }
+
+        // Remove shift code from all slots except specified one
+        function removeShiftCodeFromAllSlots(shiftCode, exceptSlot = null) {
+            shiftManageData[currentShiftClass].forEach(slot => {
+                if (slot.shift_slot !== exceptSlot) {
+                    if (slot.main_code === shiftCode) {
+                        slot.main_code = null;
+                    }
+                    if (slot.codes) {
+                        slot.codes = slot.codes.filter(code => code !== shiftCode);
+                    }
+                }
+            });
+        }
+
+        // Remove shift code from slot
+        function removeShiftCodeFromSlot(event, shiftCode, slotNumber) {
+            event.stopPropagation(); // Prevent drag event
+            const slotData = shiftManageData[currentShiftClass].find(s => s.shift_slot === slotNumber);
+            if (slotData) {
+                slotData.codes = slotData.codes.filter(code => code !== shiftCode);
+                renderShiftSlots(shiftManageData[currentShiftClass]);
+            }
+        }
+
+        // Save shift manage data
+        async function saveShiftManage() {
+            try {
+                const response = await fetch('/api/shift-manage/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        class_name: currentShiftClass,
+                        slots: shiftManageData[currentShiftClass].map(slot => ({
+                            shift_slot: slot.shift_slot,
+                            main_code: slot.main_code,
+                            codes: slot.codes,
+                            manpower: slot.manpower
+                        }))
+                    })
+                });
+
+                if (response.ok) {
+                    alert('시프트 관리 설정이 저장되었습니다.');
+                } else {
+                    const error = await response.json();
+                    alert('저장에 실패했습니다: ' + (error.detail || '알 수 없는 오류'));
+                }
+            } catch (error) {
+                console.error('Error saving shift manage:', error);
+                alert('저장에 실패했습니다.');
+            }
+        }
     </script>
 </body>
 </html> 

@@ -258,13 +258,62 @@ async def save_roster_config(
 ):
     if not user or not user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
-    print('user11', user)
-    db_config = RosterConfigModel(
-        **config_data.model_dump(),
-        office_id=user.office_id,
-        group_id=user.group_id
-    )
-    db.add(db_config)
-    db.commit()
-    db.refresh(db_config)
-    return {"message": "Configuration saved successfully"} 
+    
+    try:
+        # Get shift manage data for RN class to extract day_req, eve_req, nig_req
+        from app.db.models import ShiftManage, Nurse
+        
+        # Get current user's office_id
+        nurse = db.query(Nurse).filter(Nurse.nurse_id == user.nurse_id).first()
+        if not nurse or not nurse.group:
+            raise HTTPException(status_code=404, detail="User group information not found")
+        
+        # Get shift manage data for RN class
+        shift_manages = db.query(ShiftManage).filter(
+            ShiftManage.office_id == nurse.group.office_id,
+            ShiftManage.group_id == user.group_id,
+            ShiftManage.nurse_class == 'RN'
+        ).all()
+        
+        # Extract manpower for each slot (교대 1=day_req, 교대 2=eve_req, 교대 3=nig_req)
+        day_req = eve_req = nig_req = 0
+        
+        if shift_manages:
+            for sm in shift_manages:
+                if sm.shift_slot == 1:  # 교대 1
+                    day_req = sm.manpower or 0
+                elif sm.shift_slot == 2:  # 교대 2
+                    eve_req = sm.manpower or 0
+                elif sm.shift_slot == 3:  # 교대 3
+                    nig_req = sm.manpower or 0
+        else:
+            # Default values if no shift management data exists
+            day_req = eve_req = nig_req = 3
+        
+        print(f'Extracted shift requirements: day_req={day_req}, eve_req={eve_req}, nig_req={nig_req}')
+        
+        # Create config data with extracted values
+        config_dict = config_data.model_dump()
+        config_dict.update({
+            'day_req': day_req,
+            'eve_req': eve_req,
+            'nig_req': nig_req
+        })
+        
+        print(f'Final config dict: {config_dict}')
+        
+        db_config = RosterConfigModel(
+            **config_dict,
+            office_id=user.office_id,
+            group_id=user.group_id
+        )
+        db.add(db_config)
+        db.commit()
+        db.refresh(db_config)
+        
+        return {"message": "Configuration saved successfully"}
+        
+    except Exception as e:
+        print(f'Error in save_roster_config: {str(e)}')
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Configuration save failed: {str(e)}") 

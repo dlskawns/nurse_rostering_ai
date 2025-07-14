@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 import numpy as np
 from typing import Optional
 from app.db.client import get_db
-from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster
+from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
 from app.schemas.auth_schema import User as UserSchema
 from app.routers.auth import get_current_user_from_cookie
 from app.roster_engine import generate_roster, get_days_in_month
@@ -543,7 +543,7 @@ class ShiftAddRequest(BaseModel):
     color: str
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    type: str = "work"
+    shift_type: str = "work"  # Changed from 'type' to 'shift_type' to match frontend
     # time_type: str = "range"
     duration: Optional[int] = None
     allday: Optional[int] = 0
@@ -557,6 +557,11 @@ async def add_shift(
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Get current user's office_id
+    nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
+    if not nurse or not nurse.group:
+        raise HTTPException(status_code=404, detail="User group information not found")
     
     # 중복 shift_id 체크 (같은 그룹 내에서)
     existing_shift = db.query(Shift).filter(
@@ -575,12 +580,13 @@ async def add_shift(
     # 새 시프트 생성
     new_shift = Shift(
         shift_id=req.shift_id,
+        office_id=nurse.group.office_id,
         group_id=current_user.group_id,
         name=req.name,
         color=req.color,
         start_time=req.start_time,
         end_time=req.end_time,
-        type=req.type,
+        type=req.shift_type,  # 'work' or 'off'
         # time_type=req.time_type,
         duration=req.duration,
         allday=req.allday,
@@ -626,7 +632,7 @@ async def update_shift(
     existing_shift.color = req.color
     existing_shift.start_time = req.start_time
     existing_shift.end_time = req.end_time
-    existing_shift.type = req.type
+    existing_shift.type = req.shift_type
     existing_shift.duration = req.duration
     existing_shift.allday = req.allday
     existing_shift.auto_schedule = req.auto_schedule
@@ -741,6 +747,109 @@ async def move_shift(
     
     return {"message": "근무코드 순서가 성공적으로 변경되었습니다."}
 
+# [Shift Management] - 시프트 관리 데이터 조회
+@router.get("/shift-manage/{class_name}")
+async def get_shift_manage(
+    class_name: str,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get current user's office_id
+    nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
+    if not nurse or not nurse.group:
+        raise HTTPException(status_code=404, detail="User group information not found")
+    
+    # 해당 클래스의 shift_manage 데이터 조회
+    shift_manages = db.query(ShiftManage).filter(
+        ShiftManage.office_id == nurse.group.office_id,
+        ShiftManage.group_id == current_user.group_id,
+        ShiftManage.nurse_class == class_name
+    ).order_by(ShiftManage.shift_slot.asc()).all()
+    
+    # 데이터가 없으면 기본 슬롯 생성
+    if not shift_manages:
+        default_slots = [
+            {"shift_slot": 1, "main_code": "D", "codes": [], "manpower": 3},
+            {"shift_slot": 2, "main_code": "E", "codes": [], "manpower": 3},
+            {"shift_slot": 3, "main_code": "N", "codes": [], "manpower": 2}
+        ]
+        
+        # DB에 기본 슬롯 저장
+        for slot_data in default_slots:
+            shift_manage = ShiftManage(
+                office_id=nurse.group.office_id,
+                group_id=current_user.group_id,
+                nurse_class=class_name,
+                shift_slot=slot_data["shift_slot"],
+                main_code=slot_data["main_code"],
+                codes=slot_data["codes"],
+                manpower=slot_data["manpower"]
+            )
+            db.add(shift_manage)
+        
+        db.commit()
+        
+        # 다시 조회해서 반환
+        shift_manages = db.query(ShiftManage).filter(
+            ShiftManage.office_id == nurse.group.office_id,
+            ShiftManage.group_id == current_user.group_id,
+            ShiftManage.nurse_class == class_name
+        ).order_by(ShiftManage.shift_slot.asc()).all()
+    
+    return [
+        {
+            "shift_slot": sm.shift_slot,
+            "main_code": sm.main_code,
+            "codes": sm.codes if sm.codes else [],
+            "manpower": sm.manpower
+        }
+        for sm in shift_manages
+    ]
+
+class ShiftManageSaveRequest(BaseModel):
+    class_name: str
+    slots: list  # [{"shift_slot": 1, "codes": ["D"], "manpower": 3}, ...]
+
+@router.post("/shift-manage/save")
+async def save_shift_manage(
+    req: ShiftManageSaveRequest,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Get current user's office_id
+    nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
+    if not nurse or not nurse.group:
+        raise HTTPException(status_code=404, detail="User group information not found")
+    
+    # 기존 데이터 삭제 (특정 클래스의 모든 슬롯)
+    db.query(ShiftManage).filter(
+        ShiftManage.office_id == nurse.group.office_id,
+        ShiftManage.group_id == current_user.group_id,
+        ShiftManage.nurse_class == req.class_name
+    ).delete()
+    
+    # 새 데이터 저장
+    for slot_data in req.slots:
+        shift_manage = ShiftManage(
+            office_id=nurse.group.office_id,
+            group_id=current_user.group_id,
+            nurse_class=req.class_name,
+            shift_slot=slot_data["shift_slot"],
+            main_code=slot_data.get("main_code"),
+            codes=slot_data["codes"],
+            manpower=slot_data["manpower"]
+        )
+        db.add(shift_manage)
+    
+    db.commit()
+    return {"message": "시프트 관리 설정이 저장되었습니다."}
+
 # [Roster] - 근무표 생성
 @router.post("/roster/generate")
 async def generate_roster_endpoint(
@@ -750,19 +859,6 @@ async def generate_roster_endpoint(
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
-
-    # # Ensure default shifts exist to prevent foreign key errors
-    # default_shifts = [
-    #     {'shift_id': 'D', 'name': 'Day', 'color': '#87CEEB'},
-    #     {'shift_id': 'E', 'name': 'Evening', 'color': '#FFDAB9'},
-    #     {'shift_id': 'N', 'name': 'Night', 'color': '#6A5ACD'},
-    #     {'shift_id': 'O', 'name': 'Off', 'color': '#F5F5F5'},
-    # ]
-    # for shift_data in default_shifts:
-    #     exists = db.query(Shift).filter(Shift.shift_id == shift_data['shift_id']).first()
-    #     if not exists:
-    #         db.add(Shift(**shift_data))
-    # db.commit()
 
     # 0. Check if wanted request exists for this month
     wanted = db.query(Wanted).filter(
@@ -814,36 +910,51 @@ async def generate_roster_endpoint(
     if not latest_config:
         raise HTTPException(status_code=400, detail="설정값을 입력해주세요")
 
+    # Get current user's office_id for shift manage data
+    nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
+    if not nurse or not nurse.group:
+        raise HTTPException(status_code=404, detail="User group information not found")
+
+    # Get shift manage data for RN class
+    shift_manages = db.query(ShiftManage).filter(
+        ShiftManage.office_id == nurse.group.office_id,
+        ShiftManage.group_id == current_user.group_id,
+        ShiftManage.nurse_class == 'RN'
+    ).order_by(ShiftManage.shift_slot.asc()).all()
+    
+    # Convert shift manage data to daily requirements format
+    daily_shift_requirements = {}
+    for shift_manage in shift_manages:
+        if shift_manage.codes:
+            for code in shift_manage.codes:
+                daily_shift_requirements[code] = shift_manage.manpower
+
     # 4. Convert data to formats expected by engines
     nurses_dict = [n.__dict__ for n in nurses_in_group]
     prefs_dict = [p.__dict__ for p in preferences]
     config_dict = latest_config.__dict__ if latest_config else {}
     
-    print(f"간호사 수: {len(nurses_dict)}, 선호도 수: {len(prefs_dict)}")
-
+    # Add daily shift requirements to config
+    config_dict['daily_shift_requirements'] = daily_shift_requirements
+    
     # 5. Choose engine and generate roster
-    print(f"선택된 알고리즘: {req.algorithm}")
     
     if req.algorithm == "cp_sat" and CPSAT_AVAILABLE:
-        print("CP-SAT 기반 엔진을 사용하여 근무표를 생성합니다.")
         try:
             with Timer("CP-SAT 엔진으로 근무표 생성"):
                 generated = generate_roster_cp_sat(
                     nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=60
                 )
         except Exception as e:
-            print(f"CP-SAT 엔진 실행 중 오류 발생: {e}")
             print("기존 엔진으로 폴백합니다.")
             generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
     elif req.algorithm == "cp_sat_main_v3" and CPSAT_MAIN_V3_AVAILABLE:
-        print("CP-SAT Main V3 엔진을 사용하여 근무표를 생성합니다.")
         try:
             with Timer("CP-SAT Main V3 엔진으로 근무표 생성"):
                 generated = generate_roster_cp_sat_main_v3(
                     nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=90
                 )
         except Exception as e:
-            print(f"CP-SAT Main V3 엔진 실행 중 오류 발생: {e}")
             print("CP-SAT 기본 엔진으로 폴백합니다.")
             if CPSAT_AVAILABLE:
                 generated = generate_roster_cp_sat(
@@ -853,14 +964,12 @@ async def generate_roster_endpoint(
                 print("기존 엔진으로 폴백합니다.")
                 generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
     elif req.algorithm == "cp_sat_main_v2" and CPSAT_MAIN_V2_AVAILABLE:
-        print("CP-SAT Main V2 엔진을 사용하여 근무표를 생성합니다.")
         try:
             with Timer("CP-SAT Main V2 엔진으로 근무표 생성"):
                 generated = generate_roster_cp_sat_main_v2(
                     nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=90
                 )
         except Exception as e:
-            print(f"CP-SAT Main V2 엔진 실행 중 오류 발생: {e}")
             print("CP-SAT 기본 엔진으로 폴백합니다.")
             if CPSAT_AVAILABLE:
                 generated = generate_roster_cp_sat(
@@ -870,14 +979,12 @@ async def generate_roster_endpoint(
                 print("기존 엔진으로 폴백합니다.")
                 generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
     elif req.algorithm == "cp_sat_adaptive" and CPSAT_ADAPTIVE_AVAILABLE:
-        print("CP-SAT Adaptive 엔진을 사용하여 근무표를 생성합니다.")
         try:
             with Timer("CP-SAT Adaptive 엔진으로 근무표 생성"):
                 generated = generate_roster_cp_sat_adaptive(
                     nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=300
                 )
         except Exception as e:
-            print(f"CP-SAT Adaptive 엔진 실행 중 오류 발생: {e}")
             print("CP-SAT 기본 엔진으로 폴백합니다.")
             if CPSAT_AVAILABLE:
                 generated = generate_roster_cp_sat(
@@ -887,11 +994,9 @@ async def generate_roster_endpoint(
                 print("기존 엔진으로 폴백합니다.")
                 generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
     elif req.algorithm == "random_sampling":
-        print("랜덤 샘플링 엔진을 사용하여 근무표를 생성합니다.")
         generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
     else:
         # 기본값 또는 CP-SAT 사용 불가능한 경우
-        print("기존 엔진을 사용하여 근무표를 생성합니다.")
         generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
 
     # 6. Clear old entries and save new roster to DB

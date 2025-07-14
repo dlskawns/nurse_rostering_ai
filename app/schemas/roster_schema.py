@@ -11,9 +11,9 @@ class RosterResponse(BaseModel):
     response: Any
 
 class RosterConfigBase(BaseModel):
-    day_req: int
-    eve_req: int
-    nig_req: int
+    day_req: Optional[int] = 0
+    eve_req: Optional[int] = 0
+    nig_req: Optional[int] = 0
     min_exp_per_shift: int
     req_exp_nurses: int
     two_offs_per_week: bool

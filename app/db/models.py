@@ -67,6 +67,7 @@ class ScheduleEntry(Base):
 class Shift(Base):
     __tablename__ = "shifts"
     shift_id = Column(VARCHAR(10), primary_key=True)
+    office_id = Column(VARCHAR(50), ForeignKey("offices.office_id"))
     group_id = Column(VARCHAR(50), ForeignKey("groups.group_id"))
     name = Column(VARCHAR(20), nullable=False)
     color = Column(VARCHAR(10), nullable=False)
@@ -79,6 +80,21 @@ class Shift(Base):
     duration = Column(INTEGER, nullable=True)  # for time_type='hours'
     sequence = Column(INTEGER, nullable=False, default=0)  # 순서 관리용
 
+    office = relationship("Office")
+    group = relationship("Group")
+
+class ShiftManage(Base):
+    __tablename__ = "shift_manage"
+    # ── 복합 PRIMARY KEY ──────────────────────────────
+    office_id  = Column(VARCHAR(50), ForeignKey("offices.office_id"), primary_key=True)
+    group_id   = Column(VARCHAR(50), ForeignKey("groups.group_id"), primary_key=True)
+    nurse_class = Column(VARCHAR(10), nullable=False, primary_key=True)  # 'RN', 'AN', '보조'
+    shift_slot = Column(INTEGER, nullable=False, primary_key=True)  # 슬롯 번호 (1, 2, 3...)
+    main_code = Column(VARCHAR(10), nullable=True)  # 메인 근무코드 (하나만)
+    codes = Column(JSON, nullable=True)  # 근무코드 리스트 ['D', 'E', 'N']
+    manpower = Column(INTEGER, nullable=False, default=0)  # 인력 수
+
+    office = relationship("Office")
     group = relationship("Group")
 
 class ShiftPreference(Base):
