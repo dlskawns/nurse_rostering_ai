@@ -61,8 +61,11 @@ class Nurse:
             np.ndarray: 각 교대 유형에 대한 선호도 점수 [D, E, N, OFF]
         """
         preferences = np.ones(len(config.shift_types))
+        # print('config.shift_types', config.shift_types)
         
         # 설정에서 교대 배정 비율 적용
+        print('---------------------------------config', config.shift_types.index('OFF')
+        )
         d_idx = config.shift_types.index('D')
         evening_idx = config.shift_types.index('E')
         night_idx = config.shift_types.index('N')

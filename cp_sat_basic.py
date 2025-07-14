@@ -30,24 +30,54 @@ class CPSATBasicEngine:
     
     def create_config_from_db(self, config_data: dict) -> NurseRosterConfig:
         """DB에서 가져온 설정 데이터를 NurseRosterConfig 객체로 변환"""
+        
+        # 법규 제약사항 (Hard Constraints)
+        max_conseq_work = config_data.get('max_conseq_work', 5)
+        banned_day_after_eve = config_data.get('banned_day_after_eve', True)
+        three_seq_nig = config_data.get('three_seq_nig', True)
+        two_offs_after_three_nig = config_data.get('two_offs_after_three_nig', True)
+        two_offs_after_two_nig = config_data.get('two_offs_after_two_nig', False)
+        max_nig_per_month = config_data.get('max_nig_per_month', 15)
+        
+        # 병원 내규 (Soft Constraints)
+        min_exp_per_shift = config_data.get('min_exp_per_shift', 3)
+        req_exp_nurses = config_data.get('req_exp_nurses', 1)
+        two_offs_per_week = config_data.get('two_offs_per_week', True)
+        sequential_offs = config_data.get('sequential_offs', True)
+        even_nights = config_data.get('even_nights', True)
+        
+        # 가중치 설정 - Night Keep은 E와 차별화
+        shift_weights = {
+            'D': 5.0, 
+            'E': 5.0, 
+            'N': 7.0,  # Night Keep은 더 높은 가중치
+            'OFF': 10.0
+        }
+        
         return NurseRosterConfig(
-            daily_shift_requirements={
+            daily_shift_requirements=config_data.get('daily_shift_requirements', {
                 'D': config_data.get('day_req', 3),
                 'E': config_data.get('eve_req', 3), 
                 'N': config_data.get('nig_req', 2)
-            },
-            min_experience_per_shift=config_data.get('min_exp_per_shift', 3),
-            required_experienced_nurses=config_data.get('req_exp_nurses', 1),
-            enforce_two_offs_per_week=config_data.get('two_offs_per_week', False),
-            max_night_shifts_per_month=config_data.get('max_nig_per_month', 15),
-            max_consecutive_nights=3 if config_data.get('three_seq_nig', False) else 2,
-            max_consecutive_work_days=config_data.get('max_conseq_work', 6),
-            global_monthly_off_days=2,  # 하드코딩 필요
+            }),
+            # 병원 내규 (Soft Constraints)
+            min_experience_per_shift=min_exp_per_shift,
+            required_experienced_nurses=req_exp_nurses,
+            enforce_two_offs_per_week=two_offs_per_week,
+            # 법규 제약사항 (Hard Constraints)
+            max_night_shifts_per_month=max_nig_per_month,
+            max_consecutive_nights=3 if three_seq_nig else 2,
+            max_consecutive_work_days=max_conseq_work,
+            # 추가된 새로운 제약사항들
+            banned_day_after_eve=banned_day_after_eve,
+            two_offs_after_three_nig=two_offs_after_three_nig,
+            two_offs_after_two_nig=two_offs_after_two_nig,
+            sequential_offs=sequential_offs,
+            even_nights=even_nights,
+            global_monthly_off_days=2,
             standard_personal_off_days=config_data.get('off_days', 8) - 2 if config_data.get('off_days', 8) > 2 else 0,
             shift_requirement_priority=config_data.get('shift_priority', 0.7),
-            shift_preference_weights={
-                'D': 5.0, 'E': 5.0, 'N': 5.0, 'OFF': 10.0
-            },
+            shift_preference_weights=shift_weights,
             pair_preference_weight=3.0
         )
     
@@ -210,10 +240,14 @@ class CPSATBasicEngine:
             # 기본값으로 빈 페어링 선호도 설정
             roster_system.apply_pair_preferences(pair_preferences)
         
-        # 9. CP-SAT으로 최적화
+        # 9. CP-SAT으로 최적화 (새로운 제약사항 포함)
         with Timer("CP-SAT으로 최적화"):
             print(f"{self.logger_prefix} CP-SAT 최적화 시작 (시간 제한: {time_limit_seconds}초)...")
-            roster_system.optimize_roster_with_cp_sat_v2(time_limit_seconds=time_limit_seconds)
+            success = self._optimize_with_enhanced_constraints(roster_system, time_limit_seconds)
+            
+            if not success:
+                print(f"{self.logger_prefix} 개선된 제약사항으로 실패, 기본 알고리즘으로 폴백...")
+                roster_system.optimize_roster_with_cp_sat_v2(time_limit_seconds=time_limit_seconds)
         
         # 10. 결과 변환
         with Timer("결과 변환"):
@@ -224,6 +258,199 @@ class CPSATBasicEngine:
         
         print(f"{self.logger_prefix} 근무표 생성 완료")
         return result
+    
+    def _optimize_with_enhanced_constraints(self, roster_system: RosterSystem, time_limit_seconds: int) -> bool:
+        """법규 제약사항과 병원 내규를 포함한 CP-SAT 최적화"""
+        try:
+            from ortools.sat.python import cp_model
+        except ImportError:
+            print("OR-Tools를 찾을 수 없습니다.")
+            return False
+            
+        print(f"{self.logger_prefix} 개선된 제약사항으로 CP-SAT 최적화 시작...")
+        start_time = time.time()
+        
+        model = cp_model.CpModel()
+        
+        # 변수 정의: x[nurse, day, shift] = 1 if nurse is assigned to shift on day
+        x = {}
+        for n_idx in range(len(roster_system.nurses)):
+            for day in range(roster_system.num_days):
+                for s_idx in range(roster_system.config.num_shifts):
+                    x[n_idx, day, s_idx] = model.NewBoolVar(f'n{n_idx}_d{day}_s{s_idx}')
+
+        # ============ 기본 제약사항 ============
+        
+        # 1. 각 간호사는 하루에 정확히 하나의 근무만 배정
+        for n_idx in range(len(roster_system.nurses)):
+            for day in range(roster_system.num_days):
+                model.AddExactlyOne(x[n_idx, day, s_idx] for s_idx in range(roster_system.config.num_shifts))
+
+        # 2. 일일 교대별 인원 요구사항 (하드 제약)
+        for day in range(roster_system.num_days):
+            for shift, required in roster_system.config.daily_shift_requirements.items():
+                s_idx = roster_system.config.shift_types.index(shift)
+                model.Add(sum(x[n_idx, day, s_idx] for n_idx in range(len(roster_system.nurses))) >= required)
+
+        # ============ 법규 제약사항 (Hard Constraints) ============
+        
+        night_idx = roster_system.config.shift_types.index('N')
+        day_idx = roster_system.config.shift_types.index('D')
+        eve_idx = roster_system.config.shift_types.index('E')
+        off_idx = roster_system.config.shift_types.index('OFF')
+        
+        # 3. 최대 연속 근무일 수 제한
+        max_work = roster_system.config.max_consecutive_work_days
+        for n_idx in range(len(roster_system.nurses)):
+            for start_day in range(roster_system.num_days - max_work):
+                # 연속된 (max_work + 1)일 중 적어도 1일은 반드시 휴무여야 함
+                off_days_in_window = []
+                for d in range(max_work + 1):
+                    if start_day + d < roster_system.num_days:
+                        off_days_in_window.append(x[n_idx, start_day + d, off_idx])
+                
+                if off_days_in_window:
+                    model.Add(sum(off_days_in_window) >= 1)
+
+        # 4. E → D 근무 금지 (법규)
+        if hasattr(roster_system.config, 'banned_day_after_eve') and roster_system.config.banned_day_after_eve:
+            for n_idx in range(len(roster_system.nurses)):
+                for day in range(1, roster_system.num_days):
+                    model.Add(x[n_idx, day, day_idx] + x[n_idx, day-1, eve_idx] <= 1)
+
+        # 5. N → D 근무 금지 (항상 적용)
+        for n_idx in range(len(roster_system.nurses)):
+            for day in range(1, roster_system.num_days):
+                model.Add(x[n_idx, day, day_idx] + x[n_idx, day-1, night_idx] <= 1)
+
+        # 6. 최대 연속 야간 근무 제한
+        max_nights = roster_system.config.max_consecutive_nights
+        for n_idx in range(len(roster_system.nurses)):
+            for day in range(roster_system.num_days - max_nights):
+                model.Add(sum(x[n_idx, d, night_idx] for d in range(day, day + max_nights + 1) if d < roster_system.num_days) <= max_nights)
+
+        # 7. 월 최대 야간 근무 수 제한
+        for n_idx in range(len(roster_system.nurses)):
+            model.Add(sum(x[n_idx, day, night_idx] for day in range(roster_system.num_days)) <= roster_system.config.max_night_shifts_per_month)
+
+        # 8. N 3회 후 OFF 2회 (법규)
+        if hasattr(roster_system.config, 'two_offs_after_three_nig') and roster_system.config.two_offs_after_three_nig:
+            for n_idx in range(len(roster_system.nurses)):
+                for day in range(2, roster_system.num_days - 2):
+                    # 3일 연속 N이면 다음 2일은 반드시 OFF
+                    three_nights = x[n_idx, day-2, night_idx] + x[n_idx, day-1, night_idx] + x[n_idx, day, night_idx]
+                    if day + 2 < roster_system.num_days:
+                        two_offs = x[n_idx, day+1, off_idx] + x[n_idx, day+2, off_idx]
+                        # 3일 연속 N(three_nights=3)이면 다음 2일 반드시 OFF(two_offs=2)
+                        model.Add(two_offs >= 2 * (three_nights - 2))
+
+        # 9. N 2회 후 OFF 2회 (법규)
+        if hasattr(roster_system.config, 'two_offs_after_two_nig') and roster_system.config.two_offs_after_two_nig:
+            for n_idx in range(len(roster_system.nurses)):
+                for day in range(1, roster_system.num_days - 2):
+                    # 2일 연속 N이면 다음 2일은 반드시 OFF
+                    two_nights = x[n_idx, day-1, night_idx] + x[n_idx, day, night_idx]
+                    if day + 2 < roster_system.num_days:
+                        two_offs = x[n_idx, day+1, off_idx] + x[n_idx, day+2, off_idx]
+                        # 2일 연속 N(two_nights=2)이면 다음 2일 반드시 OFF(two_offs=2)
+                        model.Add(two_offs >= 2 * (two_nights - 1))
+
+        # ============ 병원 내규 (Soft Constraints via Penalty) ============
+        
+        penalty_terms = []
+        
+        # 10. 경력 간호사 요구사항 (소프트)
+        exp_penalty_vars = []
+        for day in range(roster_system.num_days):
+            for shift in ['D', 'E', 'N']:
+                s_idx = roster_system.config.shift_types.index(shift)
+                experienced_assigned = sum(
+                    x[n_idx, day, s_idx] 
+                    for n_idx, nurse in enumerate(roster_system.nurses)
+                    if nurse.experience_years >= roster_system.config.min_experience_per_shift
+                )
+                exp_shortage = model.NewIntVar(0, roster_system.config.required_experienced_nurses, f'exp_shortage_d{day}_s{shift}')
+                model.Add(exp_shortage >= roster_system.config.required_experienced_nurses - experienced_assigned)
+                exp_penalty_vars.append(exp_shortage)
+
+        # 11. 주 2회 이상 OFF (소프트)
+        if hasattr(roster_system.config, 'enforce_two_offs_per_week') and roster_system.config.enforce_two_offs_per_week:
+            weekly_off_penalty_vars = []
+            weeks = roster_system.num_days // 7
+            for n_idx in range(len(roster_system.nurses)):
+                for week in range(weeks):
+                    week_start = week * 7
+                    week_end = min(week_start + 7, roster_system.num_days)
+                    week_offs = sum(x[n_idx, day, off_idx] for day in range(week_start, week_end))
+                    off_shortage = model.NewIntVar(0, 2, f'week_off_shortage_n{n_idx}_w{week}')
+                    model.Add(off_shortage >= 2 - week_offs)
+                    weekly_off_penalty_vars.append(off_shortage)
+
+        # 12. N 개수 균등 배정 (소프트)
+        if hasattr(roster_system.config, 'even_nights') and roster_system.config.even_nights:
+            night_penalty_vars = []
+            # 야간전담 간호사 제외하고 균등 배정
+            non_night_nurses = [n_idx for n_idx, nurse in enumerate(roster_system.nurses) if not nurse.is_night_nurse]
+            if len(non_night_nurses) > 1:
+                target_nights = sum(roster_system.config.daily_shift_requirements.get('N', 2) for _ in range(roster_system.num_days)) // len(non_night_nurses)
+                
+                for n_idx in non_night_nurses:
+                    total_nights = sum(x[n_idx, day, night_idx] for day in range(roster_system.num_days))
+                    night_deviation_pos = model.NewIntVar(0, roster_system.num_days, f'night_dev_pos_n{n_idx}')
+                    night_deviation_neg = model.NewIntVar(0, roster_system.num_days, f'night_dev_neg_n{n_idx}')
+                    model.Add(night_deviation_pos - night_deviation_neg == total_nights - target_nights)
+                    night_penalty_vars.extend([night_deviation_pos, night_deviation_neg])
+
+        # ============ 목적 함수 ============
+        
+        objective_terms = []
+        
+        # 선호도 만족
+        for n_idx in range(len(roster_system.nurses)):
+            for day in range(roster_system.num_days):
+                for s_idx in range(roster_system.config.num_shifts):
+                    pref_score = int(roster_system.preference_matrix[n_idx, day, s_idx] * 100)
+                    objective_terms.append(pref_score * x[n_idx, day, s_idx])
+        
+        # 소프트 제약 위반 패널티
+        for var in exp_penalty_vars:
+            objective_terms.append(-500 * var)  # 경력 간호사 부족 패널티
+            
+        if hasattr(roster_system.config, 'enforce_two_offs_per_week') and roster_system.config.enforce_two_offs_per_week:
+            for var in weekly_off_penalty_vars:
+                objective_terms.append(-100 * var)  # 주간 휴무 부족 패널티
+        
+        if hasattr(roster_system.config, 'even_nights') and roster_system.config.even_nights:
+            for var in night_penalty_vars:
+                objective_terms.append(-50 * var)  # 야간 근무 불균등 패널티
+
+        model.Maximize(sum(objective_terms))
+
+        # ============ 솔버 실행 ============
+        
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = time_limit_seconds
+        solver.parameters.log_search_progress = True
+        solver.parameters.num_search_workers = 8
+        
+        status = solver.Solve(model)
+
+        if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            print(f"{self.logger_prefix} 최적화 완료: {time.time() - start_time:.2f}초 소요")
+            print(f"목적값: {solver.ObjectiveValue()}")
+            
+            # 결과를 roster_system에 저장
+            roster_system.roster.fill(0)
+            for n_idx in range(len(roster_system.nurses)):
+                for day in range(roster_system.num_days):
+                    for s_idx in range(roster_system.config.num_shifts):
+                        if solver.Value(x[n_idx, day, s_idx]) == 1:
+                            roster_system.roster[n_idx, day, s_idx] = 1
+            
+            return True
+        else:
+            print(f"{self.logger_prefix} 해를 찾지 못했습니다. 상태: {status}")
+            return False
     
     def _convert_result_to_db_format(self, roster_system: RosterSystem, nurses: List[Nurse]) -> Dict[str, List[str]]:
         """RosterSystem 결과를 DB 형식으로 변환"""

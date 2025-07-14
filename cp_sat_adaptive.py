@@ -61,25 +61,56 @@ class CPSATAdaptiveEngine:
     
     def create_config_from_db(self, config_data: dict) -> NurseRosterConfig:
         """DB에서 가져온 설정 데이터를 NurseRosterConfig 객체로 변환"""
+        
+        # 법규 제약사항 (Hard Constraints)
+        max_conseq_work = config_data.get('max_conseq_work', 5)
+        banned_day_after_eve = config_data.get('banned_day_after_eve', True)
+        three_seq_nig = config_data.get('three_seq_nig', True)
+        two_offs_after_three_nig = config_data.get('two_offs_after_three_nig', True)
+        two_offs_after_two_nig = config_data.get('two_offs_after_two_nig', False)
+        max_nig_per_month = config_data.get('max_nig_per_month', 15)
+        
+        # 병원 내규 (Soft Constraints)
+        min_exp_per_shift = config_data.get('min_exp_per_shift', 3)
+        req_exp_nurses = config_data.get('req_exp_nurses', 1)
+        two_offs_per_week = config_data.get('two_offs_per_week', True)
+        sequential_offs = config_data.get('sequential_offs', True)
+        even_nights = config_data.get('even_nights', True)
+        
+        # 가중치 설정 - Night Keep은 E와 차별화
+        shift_weights = {
+            'D': 5.0, 
+            'E': 5.0, 
+            'N': 7.0,  # Night Keep은 더 높은 가중치
+            'OFF': 10.0
+        }
+        
         return NurseRosterConfig(
-            daily_shift_requirements={
+            daily_shift_requirements=config_data.get('daily_shift_requirements', {
                 'D': config_data.get('day_req', 3),
                 'E': config_data.get('eve_req', 3), 
                 'N': config_data.get('nig_req', 2)
-            },
-            min_experience_per_shift=config_data.get('min_exp_per_shift', 3),
-            required_experienced_nurses=config_data.get('req_exp_nurses', 1),
-            enforce_two_offs_per_week=config_data.get('two_offs_per_week', False),
-            max_night_shifts_per_month=config_data.get('max_nig_per_month', 15),
-            max_consecutive_nights=3 if config_data.get('three_seq_nig', False) else 2,
-            max_consecutive_work_days=config_data.get('max_conseq_work', 6),
+            }),
+            # 병원 내규 (Soft Constraints)
+            min_experience_per_shift=min_exp_per_shift,
+            required_experienced_nurses=req_exp_nurses,
+            enforce_two_offs_per_week=two_offs_per_week,
+            # 법규 제약사항 (Hard Constraints)
+            max_night_shifts_per_month=max_nig_per_month,
+            max_consecutive_nights=3 if three_seq_nig else 2,
+            max_consecutive_work_days=max_conseq_work,
+            # 추가된 새로운 제약사항들
+            banned_day_after_eve=banned_day_after_eve,
+            two_offs_after_three_nig=two_offs_after_three_nig,
+            two_offs_after_two_nig=two_offs_after_two_nig,
+            sequential_offs=sequential_offs,
+            even_nights=even_nights,
             global_monthly_off_days=config_data.get('global_monthly_off_days', 3),
             standard_personal_off_days=config_data.get('off_days', 8) - config_data.get('global_monthly_off_days', 3) if config_data.get('off_days', 8) > config_data.get('global_monthly_off_days', 3) else 0,
-            enforce_E_after_D_constraint=config_data.get('banned_day_after_eve', True),
+            # 기존 필드
+            enforce_E_after_D_constraint=banned_day_after_eve,  # 호환성을 위해 유지
             shift_requirement_priority=config_data.get('shift_priority', 0.8),
-            # 추가된 야간 근무 관련 제약 조건들
-            two_offs_after_three_nig=config_data.get('two_offs_after_three_nig', False),
-            two_offs_after_two_nig=config_data.get('two_offs_after_two_nig', False)
+            shift_preference_weights=shift_weights
         )
     
     def create_nurses_from_db(self, nurses_data: List[dict]) -> List[Nurse]:
@@ -360,6 +391,18 @@ class CPSATAdaptiveEngine:
             model.Add(total_off <= allowed_off)
             # 최소 휴무일도 어느 정도 보장
             model.Add(total_off >= max(1, int(allowed_off * 0.6)))
+        
+        # 3. 주 2회 이상 OFF (병원 내규)
+        if hasattr(roster_system.config, 'enforce_two_offs_per_week') and roster_system.config.enforce_two_offs_per_week:
+            weeks = roster_system.num_days // 7
+            for n_idx in range(len(roster_system.nurses)):
+                for week in range(weeks):
+                    week_start = week * 7
+                    week_end = min(week_start + 7, roster_system.num_days)
+                    week_offs = sum(x[n_idx, day, off_idx] for day in range(week_start, week_end))
+                    model.Add(week_offs >= 2)
+        
+        # 4. N 개수 균등 배정 (병원 내규) - 소프트 제약으로 처리는 _set_objective에서
 
     def _set_objective(self, model, x, roster_system: RosterSystem, relaxations: List[str]):
         """목적 함수 설정"""
@@ -390,6 +433,34 @@ class CPSATAdaptiveEngine:
                 
                 model.Add(deviation_pos - deviation_neg == off_days - target_off_days)
                 objective_terms.append(-5 * (deviation_pos + deviation_neg))
+            
+            # N 개수 균등 배정 (병원 내규)
+            if hasattr(roster_system.config, 'even_nights') and roster_system.config.even_nights:
+                night_idx = roster_system.config.shift_types.index('N')
+                # 야간전담 간호사 제외하고 균등 배정
+                non_night_nurses = [n_idx for n_idx, nurse in enumerate(roster_system.nurses) if not nurse.is_night_nurse]
+                if len(non_night_nurses) > 1:
+                    total_night_shifts = sum(roster_system.config.daily_shift_requirements.get('N', 2) for _ in range(roster_system.num_days))
+                    target_nights_per_nurse = total_night_shifts // len(non_night_nurses)
+                    
+                    for n_idx in non_night_nurses:
+                        night_shifts = sum(x[n_idx, day, night_idx] for day in range(roster_system.num_days))
+                        night_dev_pos = model.NewIntVar(0, roster_system.num_days, f'night_dev_pos_{n_idx}')
+                        night_dev_neg = model.NewIntVar(0, roster_system.num_days, f'night_dev_neg_{n_idx}')
+                        
+                        model.Add(night_dev_pos - night_dev_neg == night_shifts - target_nights_per_nurse)
+                        objective_terms.append(-10 * (night_dev_pos + night_dev_neg))  # 야간 근무 균등 배정 패널티
+            
+            # OFF 연속 배정 보너스 (병원 내규)
+            if hasattr(roster_system.config, 'sequential_offs') and roster_system.config.sequential_offs:
+                for n_idx in range(len(roster_system.nurses)):
+                    for day in range(roster_system.num_days - 1):
+                        # 연속된 OFF에 보너스 부여
+                        consecutive_offs = x[n_idx, day, off_idx] + x[n_idx, day + 1, off_idx]
+                        # 2일 연속 OFF면 보너스
+                        consecutive_bonus = model.NewBoolVar(f'consecutive_off_bonus_{n_idx}_{day}')
+                        model.Add(consecutive_bonus == (consecutive_offs == 2))
+                        objective_terms.append(15 * consecutive_bonus)  # 연속 휴무 보너스
         
         # 목적 함수 설정
         if objective_terms:

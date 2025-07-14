@@ -21,6 +21,11 @@ class NurseRosterConfig:
     # 근무 패턴 제약 조건
     max_consecutive_work_days: int = 6  # 최대 연속 근무일 수
     enforce_two_offs_per_week: bool = False  # 주당 2일 휴무 적용 여부
+    banned_day_after_eve: bool = True  # E → D 근무 금지 (법규)
+    
+    # 병원 내규 (소프트 제약)
+    sequential_offs: bool = True  # OFF 연속 배정
+    even_nights: bool = True  # N 개수 균등 배정
     
     # 휴무일 관리
     global_monthly_off_days: int = 3  # 모든 간호사에게 적용되는 전체 휴무일(공휴일, 특별 휴무일)
