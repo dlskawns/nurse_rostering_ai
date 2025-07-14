@@ -27,6 +27,8 @@ class RosterConfigBase(BaseModel):
     shift_priority: float
     weekend_shift_ratio: float
     patient_amount: int
+    even_nights: bool
+    sequential_offs: bool
 
 class RosterConfigCreate(RosterConfigBase):
     pass

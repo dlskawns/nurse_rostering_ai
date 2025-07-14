@@ -299,7 +299,7 @@ async def save_roster_config(
             'eve_req': eve_req,
             'nig_req': nig_req
         })
-        
+        print('config_dict', config_dict)
         print(f'Final config dict: {config_dict}')
         
         db_config = RosterConfigModel(
@@ -307,6 +307,7 @@ async def save_roster_config(
             office_id=user.office_id,
             group_id=user.group_id
         )
+
         db.add(db_config)
         db.commit()
         db.refresh(db_config)
