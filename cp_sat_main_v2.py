@@ -72,11 +72,11 @@ class CPSATMainV2Engine:
         }
         
         return NurseRosterConfig(
-            daily_shift_requirements=config_data.get('daily_shift_requirements', {
+            daily_shift_requirements={
                 'D': config_data.get('day_req', 3),
                 'E': config_data.get('eve_req', 3), 
                 'N': config_data.get('nig_req', 2)
-            }),
+            },
             # 병원 내규 (Soft Constraints)
             min_experience_per_shift=min_exp_per_shift,
             required_experienced_nurses=req_exp_nurses,
