@@ -946,7 +946,7 @@ async def generate_roster_endpoint(
                     nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=60
                 )
         except Exception as e:
-            print("기존 엔진으로 폴백합니다.")
+            print("기존 엔진으로 폴백합니다.", e)
             generated = generate_roster(nurses_dict, prefs_dict, req.year, req.month)
     elif req.algorithm == "cp_sat_main_v3" and CPSAT_MAIN_V3_AVAILABLE:
         try:
@@ -1033,7 +1033,7 @@ async def generate_roster_endpoint(
         "nurses": [],
         "violations": []  # 임시로 빈 리스트
     }
-    
+    print('\n\n\n\n\nroster_data', roster_data, '\n\n\n\n\n')
     # Structure data by nurse using DB entries (동일한 로직으로 일관성 보장)
     entries_by_nurse = {}
     for entry in entries:
@@ -1241,80 +1241,130 @@ async def save_roster(
     return {"message": "Roster saved successfully"}
 
 # [Roster] - 근무표 위반사항 실시간 계산
+# [Roster] - 근무표 위반사항 실시간 계산
 @router.post("/roster/validate")
 async def validate_roster(
     roster_data: dict,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
+    # ──────────────────────── 0. 인증/파라미터 체크 ────────────────────────
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    year = roster_data.get('year')
-    month = roster_data.get('month')
-    roster = roster_data.get('roster')
-    
+    year: int   = roster_data.get('year')
+    month: int  = roster_data.get('month')
+    roster      = roster_data.get('roster')
+
     if not all([year, month, roster]):
-        raise HTTPException(status_code=400, detail="Missing required fields: year, month, roster")
+        raise HTTPException(
+            status_code=400,
+            detail="Missing required fields: year, month, roster"
+        )
 
     try:
-        # Get roster configuration
-        latest_config_db = db.query(RosterConfig).filter(
-            RosterConfig.group_id == current_user.group_id
-        ).order_by(RosterConfig.created_at.desc()).first()
-        
+        # ──────────────────────── 1. “base-code ↔️ 파생코드” 매핑 만들기 ────────────────────────
+        #
+        #  * 같은 nurse_class라도, 사전에 등록된 교대(slot) 기준으로만 조회
+        #  * codes 열(JSON) 에 들어있는 파생 코드를 본교대(main_code) 로 매핑
+        #
+        from app.db.models import ShiftManage, Nurse, RosterConfig  # local import
+
+        # ○ 현 수간호사의 부서 기준으로 조회
+        shift_rows = db.query(ShiftManage).filter(
+            ShiftManage.office_id == current_user.office_id,
+            ShiftManage.group_id  == current_user.group_id
+        ).all()
+
+        #    예) { 'D': 'D', 'D1': 'D', 'MD': 'D',  'E': 'E', … }
+        alias_map: dict[str, str] = {}
+
+        for row in shift_rows:
+            if not row.main_code:
+                continue
+            base = row.main_code.upper()          # ex) 'D'
+            alias_map[base] = base
+
+            if row.codes:
+                # row.codes 가 JSON 컬럼 → 이미 list 로 deserialize 되어있음
+                for code in row.codes:
+                    alias_map[code.upper()] = base
+
+        # OFF(휴무) 도 항상 포함시킴
+        alias_map.setdefault('OFF', 'OFF')
+        alias_map.setdefault('O',   'OFF')
+
+        # ──────────────────────── 2. 근무표 설정(인원/제약) 불러오기 ────────────────────────
+        latest_config_db = (
+            db.query(RosterConfig)
+              .filter(RosterConfig.group_id == current_user.group_id)
+              .order_by(RosterConfig.created_at.desc())
+              .first()
+        )
         if not latest_config_db:
             return {"violations": ["근무표 설정을 찾을 수 없습니다."]}
-        
-        # Create RosterSystem configuration
+
         roster_config_for_engine = NurseRosterConfig(
             daily_shift_requirements={
                 'D': latest_config_db.day_req,
                 'E': latest_config_db.eve_req,
                 'N': latest_config_db.nig_req
             },
-            max_consecutive_work_days=latest_config_db.max_conseq_work,
-            max_night_shifts_per_month=latest_config_db.max_nig_per_month,
-            max_consecutive_nights=3 if latest_config_db.three_seq_nig else 2
+            max_consecutive_work_days   = latest_config_db.max_conseq_work,
+            max_night_shifts_per_month  = latest_config_db.max_nig_per_month,
+            max_consecutive_nights      = 3 if latest_config_db.three_seq_nig else 2
         )
-        
-        # Get nurses for engine
-        nurses_for_engine = [NurseEngine.from_db_model(n, i) for i, n in enumerate(db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all())]
-        
-        # Create RosterSystem instance
+
+        # ──────────────────────── 3. RosterSystem 초기화 ────────────────────────
+        nurses_for_engine = [
+            NurseEngine.from_db_model(n, i)
+            for i, n in enumerate(
+                db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
+            )
+        ]
+
         system = RosterSystem(
-            nurses=nurses_for_engine,
-            target_month=date(year, month, 1),
-            config=roster_config_for_engine
+            nurses        = nurses_for_engine,
+            target_month  = date(year, month, 1),
+            config        = roster_config_for_engine
         )
-        
-        # Convert roster data to RosterSystem format
+
+        # shift_types 는 ['D','E','N','OFF'] (엔진 기본).  
         shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
-        
-        # Initialize roster with zeros
-        system.roster.fill(0)
-        
+        system.roster.fill(0)                                # 3-D 배열 0으로 초기화
+
+        # ──────────────────────── 4. 프론트에서 넘어온 근무표 → 엔진 포맷 변환 ────────────────────────
         for nurse_idx, nurse_data in enumerate(roster):
             if nurse_idx >= len(system.nurses):
                 continue
             schedule = nurse_data.get('schedule', [])
-            for day_idx, shift in enumerate(schedule):
+            for day_idx, raw_shift in enumerate(schedule):
                 if day_idx >= system.num_days:
                     continue
-                shift_idx = shift_map.get(shift.upper())
+                # ① 대소문자 무시
+                raw_shift = (raw_shift or '').upper()
+
+                # ② alias_map 으로 본교대 변환
+                base_shift = alias_map.get(raw_shift, raw_shift)
+
+                # ③ 엔진 shift index 찾기
+                shift_idx = shift_map.get(base_shift)
                 if shift_idx is not None:
                     system.roster[nurse_idx, day_idx, shift_idx] = 1
-        
-        # Find violations
+                # else: 알 수 없는 코드 → 무시
+
+        # ──────────────────────── 5. 위반사항 탐색 & 포매팅 ────────────────────────
         violation_details = system._find_violations()
-        
-        # Format violation messages and extract detailed info
-        violation_messages = set()
-        detailed_violations = []
-        
+
+        violation_messages: set[str] = set()
+        detailed_violations: list[dict] = []
+
         for v in violation_details:
             if v['type'] == 'shift_requirement':
-                violation_messages.add(f"{v['day']+1}일: {v['shift']} 근무 인원 미달 (필요: {v['required']}, 배정: {v['actual']})")
+                violation_messages.add(
+                    f"{v['day'] + 1}일: {v['shift']} 근무 인원 미달 "
+                    f"(필요: {v['required']}, 배정: {v['actual']})"
+                )
                 detailed_violations.append({
                     'type': 'shift_requirement',
                     'day': v['day'],
@@ -1340,17 +1390,20 @@ async def validate_roster(
                     'nurse_name': nurse_name,
                     'day': v['day']
                 })
-        
-        violations = sorted(list(violation_messages))
-        
+
         return {
-            "violations": violations,
+            "violations": sorted(violation_messages),
             "detailed_violations": detailed_violations
         }
-        
+
+    # ──────────────────────── 6. 예외 처리 ────────────────────────
     except Exception as e:
-        print(f"위반사항 계산 중 오류 발생: {e}")
-        return {"violations": [f"위반사항 계산 중 오류가 발생했습니다: {str(e)}"]}
+        print(f"[validate_roster] 오류: {e}")
+        return {
+            "violations": [f"위반사항 계산 중 오류가 발생했습니다: {str(e)}"],
+            "detailed_violations": []
+        }
+
 
 # [Schedules] - 특정 월의 모든 버전 목록 조회 (수간호사용)
 @router.get("/schedules/{year}/{month}/versions")

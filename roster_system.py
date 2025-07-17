@@ -7,6 +7,12 @@ import pandas as pd
 import logging
 from config import NurseRosterConfig, DEFAULT_CONFIG
 from nurse import Nurse
+from app.services.holiday_pack import get_weekends   # ← 주말 헬퍼
+
+def _weekend_set(year: int, month: int) -> set[int]:
+    """해당 월의 주말 날짜(1‑based)를 {0‑based day_idx} 로 반환."""
+    return {d.day - 1 for d in get_weekends(year, month)}
+
 
 class RosterSystem:
     """간호사 근무표 생성 및 관리를 위한 주요 클래스."""
@@ -25,7 +31,7 @@ class RosterSystem:
         self.target_month = target_month
         self.config = config
         self.num_days = calendar.monthrange(target_month.year, target_month.month)[1]
-        
+        # self.nurse._anchor_date = date(year, month, 1)
         # 근무표 행렬 초기화: [간호사 × 일수 × 교대]
         self.roster = np.zeros((len(nurses), self.num_days, config.num_shifts))
         
@@ -61,10 +67,12 @@ class RosterSystem:
         print("선호도 행렬 계산 중...")
         start_time = time.time()
         
+        weekend_days = _weekend_set(self.target_month.year, self.target_month.month)
+
         for n_idx, nurse in enumerate(self.nurses):
             for day in range(self.num_days):
                 self.preference_matrix[n_idx, day] = nurse.get_shift_preferences(
-                    day, self.num_days, self.config
+                    day, self.num_days, self.config, weekend_days
                 )
                 
         print(f"선호도 행렬 계산 완료: {time.time() - start_time:.4f}초 소요")
@@ -156,8 +164,8 @@ class RosterSystem:
         base_weight = self.config.shift_preference_weights.get("OFF", 10.0)
         print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
         for target_nurse_id, day_map in off_requests.items():
-            if target_nurse_id is None:
-                print(f"[OFF] 경고: ID {target_nurse_id} 간호사 없음");  continue
+            # if target_nurse_id is None:
+            #     print(f"[OFF] 경고: ID {target_nurse_id} 간호사 없음");  continue
 
             valid_days = []
             for day_str, delta in day_map.items():
@@ -179,6 +187,7 @@ class RosterSystem:
                 day_idx = d-1
                 delta   = day_map[str(d)]
                 self.preference_matrix[nurse.id, day_idx, off_idx] = base_weight + delta
+                # print('\n\n\n\n\nself.preference_matrix[nurse.id, day_idx, off_idx]', self.preference_matrix[nurse.id, day_idx, off_idx], '\n\n\n\n\n')
         
         # nurse.update_off_days(len(valid_days))
             
@@ -214,7 +223,9 @@ class RosterSystem:
                     if 1 <= day <= self.num_days:
                         day_idx = day - 1
                         self.preference_matrix[nurse.id, day_idx, shift_idx] = default_weight + delta
-                        
+            # print('\n\n\n\n\nself.preference_matrix[nurse.id, day_idx, shift_idx]', self.preference_matrix[nurse.id, day_idx, shift_idx], '\n\n\n\n\n')
+            # print('\n\n\n\n\nself.preference_matrix[nurse.id]', self.preference_matrix[nurse.id], '\n\n\n\n\n')
+            
         print("근무 유형 선호도 적용 완료")
         
     def apply_pair_preferences(self, pair_preferences: Dict[str, List[Dict[str, Union[int, float]]]]):
@@ -237,6 +248,7 @@ class RosterSystem:
         
         # together (함께 일하기 원하는 쌍) 처리
         if "work_together" in pair_preferences:
+            # print('\n\n\n\n\npair_preferences["work_together"]', pair_preferences["work_together"], '\n\n\n\n\n')
             for pair in pair_preferences["work_together"]:
                 nurse_1_id = pair["nurse_1"]
                 nurse_2_id = pair["nurse_2"]
@@ -257,6 +269,7 @@ class RosterSystem:
         
         # apart (따로 일하기 원하는 쌍) 처리
         if "work_apart" in pair_preferences:
+            # print('\n\n\n\n\npair_preferences["work_apart"]', pair_preferences["work_apart"], '\n\n\n\n\n')
             for pair in pair_preferences["work_apart"]:
                 nurse_1_id = pair["nurse_1"]
                 nurse_2_id = pair["nurse_2"]
@@ -274,7 +287,7 @@ class RosterSystem:
                         print(f"경고: ID {nurse_1_id}인 간호사를 찾을 수 없습니다.")
                     if nurse_2_idx is None:
                         print(f"경고: ID {nurse_2_id}인 간호사를 찾을 수 없습니다.")
-                        
+        # print('\n\n\n\n\nself.pair_matrix', self.pair_matrix, '\n\n\n\n\n')
         print("간호사 페어링 선호도 초기화 완료")
         
     def _find_violations(self) -> List[dict]:
@@ -741,10 +754,11 @@ class RosterSystem:
         for n_idx, nurse in enumerate(self.nurses):
             if nurse.is_night_nurse:
                 d_idx = self.config.shift_types.index('D')
+                e_idx = self.config.shift_types.index('E')
                 for day in range(self.num_days):
                     # Force day shift assignment to be 0 for night nurses
                     model.Add(x[n_idx, day, d_idx] == 0)
-        
+                    model.Add(x[n_idx, day, e_idx] == 0)
         # 6. Add consecutive work days constraint - 소프트 제약으로 구현
         consecutive_penalty_vars = []
         for n_idx in range(len(self.nurses)):
@@ -1455,16 +1469,22 @@ class RosterSystem:
         for n_idx, nurse in enumerate(self.nurses):
             if nurse.is_night_nurse:
                 d_idx = self.config.shift_types.index('D')
+                E_idx = self.config.shift_types.index('E')
                 for day in range(self.num_days):
                     model.Add(x[n_idx, day, d_idx] == 0)
+                    model.Add(x[n_idx, day, e_idx] == 0)
         
         # 5. No day shift after night shift (HARD)
         night_idx = self.config.shift_types.index('N')
+        evening_idx = self.config.shift_types.index('E')
         day_idx = self.config.shift_types.index('D')
         for n_idx in range(len(self.nurses)):
             for day in range(1, self.num_days):
                 model.Add(x[n_idx, day, day_idx] <= 1 - x[n_idx, day-1, night_idx])
-        
+        for e_idx in range(len(self.nurses)):
+            for day in range(1, self.num_days):
+                model.Add(x[e_idx, day, day_idx] <= 1 - x[e_idx, day-1, evening_idx])
+                
         # 6. 휴무일 제한 추가 (HARD) - 상한만 유지
         off_idx = self.config.shift_types.index('OFF')
         for n_idx, nurse in enumerate(self.nurses):

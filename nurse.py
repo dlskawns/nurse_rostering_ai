@@ -2,7 +2,16 @@ from dataclasses import dataclass
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 import numpy as np
+from functools import lru_cache
+from app.services.holiday_pack import get_weekends   # ← 주말 헬퍼
 
+# ────────────────────────────────────────────────────────────────
+# 주말‑셋 캐시  (month 단위로 한 번만 계산)
+@lru_cache(maxsize=None)
+def _weekend_set(year: int, month: int) -> set[int]:
+    """해당 월의 주말 날짜(1‑based)를 {0‑based day_idx} 로 반환."""
+    return {d.day - 1 for d in get_weekends(year, month)}
+# ────────────────────────────────────────────────────────────────
 @dataclass
 class Nurse:
     """간호사의 속성과 제약 조건을 나타내는 클래스."""
@@ -15,6 +24,7 @@ class Nurse:
     remaining_off_days: int = 0
     personal_off_adjustment: int = 0  # 이전 달에서 이월된 조정치(음수 또는 양수 가능)
     resignation_date: Optional[date] = None
+    entering_date: Optional[date] = None
     head_nurse_off_pattern: Optional[str] = None  # 'weekend', 'mixed', 'normal'
     
     @classmethod
@@ -54,7 +64,7 @@ class Nurse:
             self.personal_off_adjustment = self.remaining_off_days  # 음수 잔액을 다음 달로 이월
             self.remaining_off_days = 0
         
-    def get_shift_preferences(self, day_idx: int, month_days: int, config) -> np.ndarray:
+    def get_shift_preferences(self, day_idx: int, month_days: int, config, weekend_days) -> np.ndarray:
         """주어진 날짜에 대한 교대 근무 선호도를 계산합니다.
         
         Returns:
@@ -64,8 +74,7 @@ class Nurse:
         # print('config.shift_types', config.shift_types)
         
         # 설정에서 교대 배정 비율 적용
-        print('---------------------------------config', config.shift_types.index('OFF')
-        )
+
         d_idx = config.shift_types.index('D')
         evening_idx = config.shift_types.index('E')
         night_idx = config.shift_types.index('N')
@@ -79,26 +88,45 @@ class Nurse:
         # 간호사 유형에 따른 기본 선호도
         if self.is_night_nurse:
             preferences[night_idx] *= config.night_nurse_weight
-            preferences[evening_idx] *= config.night_nurse_weight * 0.8
+            preferences[evening_idx] *= config.night_nurse_weight * 0.2
             preferences[d_idx] *= 0.2  # 주간 근무 비선호
             
-        # 수간호사 선호도
+        # ── ★ 수간호사 weekend 선호 보정 (개선된 주말 판별) ──────
         if self.is_head_nurse:
-            is_weekend = day_idx % 7 >= 5  # 토요일 또는 일요일
-            if self.head_nurse_off_pattern == 'weekend' and is_weekend:
-                preferences[:] = 0.1  # 모든 교대 비선호
+            # # ① 해당 Nurse 객체에 anchor date(달 첫날)가 세팅돼 있으면 사용
+            # anchor: Optional[date] = getattr(self, "_anchor_date", None)
+            # # ② 없으면 config 쪽에 target_month 필드(date) 가 있다면 사용
+            # if anchor is None:
+            #     anchor = getattr(config, "target_month", None)
+
+            # if anchor:
+            #     wk_set = _weekend_set(anchor.year, anchor.month)
+            #     is_weekend = day_idx in wk_set
+            # else:
+            #     # ⬇️ fallback – 예전 방식
+            #     is_weekend = day_idx % 7 >= 5
+
+            # # weekend / mixed 패턴 처리
+            # if self.head_nurse_off_pattern == 'weekend' and is_weekend:
+            #     preferences[:]     = 0.1
+            #     preferences[off_idx] = 2.0
+            # elif self.head_nurse_off_pattern == 'mixed':
+            #     # 격주 주말: 홀수번째 주말 OFF
+            #     if is_weekend and ((anchor.day + day_idx) // 7) % 2 == 1:
+            #         preferences[:]   = 0.1
+            #         preferences[off_idx] = 2.0
+           if self.head_nurse_off_pattern == 'weekend' and day_idx in weekend_days:
+                # print(f'오늘 날짜 {day_idx} 는 주말입니다.')
+                preferences[:]     = 0.1
                 preferences[off_idx] = 2.0
-            elif self.head_nurse_off_pattern == 'mixed':
-                if is_weekend and day_idx % 14 >= 7:  # 격주 주말
-                    preferences[:] = 0.1
-                    preferences[off_idx] = 2.0
-                    
-        # 사직일 처리
-        if self.resignation_date:
-            current_date = date(2024, 1, 1) + timedelta(days=day_idx)  # 예시 기준 날짜
-            if current_date >= self.resignation_date:
-                preferences[:] = 0.0
-                preferences[off_idx] = 1.0
+            # print('\n\n\n\n\npreferences[off_idx]', preferences[off_idx], '\n\n\n\n\n')
+        # # ── 사직일 이후 OFF 선호 ────────────────────────────────
+        # if self.resignation_date:
+        #     if anchor:
+        #         current_date = anchor + timedelta(days=day_idx)
+        #         if current_date >= self.resignation_date:
+        #             preferences[:]     = 0.0
+        #             preferences[off_idx] = 1.0
                 
         return preferences
         

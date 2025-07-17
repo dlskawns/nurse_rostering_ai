@@ -124,10 +124,9 @@ class CPSATBasicEngine:
         for pref in prefs_data:
             nurse_id = pref['nurse_id']
             data = pref.get('data', {})
-            
             if not data:
                 continue
-            
+            # print('\n\n\n\n\ndata', data, '\n\n\n\n\n')
             # 근무 유형 선호도 파싱
             if 'shift' in data:
                 shift_prefs = {}
@@ -136,31 +135,29 @@ class CPSATBasicEngine:
                         shift_prefs[shift_type.upper()] = dates
                 if shift_prefs:
                     shift_preferences[nurse_id] = shift_prefs
-            
+
             # 휴무 요청 파싱
-            if 'off' in data and data['off']:
-                off_dict = {}
-                for date_str in data['off']:
-                    try:
-                        day = int(date_str)
-                        # 기본 휴무 요청 가중치 설정
-                        off_dict[str(day)] = 5.0  
-                    except (ValueError, TypeError):
-                        continue
-                if off_dict:
-                    off_requests[nurse_id] = off_dict
+            if 'O' in data['shift']:
+                # off_dict = {}
+                # for date_str in data['O']:
+                #     try:
+                #         day = int(date_str)
+                #         # 기본 휴무 요청 가중치 설정
+                #         off_dict[str(day)] += 5.0  
+                #     except (ValueError, TypeError):
+                #         continue
+                # if off_dict:
+                off_requests[nurse_id] = data['shift']['O']
+                print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
             
-            # preference 배열에서 OFF 요청도 파싱
+            # preference 파싱
             if 'preference' in data and data['preference']:
-                for pref_item in data['preference']:
-                    if isinstance(pref_item, dict) and pref_item.get('shift') == 'OFF':
-                        date = pref_item.get('date')
-                        weight = pref_item.get('weight', 5.0)
-                        if date:
-                            if nurse_id not in off_requests:
-                                off_requests[nurse_id] = {}
-                            off_requests[nurse_id][str(date)] = weight
-        
+                print(data['preference'])
+                for d in data['preference']:
+                    if d['weight'] <0:
+                        pair_preferences["work_apart"].append({"nurse_1":nurse_id, "nurse_2": d['id'], "weight": d['weight']})
+                    elif d['weight'] >0:
+                        pair_preferences["work_together"].append({"nurse_1":nurse_id, "nurse_2":d['id'], "weight": d['weight']})
         return shift_preferences, off_requests, pair_preferences
     
     def generate_roster(
@@ -325,6 +322,7 @@ class CPSATBasicEngine:
 
         # 6. 최대 연속 야간 근무 제한
         max_nights = roster_system.config.max_consecutive_nights
+        print('\n\n\n\n\nmax_nights', max_nights, '\n\n\n\n\n')
         for n_idx in range(len(roster_system.nurses)):
             for day in range(roster_system.num_days - max_nights):
                 model.Add(sum(x[n_idx, d, night_idx] for d in range(day, day + max_nights + 1) if d < roster_system.num_days) <= max_nights)
@@ -414,11 +412,12 @@ class CPSATBasicEngine:
         
         # 소프트 제약 위반 패널티
         for var in exp_penalty_vars:
-            objective_terms.append(-500 * var)  # 경력 간호사 부족 패널티
+            # print('\n\n\n\n\nvar', -100 * var, '\n\n\n\n\n')
+            objective_terms.append(-100 * var)  # 경력 간호사 부족 패널티
             
         if hasattr(roster_system.config, 'enforce_two_offs_per_week') and roster_system.config.enforce_two_offs_per_week:
             for var in weekly_off_penalty_vars:
-                objective_terms.append(-100 * var)  # 주간 휴무 부족 패널티
+                objective_terms.append(-500 * var)  # 주간 휴무 부족 패널티
         
         if hasattr(roster_system.config, 'even_nights') and roster_system.config.even_nights:
             for var in night_penalty_vars:

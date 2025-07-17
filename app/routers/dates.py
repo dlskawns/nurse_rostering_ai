@@ -12,8 +12,14 @@ def get_holidays(
     month: int,
 ):
     holidays_serial = serialise(get_korean_public_holidays(year, month))
-    print('🟡 holidays_serial =', holidays_serial)
     weekends_serial = serialise(get_weekends(year, month))
-    print('🟡 weekends_serial =', weekends_serial)
     total_holiday = sorted(set(holidays_serial + weekends_serial))
     return total_holiday
+
+@router.get("/dates/weekends")
+def get_holidays(
+    year: int, 
+    month: int,
+):
+    weekends_serial = serialise(get_weekends(year, month))
+    return weekends_serial
