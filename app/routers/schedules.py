@@ -876,7 +876,7 @@ async def generate_roster_endpoint(
     # 2. Fetch all nurses and their preferences
     nurses_in_group = db.query(Nurse).filter(Nurse.group_id == current_user.group_id).order_by(Nurse.experience.desc(), Nurse.nurse_id.asc()).all()
     nurse_ids = [n.nurse_id for n in nurses_in_group]
-    
+
     # 각 간호사의 최신 선호도 데이터 조회 (제출된 것 우선)
     preferences = []
     for nurse_id in nurse_ids:
@@ -887,7 +887,7 @@ async def generate_roster_endpoint(
             ShiftPreference.month == req.month,
             ShiftPreference.is_submitted == True
         ).order_by(ShiftPreference.submitted_at.desc()).first()
-        
+
         if submitted_pref:
             preferences.append(submitted_pref)
         else:
@@ -906,7 +906,7 @@ async def generate_roster_endpoint(
     latest_config = db.query(RosterConfig).filter(
         RosterConfig.group_id == current_user.group_id
     ).order_by(RosterConfig.created_at.desc()).first()
-    
+
     if not latest_config:
         raise HTTPException(status_code=400, detail="설정값을 입력해주세요")
 
@@ -921,14 +921,14 @@ async def generate_roster_endpoint(
         ShiftManage.group_id == current_user.group_id,
         ShiftManage.nurse_class == 'RN'
     ).order_by(ShiftManage.shift_slot.asc()).all()
-    
+
     # Convert shift manage data to daily requirements format
     daily_shift_requirements = {}
     for shift_manage in shift_manages:
         if shift_manage.codes:
             for code in shift_manage.codes:
                 daily_shift_requirements[code] = shift_manage.manpower
-
+    
     # 4. Convert data to formats expected by engines
     nurses_dict = [n.__dict__ for n in nurses_in_group]
     prefs_dict = [p.__dict__ for p in preferences]
@@ -943,7 +943,7 @@ async def generate_roster_endpoint(
         try:
             with Timer("CP-SAT 엔진으로 근무표 생성"):
                 generated = generate_roster_cp_sat(
-                    nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=60
+                    nurses_dict, prefs_dict, config_dict, req.year, req.month, time_limit_seconds=60, 
                 )
         except Exception as e:
             print("기존 엔진으로 폴백합니다.", e)
@@ -1001,18 +1001,19 @@ async def generate_roster_endpoint(
 
     # 6. Clear old entries and save new roster to DB
     db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
-    
+    print(generated.items())
     for nurse_id, shifts in generated.items():
         for day_index, shift_id in enumerate(shifts):
-            work_date = date(req.year, req.month, day_index + 1)
-            entry = ScheduleEntry(
-                entry_id=str(uuid.uuid4().hex)[:16],
-                schedule_id=schedule.schedule_id,
-                nurse_id=nurse_id,
-                work_date=work_date,
-                shift_id=shift_id.upper()
-            )
-            db.add(entry)
+            if shift_id != '-':
+                work_date = date(req.year, req.month, day_index + 1)
+                entry = ScheduleEntry(
+                    entry_id=str(uuid.uuid4().hex)[:16],
+                    schedule_id=schedule.schedule_id,
+                    nurse_id=nurse_id,
+                    work_date=work_date,
+                    shift_id=shift_id.upper()
+                )
+                db.add(entry)
 
     db.commit()
 
@@ -1042,7 +1043,7 @@ async def generate_roster_endpoint(
         entries_by_nurse[entry.nurse_id][entry.work_date.day] = entry.shift_id
 
     for nurse in nurses_in_group:
-        nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, 'O') for d in range(1, roster_data["days_in_month"] + 1)]
+        nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, '-') for d in range(1, roster_data["days_in_month"] + 1)]
         counts = {shift: nurse_schedule.count(shift) for shift in shift_colors.keys()}
         
         roster_data["nurses"].append({
@@ -1105,7 +1106,7 @@ async def get_roster_by_schedule_id(
     violations = []  # 임시로 빈 리스트
 
     for nurse in nurses_in_group:
-        nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, 'O') for d in range(1, roster_data["days_in_month"] + 1)]
+        nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, '-') for d in range(1, roster_data["days_in_month"] + 1)]
         
         counts = {shift: nurse_schedule.count(shift) for shift in shift_colors.keys()}
         
@@ -1172,7 +1173,7 @@ async def get_roster_for_month(
     violations = []  # 임시로 빈 리스트 반환 - DB 스키마 업데이트 후 위반사항 기능 복구 예정
 
     for nurse in nurses_in_group:
-        nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, 'O') for d in range(1, roster_data["days_in_month"] + 1)]
+        nurse_schedule = [entries_by_nurse.get(nurse.nurse_id, {}).get(d, '-') for d in range(1, roster_data["days_in_month"] + 1)]
         
         counts = {shift: nurse_schedule.count(shift) for shift in shift_colors.keys()}
         

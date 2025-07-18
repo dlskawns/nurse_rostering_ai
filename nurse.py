@@ -24,7 +24,7 @@ class Nurse:
     remaining_off_days: int = 0
     personal_off_adjustment: int = 0  # 이전 달에서 이월된 조정치(음수 또는 양수 가능)
     resignation_date: Optional[date] = None
-    entering_date: Optional[date] = None
+    joining_date: Optional[date] = None
     head_nurse_off_pattern: Optional[str] = None  # 'weekend', 'mixed', 'normal'
     
     @classmethod
@@ -37,7 +37,8 @@ class Nurse:
             is_night_nurse=db_nurse.is_night_nurse,
             is_head_nurse=db_nurse.is_head_nurse,
             personal_off_adjustment=db_nurse.personal_off_adjustment,
-            resignation_date=db_nurse.resignation_date.date() if db_nurse.resignation_date else None
+            resignation_date=db_nurse.resignation_date if db_nurse.resignation_date else None,
+            joining_date=db_nurse.joining_date if db_nurse.joining_date else None
         )
 
     def __post_init__(self):
