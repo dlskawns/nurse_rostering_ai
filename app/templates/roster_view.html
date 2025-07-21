@@ -240,7 +240,7 @@
             const bookmarksContainer = document.getElementById('bookmarks-container');
             const tableContainer = document.getElementById('roster-table-container');
             try {
-                const response = await fetch('/api/schedules/issued');
+                const response = await fetch('/roster/issued');
                 if (!response.ok) throw new Error('발행된 스케줄 목록을 불러올 수 없습니다.');
                 const issuedSchedules = await response.json();
 
@@ -288,7 +288,7 @@
             container.innerHTML = `<div class="page-status-overlay"><h2>${year}년 ${month}월 근무표 로딩 중...</h2></div>`;
 
             try {
-                const response = await fetch(`/api/roster/${year}/${month}`);
+                const response = await fetch(`/roster/${year}/${month}`);
                 if (!response.ok) {
                     throw new Error('근무표 데이터를 불러올 수 없습니다.');
                 }

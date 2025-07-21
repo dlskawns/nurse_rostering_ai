@@ -1,7 +1,10 @@
 import time
 from collections import defaultdict
 # from mcp.server.fastmcp import FastMCP
+from calendar import monthrange
 
+def get_days_in_month(year, month):
+    return monthrange(year, month)[1]
 
 
 class Timer:

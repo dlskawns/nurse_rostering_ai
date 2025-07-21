@@ -2,12 +2,60 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
+class ShiftManageSaveRequest(BaseModel):
+    class_name: str
+    slots: list  # [{"shift_slot": 1, "codes": ["D"], "manpower": 3}, ...]
+
+class WantedDeadlineRequest(BaseModel):
+    year: int
+    month: int
+    exp_date: Optional[datetime] = None
+
+class MoveShiftRequest(BaseModel):
+    shift_id: str
+    new_sequence: int
+
+
+class RemoveShiftRequest(BaseModel):
+    shift_id: str
+
+class ShiftAddRequest(BaseModel):
+    shift_id: str
+    name: str
+    color: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    shift_type: str = "work"  # Changed from 'type' to 'shift_type' to match frontend
+    # time_type: str = "range"
+    duration: Optional[int] = None
+    allday: Optional[int] = 0
+    auto_schedule: Optional[int] = 1
+
 class RosterRequest(BaseModel):
+    year: int
+    month: int
+    algorithm: str = "cp_sat"  # "cp_sat" or "random_sampling"
+
+class PreferenceSubmit(BaseModel):
+    year: int
+    month: int
+
+class PreferenceData(BaseModel):
+    year: int
+    month: int
+    data: dict
+
+
+class PublishRequest(BaseModel):
+    schedule_id: str
+    issue_comment: str = None
+
+class WantedInvokeRequest(BaseModel):
     request: str| List[str]
     schema: List[Dict[str, Any]]
     case: object | None = None
 
-class RosterResponse(BaseModel):
+class WantedInvokeResponse(BaseModel):
     response: Any
 
 class RosterConfigBase(BaseModel):

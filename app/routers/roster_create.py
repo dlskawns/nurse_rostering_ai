@@ -42,7 +42,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 
 # [Roster] - 근무표 생성
-@router.post("/roster/generate")
+@router.post("/roster_create/generate")
 async def generate_roster_endpoint(
     req: RosterRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),

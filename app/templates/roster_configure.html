@@ -836,7 +836,7 @@
         // Load shifts data
         async function loadShifts() {
             try {
-                const response = await fetch('/api/shifts');
+                const response = await fetch('/shifts');
                 const shifts = await response.json();
                 
                 const tbody = document.getElementById('shiftsTableBody');
@@ -902,7 +902,7 @@
         // Update shift sequence on server
         async function updateShiftSequence(shiftId, newSequence) {
             try {
-                const response = await fetch('/api/shifts/move', {
+                const response = await fetch('/shifts/move', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -937,7 +937,7 @@
             }
 
             try {
-                const response = await fetch('/api/shifts/remove', {
+                const response = await fetch('/shifts/remove', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -968,7 +968,7 @@
 
         function openEditShiftModal(shiftId) {
             // Load shift data for editing
-            fetch('/api/shifts')
+            fetch('/shifts')
                 .then(response => response.json())
                 .then(shifts => {
                     const shift = shifts.find(s => s.shift_id === shiftId);
@@ -1062,7 +1062,7 @@
             data.auto_schedule = document.querySelector('input[name="auto_schedule"]').checked ? 1 : 0;
 
             const isEdit = document.getElementById('shiftId').readOnly;
-            const url = isEdit ? '/api/shifts/update' : '/api/shifts/add';
+            const url = isEdit ? '/shifts/update' : '/shifts/add';
             const method = 'POST';
 
             try {
@@ -1198,7 +1198,7 @@
         // Load shift manage data for specific class
         async function loadShiftManage(className) {
             try {
-                const response = await fetch(`/api/shift-manage/${className}`);
+                const response = await fetch(`/shift-manage/${className}`);
                 const data = await response.json();
                 
                 shiftManageData[className] = data;
@@ -1459,7 +1459,7 @@
         async function loadAvailableShifts() {
             if (availableShifts.length === 0) {
                 try {
-                    const response = await fetch('/api/shifts');
+                    const response = await fetch('/shifts');
                     availableShifts = await response.json();
                 } catch (error) {
                     console.error('근무코드 로딩 실패:', error);
@@ -1512,7 +1512,7 @@
         // Save shift manage data
         async function saveShiftManage() {
             try {
-                const response = await fetch('/api/shift-manage/save', {
+                const response = await fetch('/shift-manage/save', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

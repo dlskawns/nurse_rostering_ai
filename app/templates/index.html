@@ -1284,7 +1284,7 @@
                 console.log('wanted 데이터를 불러오는 중...');
                 
                 // 모든 wanted 데이터를 가져옴
-                const wantedResponse = await fetch('/api/wanted/all');
+                const wantedResponse = await fetch('/wanted/all');
                 console.log('Wanted API 응답 상태:', wantedResponse.status, wantedResponse.statusText);
                 
                 if (!wantedResponse.ok) {
@@ -1398,7 +1398,7 @@
                 pageStatusDiv.style.display = 'none';
                 
                 // 최신 선호도 데이터 조회
-                const response = await fetch(`/api/preferences/latest?year=${activeYear}&month=${activeMonth}`);
+                const response = await fetch(`/preferences/latest?year=${activeYear}&month=${activeMonth}`);
                 if (!response.ok) throw new Error('선호도 상태를 확인할 수 없습니다.');
                 const statusData = await response.json();
 
@@ -1582,7 +1582,7 @@
         async function fetchNurseSchema() {
              try {
                 console.log('간호사 스키마 API 호출 중...');
-                const response = await fetch('/api/nurses');
+                const response = await fetch('/nurses');
                 console.log('간호사 API 응답 상태:', response.status, response.statusText);
                 
                  if (!response.ok) {
@@ -1674,7 +1674,7 @@
 
                 console.log('전송할 데이터:', JSON.stringify(preferencePayload, null, 2));
 
-                const saveResponse = await fetch('/api/preferences', {
+                const saveResponse = await fetch('/preferences', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(preferencePayload)
@@ -1764,14 +1764,14 @@
             if (!confirm('최종 제출하시겠습니까?')) return;
             
             // 현재 최신 데이터 확인
-            const latestResponse = await fetch(`/api/preferences/latest?year=${activeYear}&month=${activeMonth}`);
+            const latestResponse = await fetch(`/preferences/latest?year=${activeYear}&month=${activeMonth}`);
             const latestData = await latestResponse.json();
 
-            let endpoint = '/api/preferences/submit';
+            let endpoint = '/preferences/submit';
             let body = JSON.stringify({ year: activeYear, month: activeMonth });
 
             if (!latestData.preference_data) {
-                endpoint = '/api/preferences/submit/empty';
+                endpoint = '/preferences/submit/empty';
             }
 
             try {
@@ -1800,7 +1800,7 @@
             if (!confirm('제출을 철회하고 수정하시겠습니까?')) return;
             
             try {
-                const response = await fetch('/api/preferences/retract', {
+                const response = await fetch('/preferences/retract', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ year: activeYear, month: activeMonth })
@@ -1870,7 +1870,7 @@
                     '<div class="loading-status">희망사항 현황을 불러오는 중...</div>';
 
                 // 희망사항 데이터 로드
-                const wishResponse = await fetch(`/api/preferences/all?year=${activeYear}&month=${activeMonth}`);
+                const wishResponse = await fetch(`/preferences/all?year=${activeYear}&month=${activeMonth}`);
                 if (!wishResponse.ok) {
                     throw new Error('희망사항 데이터를 불러올 수 없습니다.');
                 }
@@ -1910,7 +1910,7 @@ async function renderWishTable() {
   const container = document.getElementById('wish-table-content');
 
   /* 0) 이번 달 전체 wishData를 한 번만 가져오기 */
-  const res = await fetch(`/api/preferences/all?year=${activeYear}&month=${activeMonth}`);
+  const res = await fetch(`/preferences/all?year=${activeYear}&month=${activeMonth}`);
   if (!res.ok) {
     container.innerHTML = '<div class="loading-status">희망사항을 불러올 수 없습니다.</div>';
     return;
@@ -2016,7 +2016,7 @@ async function renderWishTable() {
         // Shifts 데이터 로드 함수 추가
         async function loadShifts() {
             try {
-                const response = await fetch('/api/shifts');
+                const response = await fetch('/shifts');
                 if (!response.ok) {
                     throw new Error('Shifts 데이터를 가져올 수 없습니다.');
                 }
@@ -2049,7 +2049,7 @@ async function renderWishTable() {
             calendarData = {};
             
             try {
-                const response = await fetch(`/api/preferences/latest?year=${activeYear}&month=${activeMonth}`);
+                const response = await fetch(`/preferences/latest?year=${activeYear}&month=${activeMonth}`);
                 if (!response.ok) {
                     console.log('선호도 데이터가 없습니다.');
                     return;
@@ -2378,7 +2378,7 @@ async function renderWishTable() {
 
                 console.log('전송할 데이터:', JSON.stringify(preferencePayload, null, 2));
 
-                const saveResponse = await fetch('/api/preferences', {
+                const saveResponse = await fetch('/preferences', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(preferencePayload)

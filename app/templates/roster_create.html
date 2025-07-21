@@ -1237,7 +1237,7 @@
 
         async function fetchLatestSchedule() {
             try {
-                const response = await fetch('/api/schedules/latest');
+                const response = await fetch('/roster/latest');
                 if (!response.ok) return null;
                 const data = await response.json();
                 return data;
@@ -1249,7 +1249,7 @@
 
         async function fetchNursesForRoster() {
             try {
-                const response = await fetch('/api/nurses');
+                const response = await fetch('/nurses');
                  if (!response.ok) {
                     if (response.status === 401) window.location.href = '/login';
                     throw new Error('간호사 정보를 불러오는데 실패했습니다.');
@@ -1332,7 +1332,7 @@
 
             try {
                 // 1. 스케줄 상태 확인
-                const scheduleResponse = await fetch(`/api/schedules/status?year=${year}&month=${month}`);
+                const scheduleResponse = await fetch(`/roster/status?year=${year}&month=${month}`);
                 if (!scheduleResponse.ok) {
                     if (scheduleResponse.status === 401) window.location.href = '/login';
                     throw new Error('스케줄 상태를 확인할 수 없습니다.');
@@ -1340,14 +1340,14 @@
                 const scheduleData = await scheduleResponse.json();
 
                 // 2. wanted 상태 확인
-                const wantedResponse = await fetch(`/api/wanted/status?year=${year}&month=${month}`);
+                const wantedResponse = await fetch(`/wanted/status?year=${year}&month=${month}`);
                 const wantedData = wantedResponse.ok ? await wantedResponse.json() : { status: null };
 
                 // 3. 마감일 상태 설정 (wanted 데이터에 따라)
                 setDeadlineStateFromWantedData(wantedData);
 
                 // 4. 전체 wanted 목록 확인 (하나라도 있는지)
-                const allWantedResponse = await fetch('/api/wanted/all');
+                const allWantedResponse = await fetch('/wanted/all');
                 const allWantedData = allWantedResponse.ok ? await allWantedResponse.json() : [];
 
                 // 5. 버튼 활성화 조건 설정
@@ -1480,7 +1480,7 @@
             versionList.innerHTML = '로딩 중...';
             
             try {
-                const response = await fetch(`/api/schedules/${year}/${month}/versions`);
+                const response = await fetch(`/roster/${year}/${month}/versions`);
                 if (!response.ok) throw new Error('버전 목록을 불러올 수 없습니다.');
                 
                 allVersions = await response.json();
@@ -1622,7 +1622,7 @@
                     expDate = selectedExpDate.toISOString();
                 }
 
-                const response = await fetch('/api/wanted/request', {
+                const response = await fetch('/wanted/request', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -1686,7 +1686,7 @@
             btn.textContent = '마감 중...';
 
             try {
-                const response = await fetch(`/api/wanted/close?year=${year}&month=${month}`, {
+                const response = await fetch(`/wanted/close?year=${year}&month=${month}`, {
                     method: 'PATCH'
                 });
 
@@ -1720,7 +1720,7 @@
             rosterOutputSection.style.display = 'block';
 
             try {
-                const response = await fetch('/api/roster/generate', {
+                const response = await fetch('/roster_create/generate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ 
@@ -1775,7 +1775,7 @@
                         roster: editedRosterData
                     };
 
-                    const validateResponse = await fetch('/api/roster/validate', {
+                    const validateResponse = await fetch('/roster/validate', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(validatePayload)
@@ -1843,7 +1843,7 @@
             const container = document.getElementById('roster-table-container');
             container.innerHTML = '발행된 근무표 불러오는 중...';
             try {
-                const response = await fetch(`/api/roster/${year}/${month}`);
+                const response = await fetch(`/roster/${year}/${month}`);
                 if (!response.ok) throw new Error('발행된 근무표를 불러올 수 없습니다.');
                 const rosterData = await response.json();
                 
@@ -1883,7 +1883,7 @@
                         roster: editedRosterData
                     };
 
-                    const validateResponse = await fetch('/api/roster/validate', {
+                    const validateResponse = await fetch('/roster/validate', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(validatePayload)
@@ -1922,7 +1922,7 @@
             const grid = document.getElementById('nurse-card-grid');
             grid.innerHTML = '로딩 중...';
             try {
-                const res = await fetch(`/api/schedules/${year}/${month}/submissions`);
+                const res = await fetch(`/roster/${year}/${month}/submissions`);
                 if(!res.ok) throw new Error('제출 현황을 불러올 수 없습니다.');
                 const data = await res.json();
                 const submittedNurseIds = new Set(data.submitted_nurses);
@@ -2192,7 +2192,7 @@
             editModeBtn.textContent = '저장 중...';
 
             try {
-                const response = await fetch('/api/roster/save', {
+                const response = await fetch('/roster/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -2607,7 +2607,7 @@
             isValidating = true;
             
             try {
-                const response = await fetch('/api/roster/validate', {
+                const response = await fetch('/roster/validate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -2664,7 +2664,7 @@
                     expDate = selectedExpDate.toISOString();
                 }
                 
-                const response = await fetch(`/api/wanted/deadline`, {
+                const response = await fetch(`/wanted/deadline`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -2741,7 +2741,7 @@
             }
             
             try {
-                const response = await fetch(`/api/schedules/${scheduleId}/name`, {
+                const response = await fetch(`/roster/${scheduleId}/name`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: newName })
@@ -2797,8 +2797,8 @@
             console.log('scheduleId:', scheduleId);
 
             try {
-                const response = await fetch(`/api/roster/schedule/${scheduleId}`);
-                console.log('response:', response);
+                const response = await fetch(`/roster/schedule/${scheduleId}`);
+                console.log('Roster response:', response);
                 if (!response.ok) throw new Error('근무표를 불러올 수 없습니다.');
                 
                 const rosterData = await response.json();
@@ -2839,7 +2839,7 @@
                         roster: editedRosterData
                     };
 
-                    const validateResponse = await fetch('/api/roster/validate', {
+                    const validateResponse = await fetch('/roster/validate', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(validatePayload)
@@ -2953,7 +2953,7 @@
             saveBtn.textContent = '발행 중...';
 
             try {
-                const response = await fetch('/api/roster/publish', {
+                const response = await fetch('/roster/publish', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -2987,7 +2987,7 @@
         // Shifts 데이터를 가져와서 동적으로 shift 버튼 생성
         async function loadShiftButtons() {
             try {
-                const response = await fetch('/api/shifts');
+                const response = await fetch('/shifts');
                 if (!response.ok) {
                     throw new Error('Shifts 데이터를 가져올 수 없습니다.');
                 }

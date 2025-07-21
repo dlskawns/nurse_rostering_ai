@@ -10,7 +10,7 @@ from app.routers.auth import get_current_user_from_cookie
 from app.schemas.auth_schema import User as UserSchema
 
 router = APIRouter(
-    prefix="/api/nurses",
+    prefix="/nurses",
     tags=["nurses"]
 )
 

@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
-from app.schemas.roster_schema import WantedInvokeRequest, WantedInvokeResponse, WantedInvokeRequest
+from app.schemas.roster_schema import WantedInvokeRequest, WantedInvokeResponse, WantedDeadlineRequest
 from app.services.graph_service import graph_service
 from pydantic import BaseModel
 from app.routers.auth import get_current_user_from_cookie
@@ -155,7 +155,7 @@ async def close_wanted_request(
 # [Wanted] - Wanted 마감일 변경
 @router.patch("/wanted/deadline")
 async def update_wanted_deadline(
-    req: WantedInvokeRequest,
+    req: WantedDeadlineRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
