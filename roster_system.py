@@ -5,8 +5,8 @@ import calendar
 import time
 import pandas as pd
 import logging
-from config import NurseRosterConfig, DEFAULT_CONFIG
-from nurse import Nurse
+from app.db.roster_config import NurseRosterConfig, DEFAULT_CONFIG
+from app.db.nurse_config import Nurse
 from app.services.holiday_pack import get_weekends   # ← 주말 헬퍼
 
 def _weekend_set(year: int, month: int) -> set[int]:

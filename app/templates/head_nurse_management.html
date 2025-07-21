@@ -227,7 +227,7 @@
 
         async function fetchNurses() {
             try {
-                const response = await fetch('/api/nurses');
+                const response = await fetch('/nurses');
                 if (!response.ok) {
                     if (response.status === 401) window.location.href = '/login';
                     throw new Error('간호사 정보를 불러오는데 실패했습니다.');
@@ -448,7 +448,7 @@
             }
 
             try {
-                const response = await fetch('/api/nurses/bulk-update', {
+                const response = await fetch('/nurses/bulk-update', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(nurses.map(n => {

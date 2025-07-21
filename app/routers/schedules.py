@@ -1,45 +1,45 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
-from pydantic import BaseModel
-import uuid
-from datetime import datetime, date
-from fastapi.responses import RedirectResponse
-import numpy as np
-from typing import Optional
-from app.db.client import get_db
-from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
-from app.schemas.auth_schema import User as UserSchema
-from app.routers.auth import get_current_user_from_cookie
-from app.roster_engine import generate_roster, get_days_in_month
-from app.routers.utils import Timer
-from roster_system import RosterSystem
-from nurse import Nurse as NurseEngine
-from config import NurseRosterConfig
-from app.routers.utils import parse_prefs_to_dict
-from app.schemas.roster_schema import WantedInvokeRequest
-# CP-SAT 기반 엔진들 import
-try:
-    from cp_sat_basic import generate_roster_cp_sat
-    from cp_sat_main_v3 import generate_roster_cp_sat_main_v3
-    from cp_sat_main_v2 import generate_roster_cp_sat_main_v2
-    from cp_sat_adaptive import generate_roster_cp_sat_adaptive
-    CPSAT_AVAILABLE = True
-    CPSAT_MAIN_V3_AVAILABLE = True
-    CPSAT_MAIN_V2_AVAILABLE = True
-    CPSAT_ADAPTIVE_AVAILABLE = True
-    print("CP-SAT 엔진들이 사용 가능합니다.")
-except ImportError as e:
-    print(f"CP-SAT 엔진 import 실패: {e}")
-    CPSAT_AVAILABLE = False
-    CPSAT_MAIN_V3_AVAILABLE = False
-    CPSAT_MAIN_V2_AVAILABLE = False
-    CPSAT_ADAPTIVE_AVAILABLE = False
+# from fastapi import APIRouter, Depends, HTTPException
+# from sqlalchemy.orm import Session
+# from sqlalchemy import func, and_
+# from pydantic import BaseModel
+# import uuid
+# from datetime import datetime, date
+# from fastapi.responses import RedirectResponse
+# import numpy as np
+# from typing import Optional
+# from app.db.client import get_db
+# from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
+# from app.schemas.auth_schema import User as UserSchema
+# from app.routers.auth import get_current_user_from_cookie
+# from app.roster_engine import generate_roster, get_days_in_month
+# from app.routers.utils import Timer
+# from roster_system import RosterSystem
+# from nurse import Nurse as NurseEngine
+# from config import NurseRosterConfig
+# from app.routers.utils import parse_prefs_to_dict
+# from app.schemas.roster_schema import WantedInvokeRequest
+# # CP-SAT 기반 엔진들 import
+# try:
+#     from cp_sat_basic import generate_roster_cp_sat
+#     from cp_sat_main_v3 import generate_roster_cp_sat_main_v3
+#     from cp_sat_main_v2 import generate_roster_cp_sat_main_v2
+#     from cp_sat_adaptive import generate_roster_cp_sat_adaptive
+#     CPSAT_AVAILABLE = True
+#     CPSAT_MAIN_V3_AVAILABLE = True
+#     CPSAT_MAIN_V2_AVAILABLE = True
+#     CPSAT_ADAPTIVE_AVAILABLE = True
+#     print("CP-SAT 엔진들이 사용 가능합니다.")
+# except ImportError as e:
+#     print(f"CP-SAT 엔진 import 실패: {e}")
+#     CPSAT_AVAILABLE = False
+#     CPSAT_MAIN_V3_AVAILABLE = False
+#     CPSAT_MAIN_V2_AVAILABLE = False
+#     CPSAT_ADAPTIVE_AVAILABLE = False
 
-router = APIRouter(
-    prefix="/api",
-    tags=["schedules"]
-)
+# router = APIRouter(
+#     prefix="/api",
+#     tags=["schedules"]
+# )
 
 # class ScheduleRequest(BaseModel):
 #     year: int

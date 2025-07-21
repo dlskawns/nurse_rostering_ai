@@ -2,8 +2,8 @@ from datetime import date, datetime, timedelta
 import time
 import numpy as np
 from typing import List, Dict, Optional, Tuple
-from config import NurseRosterConfig
-from nurse import Nurse
+from app.db.roster_config import NurseRosterConfig
+from app.db.nurse_config import Nurse
 from roster_system import RosterSystem
 
 class Timer:
