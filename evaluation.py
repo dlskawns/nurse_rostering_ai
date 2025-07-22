@@ -28,7 +28,7 @@ try:
         Timer
     )
     # RosterSystem은 이제 roster_system.py에서 가져옵니다.
-    from roster_system import RosterSystem
+    from app.services.roster_system import RosterSystem
 except ImportError as e:
     print(f"필요한 모듈을 가져오는 데 실패했습니다: {e}")
     print("main_v2.py와 roster_system.py가 evaluation.py와 같은 디렉토리에 있는지 확인하세요.")

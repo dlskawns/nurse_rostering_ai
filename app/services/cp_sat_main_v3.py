@@ -17,9 +17,9 @@ from datetime import date, datetime
 from typing import List, Dict, Any, Tuple
 import numpy as np
 
-from config import NurseRosterConfig
-from nurse import Nurse
-from roster_system import RosterSystem
+from app.db.roster_config import NurseRosterConfig
+from app.db.nurse_config import Nurse
+from app.services.roster_system import RosterSystem
 
 
 class Timer:

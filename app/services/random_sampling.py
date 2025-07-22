@@ -1,9 +1,6 @@
 import random
-from datetime import datetime, timedelta
-from calendar import monthrange
+from app.routers.utils import get_days_in_month
 
-def get_days_in_month(year, month):
-    return monthrange(year, month)[1]
 
 def generate_roster(nurses, preferences, year, month):
     """

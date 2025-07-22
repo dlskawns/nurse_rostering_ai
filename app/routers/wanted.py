@@ -12,6 +12,7 @@ from app.db.client import get_db
 from app.db.models import Wanted
 from app.schemas.auth_schema import User as UserSchema
 from app.db.models import Nurse, ShiftPreference
+from app.services.wanted_service import request_wanted_shifts_service
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
@@ -22,31 +23,10 @@ async def request_wanted_shifts(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    if not current_user or not current_user.is_head_nurse:
-        raise HTTPException(status_code=403, detail="Permission denied")
-
-    # Check if wanted request already exists for this month
-    existing_wanted = db.query(Wanted).filter(
-        Wanted.group_id == current_user.group_id,
-        Wanted.year == req.year,
-        Wanted.month == req.month
-    ).first()
-    
-    if existing_wanted:
-        raise HTTPException(status_code=400, detail="이미 해당 월의 요청이 존재합니다.")
-
-    new_wanted = Wanted(
-        group_id=current_user.group_id,
-        year=req.year,
-        month=req.month,
-        exp_date=req.exp_date,
-        status='requested'
-    )
-    db.add(new_wanted)
-    db.commit()
-    db.refresh(new_wanted)
-
-    return {"message": "Wanted 작성 요청이 성공적으로 생성되었습니다."}
+    try:
+        return request_wanted_shifts_service(req, current_user, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Wanted 작성 요청 실패: {str(e)}")
 
 # [Wanted] - 특정 그룹의 Wanted 상태 조회
 @router.get("/wanted/status")

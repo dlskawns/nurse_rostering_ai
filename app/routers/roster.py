@@ -16,8 +16,11 @@ from app.db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift
 from sqlalchemy import func, and_
 from app.routers.utils import get_days_in_month
 from app.db.nurse_config import Nurse as NurseEngine
-from roster_system import RosterSystem
+from app.services.roster_system import RosterSystem
 from datetime import date
+from app.services.roster_service import save_roster_config_service, get_latest_schedule_service, get_issued_schedules_service, get_schedule_status_service
+import uuid
+
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
@@ -111,85 +114,11 @@ async def save_roster_config(
 ):
     if not user or not user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
-    
     try:
-        # Get shift manage data for RN class to extract day_req, eve_req, nig_req
-        from app.db.models import ShiftManage, Nurse
-        
-        # Get current user's office_id
-        nurse = db.query(Nurse).filter(Nurse.nurse_id == user.nurse_id).first()
-        if not nurse or not nurse.group:
-            raise HTTPException(status_code=404, detail="User group information not found")
-        
-        # Get shift manage data for RN class
-        shift_manages = db.query(ShiftManage).filter(
-            ShiftManage.office_id == nurse.group.office_id,
-            ShiftManage.group_id == user.group_id,
-            ShiftManage.nurse_class == 'RN'
-        ).all()
-        
-        # Extract manpower for each slot (교대 1=day_req, 교대 2=eve_req, 교대 3=nig_req)
-        day_req = eve_req = nig_req = 0
-        
-        if shift_manages:
-            for sm in shift_manages:
-                if sm.shift_slot == 1:  # 교대 1
-                    day_req = sm.manpower or 0
-                elif sm.shift_slot == 2:  # 교대 2
-                    eve_req = sm.manpower or 0
-                elif sm.shift_slot == 3:  # 교대 3
-                    nig_req = sm.manpower or 0
-        else:
-            # Default values if no shift management data exists
-            day_req = eve_req = nig_req = 3
-        
-        print(f'Extracted shift requirements: day_req={day_req}, eve_req={eve_req}, nig_req={nig_req}')
-        
-        # Create config data with extracted values
-        config_dict = config_data.model_dump()
-        config_dict.update({
-            'day_req': day_req,
-            'eve_req': eve_req,
-            'nig_req': nig_req
-        })
-        print('config_dict', config_dict)
-        print(f'Final config dict: {config_dict}')
-        
-        db_config = RosterConfigModel(
-            **config_dict,
-            office_id=user.office_id,
-            group_id=user.group_id
-        )
-
-        db.add(db_config)
-        db.commit()
-        db.refresh(db_config)
-        
-        return {"message": "Configuration saved successfully"}
-        
+        return save_roster_config_service(config_data, user, db)
     except Exception as e:
-        print(f'Error in save_roster_config: {str(e)}')
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Configuration save failed: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Configuration save failed: {str(e)}")
     
-# @router.get("roster/active")
-# async def get_active_schedules(
-#     current_user: UserSchema = Depends(get_current_user_from_cookie),
-#     db: Session = Depends(get_db)
-# ):
-#     if not current_user:
-#         raise HTTPException(status_code=401, detail="Not authenticated")
-
-#     schedules_query = db.query(Schedule.year, Schedule.month).filter(
-#         and_(
-#             Schedule.group_id == current_user.group_id,
-#             Schedule.status == 'requested'
-#         )
-#     ).distinct().order_by(Schedule.year.desc(), Schedule.month.desc()).all()
-    
-#     schedules = [{"year": r.year, "month": r.month} for r in schedules_query]
-    
-#     return schedules
 
 # [Schedules] - 최신 월과 버전의 스케줄 정보 조회 (수간호사용)
 @router.get("/roster/latest")
@@ -197,28 +126,10 @@ async def get_latest_schedule(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    if not current_user or not current_user.is_head_nurse:
-        raise HTTPException(status_code=403, detail="Permission denied")
-
-    # Find the latest schedule (by year, month, version)
-    latest_schedule = db.query(Schedule).filter(
-        Schedule.group_id == current_user.group_id
-    ).order_by(
-        Schedule.year.desc(),
-        Schedule.month.desc(),
-        Schedule.version.desc()
-    ).first()
-    
-    if not latest_schedule:
-        return None
-        
-    return {
-        "year": latest_schedule.year,
-        "month": latest_schedule.month,
-        "version": latest_schedule.version,
-        "status": latest_schedule.status,
-        "schedule_id": latest_schedule.schedule_id
-    }
+    try:
+        return get_latest_schedule_service(current_user, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get latest schedule: {str(e)}")
 
 
 # [Schedules] - 발행된(issued) 모든 스케줄 조회
@@ -227,18 +138,10 @@ async def get_issued_schedules(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    schedules_query = db.query(Schedule.year, Schedule.month).filter(
-        and_(
-            Schedule.group_id == current_user.group_id,
-            Schedule.status == 'issued'
-        )
-    ).distinct().order_by(Schedule.year.desc(), Schedule.month.desc()).all()
-    
-    schedules = [{"year": r.year, "month": r.month} for r in schedules_query]
-    return schedules
+    try:
+        return get_issued_schedules_service(current_user, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get issued schedules: {str(e)}")
 
 
 # [Schedules] - 현재 그룹의 특정 월에 대한 스케줄 상태 확인
@@ -248,78 +151,10 @@ async def get_schedule_status(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # 수간호사인 경우 schedules 테이블 확인
-    if current_user.is_head_nurse:
-        schedules = db.query(Schedule).filter(
-            Schedule.group_id == current_user.group_id,
-            Schedule.year == year,
-            Schedule.month == month
-        ).all()
-        
-        has_schedules = len(schedules) > 0
-        latest_status = schedules[0].status if schedules else None
-        
-        return {
-            "has_schedules": has_schedules,
-            "latest_status": latest_status,
-            "schedule_count": len(schedules)
-        }
-    
-    # 일반 간호사인 경우 - 최신 선호도 데이터 조회
-    schedule = db.query(Schedule).filter(
-        Schedule.group_id == current_user.group_id,
-        Schedule.year == year,
-        Schedule.month == month
-    ).order_by(Schedule.version.desc()).first()
-
-    # 최신 제출된 선호도 먼저 확인
-    submitted_preference = db.query(ShiftPreference).filter(
-        ShiftPreference.nurse_id == current_user.nurse_id,
-        ShiftPreference.year == year,
-        ShiftPreference.month == month,
-        ShiftPreference.is_submitted == True
-    ).order_by(ShiftPreference.submitted_at.desc()).first()
-    
-    if submitted_preference:
-        return {
-            "schedule_status": schedule.status if schedule else None,
-            "preference_is_submitted": True,
-            "preference_data": submitted_preference.data,
-            "has_schedules": schedule is not None,
-            "created_at": submitted_preference.created_at,
-            "submitted_at": submitted_preference.submitted_at
-        }
-    
-    # 제출된 것이 없으면 최신 draft 확인
-    draft_preference = db.query(ShiftPreference).filter(
-        ShiftPreference.nurse_id == current_user.nurse_id,
-        ShiftPreference.year == year,
-        ShiftPreference.month == month,
-        ShiftPreference.is_submitted == False
-    ).order_by(ShiftPreference.created_at.desc()).first()
-    
-    if draft_preference:
-        return {
-            "schedule_status": schedule.status if schedule else None,
-            "preference_is_submitted": False,
-            "preference_data": draft_preference.data,
-            "has_schedules": schedule is not None,
-            "created_at": draft_preference.created_at,
-            "submitted_at": None
-        }
-    
-    # 아무 선호도도 없는 경우
-    return {
-        "schedule_status": schedule.status if schedule else None,
-        "preference_is_submitted": False,
-        "preference_data": None,
-        "has_schedules": schedule is not None,
-        "created_at": None,
-        "submitted_at": None
-    }
+    try:
+        return get_schedule_status_service(year, month, current_user, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get schedule status: {str(e)}")
 
 
 

@@ -4,7 +4,7 @@ import numpy as np
 from typing import List, Dict, Optional, Tuple
 from app.db.roster_config import NurseRosterConfig
 from app.db.nurse_config import Nurse
-from roster_system import RosterSystem
+from app.services.roster_system import RosterSystem
 
 class Timer:
     """코드 블록의 실행 시간을 측정하는 컨텍스트 매니저"""
