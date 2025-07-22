@@ -19,6 +19,7 @@ dependencies = [
     "optuna>=4.4.0",
     "ortools>=9.12.4544",
     "pandas>=2.2.3",
+    "psutil>=7.0.0",
     "pymysql>=1.1.1",
     "python-jose>=3.5.0",
     "scipy>=1.15.3",

@@ -16,3 +16,4 @@ python-dotenv
 tiktoken
 tqdm
 urllib3 
+psutil>=5.9.0 
