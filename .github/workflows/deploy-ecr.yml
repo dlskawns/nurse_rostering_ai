@@ -2,7 +2,8 @@ name: Build & Push backend to ECR
 
 on:
   push:
-    branches: [dev] # dev 에 push 될 때마다
+    branches:
+      - dev # dev 에 push 될 때마다
     paths-ignore: # README 수정 등은 무시
       - "docs/**"
       - "**/*.md"
