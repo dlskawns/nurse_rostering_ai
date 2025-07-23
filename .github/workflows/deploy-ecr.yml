@@ -95,19 +95,16 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 5. Docker 이미지 빌드
+      # 5. Docker 이미지 빌드 (빌드 인자에 환경변수 전달)
       - name: Build Docker image
-        working-directory: ${{ github.workspace }} # ← 확실히 루트에서 실행
         run: |
-          pwd && ls -al                               # ← 디버깅용(나중에 제거 가능)
           docker build \
             --build-arg ENV=${{ env.ENVIRONMENT }} \
             --build-arg GOOGLE_API_KEY=${{ env.GOOGLE_API_KEY }} \
             --build-arg ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }} \
             --build-arg OPENAI_API_KEY=${{ env.OPENAI_API_KEY }} \
-            -f Dockerfile \                           # ← Dockerfile 경로 명시
-            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }} \
-            ${{ github.workspace }}                   # ← 빌드 컨텍스트
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }} .
+
       # 6. Docker 이미지 ECR에 푸시
       - name: Push Docker image to ECR
         run: |
