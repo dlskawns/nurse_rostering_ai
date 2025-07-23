@@ -1,157 +1,135 @@
-name: Build ‑ Push ‑ Deploy (EC2+ALB)
+name: Build ‑ Push ‑ Deploy (EC2 + ALB)
 
 on:
   push:
-    branches: [main, dev, feat/**]
+    branches:
+      - main
+      - dev
+      - feat/** # feature/*  브랜치도 포함
 
-env: # 공통 변수
-  DOCKER_CONTEXT: . # docker build context
-  DOCKER_FILE: ./Dockerfile
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REPO: "aide-backend-dev" # ECR 리포 이름
-  IMAGE_TAG: ${{ github.sha }} # 커밋 SHA
+######################################################################
+# 📌  공통 상수 (필요하면 여기서만 바꾸면 됨)
+######################################################################
+env:
+  AWS_REGION: ap-northeast-2 # ← 리전을 바꾸면 한 곳만
+  ECR_REPO: aide-backend-dev # ECR Repository 이름
+  DOCKER_CONTEXT: . # build context (폴더)
+  DOCKER_FILE: ./Dockerfile # Dockerfile 경로
 
 jobs:
   build-push-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # OIDC for AWS (추천)
+      id-token: write # (OIDC 사용 시) 필요
 
     steps:
-      # ───────── 1) 코드 체크아웃 ─────────
-      - uses: actions/checkout@v3
+      ##################################################################
+      # 1) 저장소 체크아웃
+      ##################################################################
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      # ───────── 2) 브랜치별 환경 변수 결정 ─────────
-      - name: Set ENV & TAG
+      ##################################################################
+      # 2) 브랜치에 따라 ENV / TAG / API KEY 세팅
+      ##################################################################
+      - name: Set dynamic environment variables
+        shell: bash
         run: |
           case "${{ github.ref_name }}" in
-            "main")
-              echo "APP_ENV=prod" >> $GITHUB_ENV
-              echo "IMAGE_TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
+            main)
+              echo "APP_ENV=production"             >> $GITHUB_ENV
+              echo "DOCKER_TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
+              echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}"   >> $GITHUB_ENV
+              echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
+              echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}"         >> $GITHUB_ENV
               ;;
-            "dev")
-              echo "APP_ENV=dev"  >> $GITHUB_ENV
-              echo "IMAGE_TAG=dev-${{ github.sha }}"  >> $GITHUB_ENV
+            dev)
+              echo "APP_ENV=development"            >> $GITHUB_ENV
+              echo "DOCKER_TAG=dev-${{ github.sha }}"  >> $GITHUB_ENV
+              echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}"    >> $GITHUB_ENV
+              echo "GOOGLE_API_KEY=${{ secrets.DEV_ENV_GOOGLE }}"  >> $GITHUB_ENV
+              echo "OPENAI_API_KEY=${{ secrets.DEV_ENV_OPENAI }}"          >> $GITHUB_ENV
               ;;
             *)
-              echo "APP_ENV=feat" >> $GITHUB_ENV
-              echo "IMAGE_TAG=${{ github.ref_name }}-${{ github.sha }}" >> $GITHUB_ENV
+              echo "APP_ENV=feature"                >> $GITHUB_ENV
+              echo "DOCKER_TAG=${{ github.ref_name }}-${{ github.sha }}" >> $GITHUB_ENV
+              echo "ANTHROPIC_API_KEY=${{ secrets.LOCAL_ENV_ANTHROPIC }}"  >> $GITHUB_ENV
+              echo "GOOGLE_API_KEY=${{ secrets.LOCAL_ENV_GOOGLE }}" >> $GITHUB_ENV
+              echo "OPENAI_API_KEY=${{ secrets.LOCAL_ENV_OPENAI }}"        >> $GITHUB_ENV
               ;;
           esac
+          echo "::group::🔖  Resolved build variables"
+          env | grep -E 'APP_ENV|DOCKER_TAG|API_KEY'
+          echo "::endgroup::"
 
-      # ───────── 3) AWS 자격(OIDC) 설정 ─────────
+      ##################################################################
+      # 3) AWS 자격 구성  ── (둘 중 하나만 선택)
+      ##################################################################
+      # --- 3‑A  : OIDC (AWS IAM OIDC Role 추천) ------------------------
       # - name: Configure AWS credentials (OIDC)
       #   uses: aws-actions/configure-aws-credentials@v2
       #   with:
       #     role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-      #     aws-region:    ${{ secrets.AWS_REGION }}
-      - name: Configure AWS credentials
+      #     aws-region:     ${{ env.AWS_REGION }}
+      # ---------------------------------------------------------------
+
+      # --- 3‑B  : Access Key (빠르게 테스트할 때) ----------------------
+      - name: Configure AWS credentials (AccessKey)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+      # ---------------------------------------------------------------
 
-      # ───────── 4) ECR 로그인 ─────────
+      ##################################################################
+      # 4) ECR 로그인
+      ##################################################################
       - name: Login to Amazon ECR
-        id: login-ecr
+        id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      # ───────── 5) Docker Build & Push ─────────
-      - name: Build & push image
+      ##################################################################
+      # 5) Docker Build  +  Push
+      ##################################################################
+      - name: Build & Push image to ECR
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile
+          context: ${{ env.DOCKER_CONTEXT }}
+          file: ${{ env.DOCKER_FILE }}
           push: true
+          provenance: false # SBOM/attestation 미사용 시 속도↑
+          build-args: |
+            APP_ENV=${{ env.APP_ENV }}
+            ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }}
+            GOOGLE_API_KEY=${{ env.GOOGLE_API_KEY }}
+            OPENAI_API_KEY=${{ env.OPENAI_API_KEY }}
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:latest
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest
 
-      # - name: Build & push image
-      #   run: |
-      #     ECR_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
-      #     docker build \
-      #       --build-arg APP_ENV=${{ env.APP_ENV }} \
-      #       -f ${{ env.DOCKER_FILE }} \
-      #       -t $ECR_URI/${{ env.ECR_REPO }}:${{ env.IMG_TAG }} \
-      #       ${{ env.DOCKER_CONTEXT }}
-      #     docker push $ECR_URI/${{ env.ECR_REPO }}:${{ env.IMG_TAG }}
-
-      # ───────── 6) EC2 Rolling Deploy (SSM) ─────────
-      #  EC2 인스턴스에 SSM Agent & IAM role(AmazonSSMManagedInstanceCore) 가 붙어있어야 함
-      - name: Pull & Restart container on EC2
+      ##################################################################
+      # 6) EC2 Rolling Deploy  (SSM RunShellScript)
+      ##################################################################
+      - name: Deploy to EC2 via SSM
+        env:
+          INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }} # EC2 ID
+          IMG_URI: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }}
         run: |
-          INSTANCE_ID=${{ secrets.EC2_INSTANCE_ID }}
-          IMG_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ env.IMG_TAG }}"
-
-          # ① 새 이미지 풀
+          echo "🔄  Pulling new image on EC2"
           aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --comment "Pull new backend image" \
-            --parameters 'commands=["docker pull '"$IMG_URI"'"]' \
+            --comment "Pull new Docker image" \
+            --parameters '{"commands":["docker pull '"$IMG_URI"'"]}' \
             --output text
 
-          # ② compose 재시작 (백엔드 서비스만) – compose.yaml 에 backend 서비스가 있다고 가정
+          echo "🚀  Restarting backend service via docker‑compose"
+          # backend 서비스가 정의된 디렉터리로 이동 후 재기동 (no‑deps)
           aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Restart backend container" \
-            --parameters 'commands=["cd /home/ubuntu/app && docker compose up -d --no-deps --build backend"]' \
+            --parameters '{"commands":["cd /home/ubuntu/app","docker compose pull backend","docker compose up -d --no-deps backend"]}' \
             --output text
-
-# on:
-#   push:
-#     branches:
-#       - dev # dev 에 push 될 때마다
-#     paths-ignore: # README 수정 등은 무시
-#       - "docs/**"
-#       - "**/*.md"
-
-# env:
-#   AWS_REGION: ${{ secrets.AWS_REGION }}
-#   ECR_REPO: "aide-backend-dev" # ECR 리포 이름
-#   IMAGE_TAG: ${{ github.sha }} # 커밋 SHA
-
-# jobs:
-#   build:
-#     runs-on: ubuntu-latest
-
-#     permissions:
-#       id-token: write # OIDC로 AWS 로그인
-#       contents: read
-
-#     steps:
-#       # 1) 체크아웃
-#       - uses: actions/checkout@v4
-
-#       # 2) AWS OIDC 로그인 (access key 없이)
-#       # - name: Configure AWS credentials
-#       #   uses: aws-actions/configure-aws-credentials@v4
-#       #   with:
-#       #     role-to-assume: arn:aws:iam::702166530338:user/david_lee   # 👈 ①
-#       #     aws-region: ${{ env.AWS_REGION }}
-#       - name: Configure AWS credentials
-#         uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: ${{ env.AWS_REGION }}
-
-#       # 3) ECR에 docker login
-#       - name: Login to Amazon ECR
-#         id: login-ecr
-#         uses: aws-actions/amazon-ecr-login@v2
-
-#       # 4) Build & Push
-#       - name: Build & push image
-#         uses: docker/build-push-action@v5
-#         with:
-#           context: .
-#           push: true
-#           tags: |
-#             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
-#             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:latest
-
