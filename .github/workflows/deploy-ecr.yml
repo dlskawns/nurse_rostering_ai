@@ -13,8 +13,6 @@ on:
 env:
   AWS_REGION: ap-northeast-2 # ← 리전을 바꾸면 한 곳만
   ECR_REPO: aide-backend-dev # ECR Repository 이름
-  DOCKER_CONTEXT: . # build context (폴더)
-  DOCKER_FILE: ./Dockerfile # Dockerfile 경로
 
 jobs:
   build-push-deploy:
