@@ -28,19 +28,14 @@ RUN apt-get update && \
         build-essential curl && \
     rm -rf /var/lib/apt/lists/*
 
-# ───────── 가상환경 대신 “uv” 패키지 매니저 사용 ─────────
-#   - https://github.com/astral-sh/uv
-RUN pip install -U pip uv
+
+COPY requirements.txt* pyproject.toml* uv.lock* poetry.lock* ./
 
 
-# ───────── Python 의존성 레이어 분리 ─────────
-# requirements.txt or pyproject.toml 중 하나만 있어도 OK
-COPY requirements.txt* pyproject.toml* poetry.lock* /app/
-
-# • uv pip 은 requirements·pyproject 둘 다 인식
-RUN uv pip install --system --no-cache-dir --require-hashes --upgrade-strategy eager || \
+# 2) uv 설치 후 의존성 설치  (※  --require‑hashes 제거)
+RUN pip install --no-cache-dir -U pip uv && \
+    uv pip install --system --no-cache-dir --upgrade-strategy eager || \
     uv pip install --system --no-cache-dir
-
 # ───────── 애플리케이션 소스 복사 ─────────
 COPY . /app
 
