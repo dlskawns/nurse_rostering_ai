@@ -10,9 +10,9 @@ on:
 ######################################################################
 # 📌  공통 상수 (필요하면 여기서만 바꾸면 됨)
 ######################################################################
-env:
-  AWS_REGION: ap-northeast-2 # ← 리전을 바꾸면 한 곳만
-  ECR_REPO: aide-backend-dev # ECR Repository 이름
+# env:
+#   AWS_REGION: ap-northeast-2 # ← 리전을 바꾸면 한 곳만
+#   ECR_REPO: aide-backend-dev # ECR Repository 이름
 
 jobs:
   build-push-deploy:
