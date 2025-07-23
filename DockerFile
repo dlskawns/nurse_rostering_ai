@@ -1,0 +1,33 @@
+# ───────────────────────────────────────────────
+# ① 베이스 이미지 선택 (python 3.11 or 3.12 stable 권장)
+#    * 3.13 은 2025‑10 정식 예정 – 현재는 rc 이미지만 존재
+# ───────────────────────────────────────────────
+FROM python:3.12-slim          # 3.13 정식 나오면 python:3.13-slim 로 교체
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+
+# ───────────────────────────────────────────────
+# ② uv 설치 (CPU 아키텍처 감지는 스크립트가 알아서)
+# ───────────────────────────────────────────────
+RUN apt-get update -y \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && curl -Ls https://astral.sh/uv/install.sh | sh \
+ && uv --version                 # (optional) 설치 확인
+#   ↑ /usr/local/bin/uv 로 들어감
+
+# ───────────────────────────────────────────────
+# ③ 의존성 설치
+#    pyproject.toml / poetry.lock 대신
+#    requirements.txt 도 OK (uv pip 대체)
+# ───────────────────────────────────────────────
+COPY pyproject.toml poetry.lock* /app/
+RUN uv pip install -r <(uv pip compile --generate-hashes pyproject.toml)
+
+# 프로젝트 소스 복사
+COPY . /app
+
+# ───────────────────────────────────────────────
+# ④ 실행
+# ───────────────────────────────────────────────
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

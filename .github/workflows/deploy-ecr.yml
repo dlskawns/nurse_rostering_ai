@@ -1,0 +1,53 @@
+name: Build & Push backend to ECR
+
+on:
+  push:
+    branches: [dev] # dev 에 push 될 때마다
+    paths-ignore: # README 수정 등은 무시
+      - "docs/**"
+      - "**/*.md"
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPO: "aide-backend-dev" # ECR 리포 이름
+  IMAGE_TAG: ${{ github.sha }} # 커밋 SHA
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # OIDC로 AWS 로그인
+      contents: read
+
+    steps:
+      # 1) 체크아웃
+      - uses: actions/checkout@v4
+
+      # 2) AWS OIDC 로그인 (access key 없이)
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     role-to-assume: arn:aws:iam::702166530338:user/david_lee   # 👈 ①
+      #     aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 3) ECR에 docker login
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 4) Build & Push
+      - name: Build & push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:latest
