@@ -33,14 +33,14 @@ jobs:
       ##################################################################
       - name: Set dynamic env vars
         run: |
-          if   [[ ${{ github.ref_name }}" ==  "main" ]]; then
+          if   [[ "${{ github.ref_name }}" ==  "main" ]]; then
             echo "ENVIRONMENT=production" >> $GITHUB_ENV
             echo "DOCKER_TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
             echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}" >> $GITHUB_ENV
 
-          elif [[ ${{ github.ref_name }}" ==  "dev" ]]; then
+          elif [[ "${{ github.ref_name }}" ==  "dev" ]]; then
             echo "ENVIRONMENT=development" >> $GITHUB_ENV
             echo "DOCKER_TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
             echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}" >> $GITHUB_ENV
@@ -85,7 +85,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ secrets.AWS_REGION }}
       # ---------------------------------------------------------------
 
       ##################################################################
@@ -103,12 +103,12 @@ jobs:
             --build-arg GOOGLE_API_KEY=${{ env.GOOGLE_API_KEY }} \
             --build-arg ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }} \
             --build-arg OPENAI_API_KEY=${{ env.OPENAI_API_KEY }} \
-            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }} .
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }} .
 
       # 6. Docker 이미지 ECR에 푸시
       - name: Push Docker image to ECR
         run: |
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }}
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }}
 
       ##################################################################
       # 6) EC2 Rolling Deploy  (SSM RunShellScript)
@@ -116,7 +116,7 @@ jobs:
       - name: Deploy to EC2 via SSM
         env:
           INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }} # EC2 ID
-          IMG_URI: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }}
+          IMG_URI: ${{ steps.ecr-login.outputs.registry }}/aide-backend-dev:${{ env.DOCKER_TAG }}
         run: |
           echo "🔄  Pulling new image on EC2"
           aws ssm send-command \
