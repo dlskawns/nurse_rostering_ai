@@ -22,20 +22,18 @@ ENV GOOGLE_API_KEY=${GOOGLE_API_KEY}
 ENV ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
 ENV OPENAI_API_KEY=${OPENAI_API_KEY}
 
-# ───────── OS 패키지 최소 설치 ─────────
+# ───────── OS 패키지 & uv 설치 ─────────
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y \
-        build-essential curl && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install --no-install-recommends -y curl build-essential && \
+    rm -rf /var/lib/apt/lists/* && \
+    # ▸ uv 설치(공식 스크립트)
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    source ~/.bashrc
+    uv venv
+    uv sync
+    
 
-
-COPY requirements.txt* pyproject.toml* uv.lock* poetry.lock* ./
-
-
-# 2) uv 설치 후 의존성 설치  (※  --require‑hashes 제거)
-RUN pip install --no-cache-dir -U pip uv && \
-    uv pip install --system --no-cache-dir --upgrade-strategy eager || \
-    uv pip install --system --no-cache-dir
 # ───────── 애플리케이션 소스 복사 ─────────
 COPY . /app
 
