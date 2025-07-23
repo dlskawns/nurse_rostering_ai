@@ -113,7 +113,7 @@ jobs:
             --build-arg GOOGLE_API_KEY=${{ env.GOOGLE_API_KEY }} \
             --build-arg ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }} \
             --build-arg OPENAI_API_KEY=${{ env.OPENAI_API_KEY }} \
-            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }} .
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }} .
 
       # 6. Docker 이미지 ECR에 푸시
       - name: Push Docker image to ECR
