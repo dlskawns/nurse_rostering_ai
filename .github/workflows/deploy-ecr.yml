@@ -105,24 +105,20 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      ##################################################################
-      # 5) Docker Build  +  Push
-      ##################################################################
-      - name: Build & Push image to ECR
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ env.DOCKER_CONTEXT }}
-          file: ${{ env.DOCKER_FILE }}
-          push: true
-          provenance: false # SBOM/attestation 미사용 시 속도↑
-          build-args: |
-            APP_ENV=${{ env.APP_ENV }}
-            ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }}
-            GOOGLE_API_KEY=${{ env.GOOGLE_API_KEY }}
-            OPENAI_API_KEY=${{ env.OPENAI_API_KEY }}
-          tags: |
-            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }}
-            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest
+      # 5. Docker 이미지 빌드 (빌드 인자에 환경변수 전달)
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg ENV=${{ env.ENVIRONMENT }} \
+            --build-arg PERPLEXITY_API_KEY=${{ env.PERPLEXITY_API_KEY }} \
+            --build-arg ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }} \
+            --build-arg OPENAI_API_KEY=${{ env.OPENAI_API_KEY }} \
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/lambda-fastapi:${{ env.DOCKER_TAG }} .
+
+      # 6. Docker 이미지 ECR에 푸시
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/lambda-fastapi:${{ env.DOCKER_TAG }}
 
       ##################################################################
       # 6) EC2 Rolling Deploy  (SSM RunShellScript)
