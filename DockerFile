@@ -1,33 +1,46 @@
-# ───────────────────────────────────────────────
-# ① 베이스 이미지 선택 (python 3.11 or 3.12 stable 권장)
-#    * 3.13 은 2025‑10 정식 예정 – 현재는 rc 이미지만 존재
-# ───────────────────────────────────────────────
-FROM python:3.12-slim          # 3.13 정식 나오면 python:3.13-slim 로 교체
+# ───────── 베이스 이미지 ─────────
+# Python 3.13 slim (공식) ─ ARM/AMD 모두 OK
+FROM python:3.12
 
-ENV DEBIAN_FRONTEND=noninteractive
+# ───────── 빌드 인자 (워크플로우에서 주입) ─────────
+ARG APP_ENV=dev
+
+# ───────── OS 패키지 최소 설치 ─────────
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y \
+        build-essential curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# ───────── 가상환경 대신 “uv” 패키지 매니저 사용 ─────────
+#   - https://github.com/astral-sh/uv
+RUN pip install -U pip uv
+
 WORKDIR /app
 
-# ───────────────────────────────────────────────
-# ② uv 설치 (CPU 아키텍처 감지는 스크립트가 알아서)
-# ───────────────────────────────────────────────
-RUN apt-get update -y \
- && apt-get install -y --no-install-recommends curl ca-certificates \
- && curl -Ls https://astral.sh/uv/install.sh | sh \
- && uv --version                 # (optional) 설치 확인
-#   ↑ /usr/local/bin/uv 로 들어감
+# ───────── Python 의존성 레이어 분리 ─────────
+# requirements.txt or pyproject.toml 중 하나만 있어도 OK
+COPY requirements.txt* pyproject.toml* poetry.lock* /app/
 
-# ───────────────────────────────────────────────
-# ③ 의존성 설치
-#    pyproject.toml / poetry.lock 대신
-#    requirements.txt 도 OK (uv pip 대체)
-# ───────────────────────────────────────────────
-COPY pyproject.toml poetry.lock* /app/
-RUN uv pip install -r <(uv pip compile --generate-hashes pyproject.toml)
+# • uv pip 은 requirements·pyproject 둘 다 인식
+RUN uv pip install --system --no-cache-dir --require-hashes --upgrade-strategy eager || \
+    uv pip install --system --no-cache-dir
 
-# 프로젝트 소스 복사
+# ───────── 애플리케이션 소스 복사 ─────────
 COPY . /app
 
-# ───────────────────────────────────────────────
-# ④ 실행
-# ───────────────────────────────────────────────
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# ───────── 런타임 환경 변수 ─────────
+ENV PYTHONUNBUFFERED=1 \
+    PORT=8000 \
+    APP_ENV=${APP_ENV} \
+    OPENAI_API_KEY=${OPENAI_API_KEY} \
+    PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY} \
+    ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+EXPOSE 8000
+
+# ───────── 헬스체크 (ALB 용) ─────────
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -fs http://localhost:${PORT}/health/alb || exit 1
+
+# ───────── 컨테이너 시작 CMD ─────────
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

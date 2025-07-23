@@ -1,36 +1,49 @@
-name: Build & Push backend to ECR
+name: Build ‑ Push ‑ Deploy (EC2+ALB)
 
 on:
   push:
-    branches:
-      - dev # dev 에 push 될 때마다
-    paths-ignore: # README 수정 등은 무시
-      - "docs/**"
-      - "**/*.md"
+    branches: [main, dev, feat/**]
 
-env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REPO: "aide-backend-dev" # ECR 리포 이름
-  IMAGE_TAG: ${{ github.sha }} # 커밋 SHA
+env: # 공통 변수
+  ECR_REPO: fastapi-backend
+  DOCKER_CONTEXT: . # docker build context
+  DOCKER_FILE: ./Dockerfile
 
 jobs:
-  build:
+  build-push-deploy:
     runs-on: ubuntu-latest
-
     permissions:
-      id-token: write # OIDC로 AWS 로그인
       contents: read
+      id-token: write # OIDC for AWS (추천)
 
     steps:
-      # 1) 체크아웃
-      - uses: actions/checkout@v4
+      # ───────── 1) 코드 체크아웃 ─────────
+      - uses: actions/checkout@v3
 
-      # 2) AWS OIDC 로그인 (access key 없이)
-      # - name: Configure AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
+      # ───────── 2) 브랜치별 환경 변수 결정 ─────────
+      - name: Set ENV & TAG
+        run: |
+          case "${{ github.ref_name }}" in
+            "main")
+              echo "APP_ENV=prod" >> $GITHUB_ENV
+              echo "IMG_TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
+              ;;
+            "dev")
+              echo "APP_ENV=dev"  >> $GITHUB_ENV
+              echo "IMG_TAG=dev-${{ github.sha }}"  >> $GITHUB_ENV
+              ;;
+            *)
+              echo "APP_ENV=feat" >> $GITHUB_ENV
+              echo "IMG_TAG=${{ github.ref_name }}-${{ github.sha }}" >> $GITHUB_ENV
+              ;;
+          esac
+
+      # ───────── 3) AWS 자격(OIDC) 설정 ─────────
+      # - name: Configure AWS credentials (OIDC)
+      #   uses: aws-actions/configure-aws-credentials@v2
       #   with:
-      #     role-to-assume: arn:aws:iam::702166530338:user/david_lee   # 👈 ①
-      #     aws-region: ${{ env.AWS_REGION }}
+      #     role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+      #     aws-region:    ${{ secrets.AWS_REGION }}
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -38,17 +51,105 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 3) ECR에 docker login
+      # ───────── 4) ECR 로그인 ─────────
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 4) Build & Push
+      # ───────── 5) Docker Build & Push ─────────
       - name: Build & push image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.IMG_TAG }}
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:latest
+
+      # - name: Build & push image
+      #   run: |
+      #     ECR_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
+      #     docker build \
+      #       --build-arg APP_ENV=${{ env.APP_ENV }} \
+      #       -f ${{ env.DOCKER_FILE }} \
+      #       -t $ECR_URI/${{ env.ECR_REPO }}:${{ env.IMG_TAG }} \
+      #       ${{ env.DOCKER_CONTEXT }}
+      #     docker push $ECR_URI/${{ env.ECR_REPO }}:${{ env.IMG_TAG }}
+
+      # ───────── 6) EC2 Rolling Deploy (SSM) ─────────
+      #  EC2 인스턴스에 SSM Agent & IAM role(AmazonSSMManagedInstanceCore) 가 붙어있어야 함
+      - name: Pull & Restart container on EC2
+        run: |
+          INSTANCE_ID=${{ secrets.EC2_INSTANCE_ID }}
+          IMG_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ env.IMG_TAG }}"
+
+          # ① 새 이미지 풀
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Pull new backend image" \
+            --parameters 'commands=["docker pull '"$IMG_URI"'"]' \
+            --output text
+
+          # ② compose 재시작 (백엔드 서비스만) – compose.yaml 에 backend 서비스가 있다고 가정
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Restart backend container" \
+            --parameters 'commands=["cd /home/ubuntu/app && docker compose up -d --no-deps --build backend"]' \
+            --output text
+
+# on:
+#   push:
+#     branches:
+#       - dev # dev 에 push 될 때마다
+#     paths-ignore: # README 수정 등은 무시
+#       - "docs/**"
+#       - "**/*.md"
+
+# env:
+#   AWS_REGION: ${{ secrets.AWS_REGION }}
+#   ECR_REPO: "aide-backend-dev" # ECR 리포 이름
+#   IMAGE_TAG: ${{ github.sha }} # 커밋 SHA
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+
+#     permissions:
+#       id-token: write # OIDC로 AWS 로그인
+#       contents: read
+
+#     steps:
+#       # 1) 체크아웃
+#       - uses: actions/checkout@v4
+
+#       # 2) AWS OIDC 로그인 (access key 없이)
+#       # - name: Configure AWS credentials
+#       #   uses: aws-actions/configure-aws-credentials@v4
+#       #   with:
+#       #     role-to-assume: arn:aws:iam::702166530338:user/david_lee   # 👈 ①
+#       #     aws-region: ${{ env.AWS_REGION }}
+#       - name: Configure AWS credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+
+#       # 3) ECR에 docker login
+#       - name: Login to Amazon ECR
+#         id: login-ecr
+#         uses: aws-actions/amazon-ecr-login@v2
+
+#       # 4) Build & Push
+#       - name: Build & push image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: .
+#           push: true
+#           tags: |
+#             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+#             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}:latest
+
