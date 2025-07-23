@@ -1,7 +1,7 @@
 from sqlalchemy import Column, VARCHAR, SMALLINT, BOOLEAN, DATETIME, func, ForeignKey, JSON, CHAR, INTEGER, FLOAT, Index
 from sqlalchemy.dialects.mysql import TINYINT 
 from sqlalchemy.orm import relationship
-from app.db.client import Base
+from db.client import Base
 
 class Group(Base):
     __tablename__ = 'groups'

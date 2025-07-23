@@ -4,15 +4,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
-from app.schemas.roster_schema import WantedInvokeRequest, WantedInvokeResponse, WantedDeadlineRequest
-from app.services.graph_service import graph_service
+from schemas.roster_schema import WantedInvokeRequest, WantedInvokeResponse, WantedDeadlineRequest
+from services.graph_service import graph_service
 from pydantic import BaseModel
-from app.routers.auth import get_current_user_from_cookie
-from app.db.client import get_db
-from app.db.models import Wanted
-from app.schemas.auth_schema import User as UserSchema
-from app.db.models import Nurse, ShiftPreference
-from app.services.wanted_service import request_wanted_shifts_service
+from routers.auth import get_current_user_from_cookie
+from db.client import get_db
+from db.models import Wanted
+from schemas.auth_schema import User as UserSchema
+from db.models import Nurse, ShiftPreference
+from services.wanted_service import request_wanted_shifts_service
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 

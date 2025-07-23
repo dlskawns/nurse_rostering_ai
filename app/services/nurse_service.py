@@ -4,9 +4,9 @@
 - 모든 함수는 한글 docstring, 한글 print/logging, PEP8 스타일 적용
 """
 from sqlalchemy.orm import Session
-from app.db.models import Nurse as NurseModel
-from app.schemas.roster_schema import NurseProfile
-from app.schemas.auth_schema import User as UserSchema
+from db.models import Nurse as NurseModel
+from schemas.roster_schema import NurseProfile
+from schemas.auth_schema import User as UserSchema
 from typing import List
 
 

@@ -4,26 +4,26 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
-from app.schemas.auth_schema import User as UserSchema
-from app.schemas.roster_schema import RosterRequest
-from app.db.client import get_db
-from app.db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
-from app.routers.utils import get_days_in_month
-from app.routers.auth import get_current_user_from_cookie
+from schemas.auth_schema import User as UserSchema
+from schemas.roster_schema import RosterRequest
+from db.client import get_db
+from db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
+from routers.utils import get_days_in_month
+from routers.auth import get_current_user_from_cookie
 from sqlalchemy import func, and_
-from app.db.models import Schedule, Shift
-from app.routers.utils import Timer
+from db.models import Schedule, Shift
+from routers.utils import Timer
 from datetime import date
 import uuid
-from app.services.roster_create_service import generate_roster_service, request_schedule_service
+from services.roster_create_service import generate_roster_service, request_schedule_service
 
 # CP-SAT 기반 엔진들 import
 try:
-    from app.services.random_sampling import generate_roster
-    from app.services.cp_sat_basic import generate_roster_cp_sat
-    from app.services.cp_sat_main_v3 import generate_roster_cp_sat_main_v3
-    from app.services.cp_sat_main_v2 import generate_roster_cp_sat_main_v2
-    from app.services.cp_sat_adaptive import generate_roster_cp_sat_adaptive
+    from services.random_sampling import generate_roster
+    from services.cp_sat_basic import generate_roster_cp_sat
+    from services.cp_sat_main_v3 import generate_roster_cp_sat_main_v3
+    from services.cp_sat_main_v2 import generate_roster_cp_sat_main_v2
+    from services.cp_sat_adaptive import generate_roster_cp_sat_adaptive
     CPSAT_AVAILABLE = True
     CPSAT_MAIN_V3_AVAILABLE = True
     CPSAT_MAIN_V2_AVAILABLE = True

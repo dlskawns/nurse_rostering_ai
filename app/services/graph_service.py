@@ -1,4 +1,4 @@
-from app.agents.main_graph import GraphGenerate
+from agents.main_graph import GraphGenerate
 
 class GraphService:
     def __init__(self):

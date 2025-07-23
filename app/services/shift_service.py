@@ -4,10 +4,10 @@
 - 모든 함수는 한글 docstring, 한글 print/logging, PEP8 스타일 적용
 """
 from sqlalchemy.orm import Session
-from app.db.models import Shift, Nurse
-from app.schemas.auth_schema import User as UserSchema
+from db.models import Shift, Nurse
+from schemas.auth_schema import User as UserSchema
 from sqlalchemy import func
-from app.db.models import ScheduleEntry
+from db.models import ScheduleEntry
 
 
 def get_shifts_service(current_user, db: Session):

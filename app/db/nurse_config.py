@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import date, datetime, timedelta
 import numpy as np
 from functools import lru_cache
-from app.services.holiday_pack import get_weekends   # ← 주말 헬퍼
+from services.holiday_pack import get_weekends   # ← 주말 헬퍼
 
 # ────────────────────────────────────────────────────────────────
 # 주말‑셋 캐시  (month 단위로 한 번만 계산)

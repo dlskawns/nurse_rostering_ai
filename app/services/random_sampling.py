@@ -1,5 +1,5 @@
 import random
-from app.routers.utils import get_days_in_month
+from routers.utils import get_days_in_month
 
 
 def generate_roster(nurses, preferences, year, month):

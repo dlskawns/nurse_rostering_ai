@@ -4,20 +4,20 @@
 - 모든 함수는 한글 docstring, 한글 print/logging, PEP8 스타일 적용
 """
 from sqlalchemy.orm import Session
-from app.db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage, Schedule
-from app.schemas.roster_schema import RosterRequest
-from app.routers.utils import get_days_in_month, Timer
+from db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage, Schedule
+from schemas.roster_schema import RosterRequest
+from routers.utils import get_days_in_month, Timer
 from datetime import date
 import uuid
 from sqlalchemy import func
 
 # CP-SAT 기반 엔진들 import
 try:
-    from app.services.random_sampling import generate_roster
-    from app.services.cp_sat_basic import generate_roster_cp_sat
-    from app.services.cp_sat_main_v3 import generate_roster_cp_sat_main_v3
-    from app.services.cp_sat_main_v2 import generate_roster_cp_sat_main_v2
-    from app.services.cp_sat_adaptive import generate_roster_cp_sat_adaptive
+    from services.random_sampling import generate_roster
+    from services.cp_sat_basic import generate_roster_cp_sat
+    from services.cp_sat_main_v3 import generate_roster_cp_sat_main_v3
+    from services.cp_sat_main_v2 import generate_roster_cp_sat_main_v2
+    from services.cp_sat_adaptive import generate_roster_cp_sat_adaptive
     CPSAT_AVAILABLE = True
     CPSAT_MAIN_V3_AVAILABLE = True
     CPSAT_MAIN_V2_AVAILABLE = True

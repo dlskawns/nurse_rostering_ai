@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.routers import roster, auth, nurses, dates, wanted, preferences, roster_create, shifts, health
+from routers import roster, auth, nurses, dates, wanted, preferences, roster_create, shifts, health
 
 app = FastAPI()
 
@@ -16,3 +16,8 @@ app.include_router(preferences.router)
 app.include_router(roster_create.router) 
 app.include_router(shifts.router)
 app.include_router(health.router)
+
+import uvicorn
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 

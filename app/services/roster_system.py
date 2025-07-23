@@ -5,9 +5,9 @@ import calendar
 import time
 import pandas as pd
 import logging
-from app.db.roster_config import NurseRosterConfig, DEFAULT_CONFIG
-from app.db.nurse_config import Nurse
-from app.services.holiday_pack import get_weekends   # ← 주말 헬퍼
+from db.roster_config import NurseRosterConfig, DEFAULT_CONFIG
+from db.nurse_config import Nurse
+from services.holiday_pack import get_weekends   # ← 주말 헬퍼
 
 def _weekend_set(year: int, month: int) -> set[int]:
     """해당 월의 주말 날짜(1‑based)를 {0‑based day_idx} 로 반환."""

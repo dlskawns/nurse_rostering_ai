@@ -2,12 +2,12 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from app.db.client import get_db
-from app.db.models import Shift, Nurse, ScheduleEntry, ShiftManage
-from app.schemas.auth_schema import User as UserSchema
-from app.routers.auth import get_current_user_from_cookie
-from app.schemas.roster_schema import ShiftAddRequest, RemoveShiftRequest, MoveShiftRequest, ShiftManageSaveRequest
-from app.services.shift_service import (
+from db.client import get_db
+from db.models import Shift, Nurse, ScheduleEntry, ShiftManage
+from schemas.auth_schema import User as UserSchema
+from routers.auth import get_current_user_from_cookie
+from schemas.roster_schema import ShiftAddRequest, RemoveShiftRequest, MoveShiftRequest, ShiftManageSaveRequest
+from services.shift_service import (
     get_shifts_service,
     add_shift_service,
     update_shift_service,

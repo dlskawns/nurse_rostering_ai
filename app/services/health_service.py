@@ -5,8 +5,8 @@
 - CloudWatch 로깅 기능 포함
 """
 from sqlalchemy.orm import Session
-from app.db.client import get_db
-from app.db.models import Nurse, Schedule, ShiftPreference
+from db.client import get_db
+from db.models import Nurse, Schedule, ShiftPreference
 from datetime import datetime
 import psutil
 import os

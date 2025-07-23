@@ -3,12 +3,12 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 
-from app.db.client import get_db
-from app.db.models import Nurse as NurseModel
-from app.schemas.roster_schema import NurseProfile
-from app.routers.auth import get_current_user_from_cookie
-from app.schemas.auth_schema import User as UserSchema
-from app.services.nurse_service import get_nurses_in_group_service, bulk_update_nurses_service
+from db.client import get_db
+from db.models import Nurse as NurseModel
+from schemas.roster_schema import NurseProfile
+from routers.auth import get_current_user_from_cookie
+from schemas.auth_schema import User as UserSchema
+from services.nurse_service import get_nurses_in_group_service, bulk_update_nurses_service
 
 router = APIRouter(
     prefix="/nurses",

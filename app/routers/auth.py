@@ -5,9 +5,9 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
 
-from app.db.client import get_db
-from app.db.models import Nurse, Group, Office
-from app.schemas.auth_schema import User as UserSchema, TokenData
+from db.client import get_db
+from db.models import Nurse, Group, Office
+from schemas.auth_schema import User as UserSchema, TokenData
 
 # Configuration
 SECRET_KEY = "a_very_secret_key"  # In production, use a strong, securely stored key

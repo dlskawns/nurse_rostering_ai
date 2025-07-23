@@ -6,8 +6,8 @@
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.db.client import get_db
-from app.services.health_service import (
+from db.client import get_db
+from services.health_service import (
     check_database_health_service,
     check_system_health_service,
     check_service_dependencies_service,

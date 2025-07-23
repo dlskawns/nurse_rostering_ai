@@ -1,12 +1,12 @@
-from app.schemas.roster_schema import PreferenceData, PreferenceSubmit
-from app.routers.auth import get_current_user_from_cookie
-from app.db.client import get_db
-from app.db.models import ShiftPreference, Nurse
-from app.schemas.auth_schema import User as UserSchema
+from schemas.roster_schema import PreferenceData, PreferenceSubmit
+from routers.auth import get_current_user_from_cookie
+from db.client import get_db
+from db.models import ShiftPreference, Nurse
+from schemas.auth_schema import User as UserSchema
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
-from app.services.preferences_service import (
+from services.preferences_service import (
     save_preference_draft_service,
     submit_preferences_service,
     submit_empty_preferences_service,
