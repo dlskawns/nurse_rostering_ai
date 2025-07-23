@@ -4,6 +4,14 @@ FROM python:3.12
 
 # ───────── 빌드 인자 (워크플로우에서 주입) ─────────
 ARG APP_ENV=dev
+ARG GOOGLE_API_KEY
+ARG ANTHROPIC_API_KEY
+ARG OPENAI_API_KEY
+# 환경 변수 설정 진행
+ENV APP_ENV=${APP_ENV}
+ENV GOOGLE_API_KEY=${GOOGLE_API_KEY}
+ENV ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+ENV OPENAI_API_KEY=${OPENAI_API_KEY}
 
 # ───────── OS 패키지 최소 설치 ─────────
 RUN apt-get update && \

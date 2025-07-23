@@ -34,18 +34,15 @@ jobs:
       - name: Set dynamic env vars
         shell: bash
         run: |
-          set -e          # 이미 기본값이지만, 가독성↑
-          REF="${{ github.ref_name }}"
-
-          if   [[ "$REF" == "main" ]]; then
-            APP_ENV=production
+          if   [[ "github.ref_name" == "main" ]]; then
+            APP_ENV=prod
             echo "DOCKER_TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
             echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}" >> $GITHUB_ENV
 
-          elif [[ "$REF" == "dev" ]]; then
-            APP_ENV=development
+          elif [[ "github.ref_name" == "dev" ]]; then
+            APP_ENV=dev
             echo "DOCKER_TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
             echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.DEV_ENV_GOOGLE }}" >> $GITHUB_ENV
