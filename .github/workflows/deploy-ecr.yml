@@ -41,24 +41,24 @@ jobs:
 
           if   [[ "$REF" == "main" ]]; then
             APP_ENV=production
-            DOCKER_TAG="prod-${{ github.sha }}"
-            ANTHROPIC_API_KEY="${{ secrets.PROD_ENV_ANTHROPIC }}"
-            GOOGLE_API_KEY="${{ secrets.PROD_ENV_GOOGLE }}"
-            OPENAI_API_KEY="${{ secrets.PROD_ENV_OPENAI }}"
+            echo "DOCKER_TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
+            echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}" >> $GITHUB_ENV
+            echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}" >> $GITHUB_ENV
 
           elif [[ "$REF" == "dev" ]]; then
             APP_ENV=development
-            DOCKER_TAG="dev-${{ github.sha }}"
-            ANTHROPIC_API_KEY="${{ secrets.DEV_ENV_ANTHROPIC }}"
-            GOOGLE_API_KEY="${{ secrets.DEV_ENV_GOOGLE }}"
-            OPENAI_API_KEY="${{ secrets.DEV_ENV_OPENAI }}"
+            echo "DOCKER_TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
+            echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}" >> $GITHUB_ENV
+            echo "GOOGLE_API_KEY=${{ secrets.DEV_ENV_GOOGLE }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=${{ secrets.DEV_ENV_OPENAI }}" >> $GITHUB_ENV
 
           else
-            APP_ENV=feature
-            DOCKER_TAG="${REF}-${{ github.sha }}"
-            ANTHROPIC_API_KEY="${{ secrets.LOCAL_ENV_ANTHROPIC }}"
-            GOOGLE_API_KEY="${{ secrets.LOCAL_ENV_GOOGLE }}"
-            OPENAI_API_KEY="${{ secrets.LOCAL_ENV_OPENAI }}"
+            APP_ENV=local
+            echo "DOCKER_TAG=${REF}-${{ github.sha }}" >> $GITHUB_ENV
+            echo "ANTHROPIC_API_KEY=${{ secrets.LOCAL_ENV_ANTHROPIC }}" >> $GITHUB_ENV
+            echo "GOOGLE_API_KEY=${{ secrets.LOCAL_ENV_GOOGLE }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=${{ secrets.LOCAL_ENV_OPENAI }}" >> $GITHUB_ENV
           fi
 
           {
@@ -68,11 +68,21 @@ jobs:
             echo "GOOGLE_API_KEY=$GOOGLE_API_KEY"
             echo "OPENAI_API_KEY=$OPENAI_API_KEY"
           } >> "$GITHUB_ENV"
+        shell: bash
+      # 2-2. 환경설정 확인 로그 출력
+      - name: Log Environment
+        run: |
+          echo "Running in ${{ env.ENVIRONMENT }} environment"
+          echo "Using Docker tag: ${{ env.DOCKER_TAG }}"
+          echo "Anthropic API Key: ${{ env.ANTHROPIC_API_KEY }}"
+          echo "Perplexity API Key: ${{ env.GOOGLE_API_KEY }}"
+          echo "OPENAI API Key: ${{ env.OPENAI_API_KEY }}"
 
-          echo "::group::🔖  Resolved build variables"
-          env | grep -E 'APP_ENV|DOCKER_TAG' || true   # grep 결과 없어도 통과
-          echo "::endgroup::"
-      ##################################################################
+
+        # echo "::group::🔖  Resolved build variables"
+        # env | grep -E 'APP_ENV|DOCKER_TAG' || true   # grep 결과 없어도 통과
+        # echo "::endgroup::"
+    ##################################################################
       # 3) AWS 자격 구성  ── (둘 중 하나만 선택)
       ##################################################################
       # --- 3‑A  : OIDC (AWS IAM OIDC Role 추천) ------------------------
