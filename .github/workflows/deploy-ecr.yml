@@ -68,7 +68,6 @@ jobs:
             echo "GOOGLE_API_KEY=$GOOGLE_API_KEY"
             echo "OPENAI_API_KEY=$OPENAI_API_KEY"
           } >> "$GITHUB_ENV"
-        shell: bash
       # 2-2. 환경설정 확인 로그 출력
       - name: Log Environment
         run: |
@@ -78,11 +77,10 @@ jobs:
           echo "Perplexity API Key: ${{ env.GOOGLE_API_KEY }}"
           echo "OPENAI API Key: ${{ env.OPENAI_API_KEY }}"
 
-
         # echo "::group::🔖  Resolved build variables"
         # env | grep -E 'APP_ENV|DOCKER_TAG' || true   # grep 결과 없어도 통과
         # echo "::endgroup::"
-    ##################################################################
+      ##################################################################
       # 3) AWS 자격 구성  ── (둘 중 하나만 선택)
       ##################################################################
       # --- 3‑A  : OIDC (AWS IAM OIDC Role 추천) ------------------------
