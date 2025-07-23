@@ -110,15 +110,15 @@ jobs:
         run: |
           docker build \
             --build-arg ENV=${{ env.ENVIRONMENT }} \
-            --build-arg PERPLEXITY_API_KEY=${{ env.PERPLEXITY_API_KEY }} \
+            --build-arg GOOGLE_API_KEY=${{ env.GOOGLE_API_KEY }} \
             --build-arg ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }} \
             --build-arg OPENAI_API_KEY=${{ env.OPENAI_API_KEY }} \
-            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/lambda-fastapi:${{ env.DOCKER_TAG }} .
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }} .
 
       # 6. Docker 이미지 ECR에 푸시
       - name: Push Docker image to ECR
         run: |
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/lambda-fastapi:${{ env.DOCKER_TAG }}
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ env.DOCKER_TAG }}
 
       ##################################################################
       # 6) EC2 Rolling Deploy  (SSM RunShellScript)
