@@ -33,36 +33,45 @@ jobs:
       ##################################################################
       # 2) 브랜치에 따라 ENV / TAG / API KEY 세팅
       ##################################################################
-      - name: Set dynamic environment variables
+      - name: Set dynamic env vars
         shell: bash
         run: |
-          case "${{ github.ref_name }}" in
-            main)
-              echo "APP_ENV=production"             >> $GITHUB_ENV
-              echo "DOCKER_TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
-              echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}"   >> $GITHUB_ENV
-              echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
-              echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}"         >> $GITHUB_ENV
-              ;;
-            dev)
-              echo "APP_ENV=development"            >> $GITHUB_ENV
-              echo "DOCKER_TAG=dev-${{ github.sha }}"  >> $GITHUB_ENV
-              echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}"    >> $GITHUB_ENV
-              echo "GOOGLE_API_KEY=${{ secrets.DEV_ENV_GOOGLE }}"  >> $GITHUB_ENV
-              echo "OPENAI_API_KEY=${{ secrets.DEV_ENV_OPENAI }}"          >> $GITHUB_ENV
-              ;;
-            *)
-              echo "APP_ENV=feature"                >> $GITHUB_ENV
-              echo "DOCKER_TAG=${{ github.ref_name }}-${{ github.sha }}" >> $GITHUB_ENV
-              echo "ANTHROPIC_API_KEY=${{ secrets.LOCAL_ENV_ANTHROPIC }}"  >> $GITHUB_ENV
-              echo "GOOGLE_API_KEY=${{ secrets.LOCAL_ENV_GOOGLE }}" >> $GITHUB_ENV
-              echo "OPENAI_API_KEY=${{ secrets.LOCAL_ENV_OPENAI }}"        >> $GITHUB_ENV
-              ;;
-          esac
-          echo "::group::🔖  Resolved build variables"
-          env | grep -E 'APP_ENV|DOCKER_TAG|API_KEY'
-          echo "::endgroup::"
+          set -e          # 이미 기본값이지만, 가독성↑
+          REF="${{ github.ref_name }}"
 
+          if   [[ "$REF" == "main" ]]; then
+            APP_ENV=production
+            DOCKER_TAG="prod-${{ github.sha }}"
+            ANTHROPIC_API_KEY="${{ secrets.PROD_ENV_ANTHROPIC }}"
+            GOOGLE_API_KEY="${{ secrets.PROD_ENV_GOOGLE }}"
+            OPENAI_API_KEY="${{ secrets.PROD_ENV_OPENAI }}"
+
+          elif [[ "$REF" == "dev" ]]; then
+            APP_ENV=development
+            DOCKER_TAG="dev-${{ github.sha }}"
+            ANTHROPIC_API_KEY="${{ secrets.DEV_ENV_ANTHROPIC }}"
+            GOOGLE_API_KEY="${{ secrets.DEV_ENV_GOOGLE }}"
+            OPENAI_API_KEY="${{ secrets.DEV_ENV_OPENAI }}"
+
+          else
+            APP_ENV=feature
+            DOCKER_TAG="${REF}-${{ github.sha }}"
+            ANTHROPIC_API_KEY="${{ secrets.LOCAL_ENV_ANTHROPIC }}"
+            GOOGLE_API_KEY="${{ secrets.LOCAL_ENV_GOOGLE }}"
+            OPENAI_API_KEY="${{ secrets.LOCAL_ENV_OPENAI }}"
+          fi
+
+          {
+            echo "APP_ENV=$APP_ENV"
+            echo "DOCKER_TAG=$DOCKER_TAG"
+            echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
+            echo "GOOGLE_API_KEY=$GOOGLE_API_KEY"
+            echo "OPENAI_API_KEY=$OPENAI_API_KEY"
+          } >> "$GITHUB_ENV"
+
+          echo "::group::🔖  Resolved build variables"
+          env | grep -E 'APP_ENV|DOCKER_TAG' || true   # grep 결과 없어도 통과
+          echo "::endgroup::"
       ##################################################################
       # 3) AWS 자격 구성  ── (둘 중 하나만 선택)
       ##################################################################
