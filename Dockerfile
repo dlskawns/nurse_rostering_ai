@@ -30,11 +30,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     # ▸ uv 설치(공식 스크립트)
     curl -LsSf https://astral.sh/uv/install.sh | sh && \ 
-    ln -s /root/.local/bin/uv /usr/local/bin/uv && \
-    uv venv && \
-    uv sync && \
-    uv pip install uvicorn
+    ln -s /root/.local/bin/uv /usr/local/bin/uv
 ENV PATH="/root/.local/bin:${PATH}"
+
+RUN uv venv && \
+    uv sync
 
 # ───────── 애플리케이션 소스 복사 ─────────
 COPY . /app
