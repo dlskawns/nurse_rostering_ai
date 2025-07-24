@@ -108,7 +108,7 @@ jobs:
 
       - name: Export image uri
         run: |
-          echo "IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }}" >> $GITHUB_ENV
+          echo "IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev" >> $GITHUB_ENV
 
       # 5‑1) 이전 latest 태그 이미지 삭제 (ECR 요금 절감)
       - name: Delete previous :latest image in ECR
@@ -162,7 +162,6 @@ jobs:
       # 5‑4) 새 이미지 Pull
       - name: Pull new image on EC2
         uses: appleboy/ssh-action@v1.0.0
-        envs: IMAGE_URI
         with:
           host: ${{ secrets.DEV_EC2_HOST }}
           username: ubuntu
