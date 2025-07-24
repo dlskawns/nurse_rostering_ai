@@ -39,7 +39,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}" >> $GITHUB_ENV
-            echo "EC2_INSTANCE_ID=${{ secrets.PROD_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
+            
 
           elif [[ "${{ github.ref_name }}" ==  "dev" ]]; then
             echo "ENVIRONMENT=development" >> $GITHUB_ENV
@@ -47,7 +47,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.DEV_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.DEV_ENV_OPENAI }}" >> $GITHUB_ENV
-            echo "EC2_INSTANCE_ID=${{ secrets.DEV_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
+            
 
           else
             echo ${{ github.ref_name }}
@@ -56,7 +56,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.LOCAL_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.LOCAL_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.LOCAL_ENV_OPENAI }}" >> $GITHUB_ENV
-            echo "EC2_INSTANCE_ID=${{ secrets.LOCAL_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
+            
           fi
         shell: bash
       # 2-2. 환경설정 확인 로그 출력
@@ -67,9 +67,6 @@ jobs:
           echo "Anthropic API Key: ${{ env.ANTHROPIC_API_KEY }}"
           echo "GOOGLE API Key: ${{ env.GOOGLE_API_KEY }}"
           echo "OPENAI API Key: ${{ env.OPENAI_API_KEY }}"
-          echo "PROD_EC2 Instance ID: ${{ secrets.PROD_EC2_INSTANCE_ID }}"
-          echo "DEV_EC2 Instance ID: ${{ secrets.DEV_EC2_INSTANCE_ID }}"
-          echo "LOCAL_EC2 Instance ID: ${{ secrets.LOCAL_EC2_INSTANCE_ID }}"
 
         # echo "::group::🔖  Resolved build variables"
         # env | grep -E 'APP_ENV|DOCKER_TAG' || true   # grep 결과 없어도 통과
@@ -114,12 +111,14 @@ jobs:
       ##################################################################
       - name: Deploy to EC2 via SSM
         env:
-          INSTANCE_ID: ${{ secrets.DEV_EC2_INSTANCE_ID }} # EC2 ID
+          INSTANCE_ID: i-0aaa81477a68886a6 # EC2 ID
           IMG_URI: ${{ steps.ecr-login.outputs.registry }}/aide-backend-dev:${{ env.DOCKER_TAG }}
         run: |
           echo "🔄  Pulling new image on EC2"
+          echo "INSTANCE_ID: $INSTANCE_ID"
+          echo "IMG_URI: $IMG_URI"
           aws ssm send-command \
-            --instance-ids "0aaa81477a68886a6" \
+            --instance-ids ""$INSTANCE_ID"" \
             --document-name "AWS-RunShellScript" \
             --comment "Pull new Docker image" \
             --parameters '{"commands":["docker pull '"$IMG_URI"'"]}' \
@@ -128,7 +127,7 @@ jobs:
           echo "🚀  Restarting backend service via docker‑compose"
           # backend 서비스가 정의된 디렉터리로 이동 후 재기동 (no‑deps)
           aws ssm send-command \
-            --instance-ids "0aaa81477a68886a6" \
+            --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Restart backend container" \
             --parameters '{"commands":["cd /home/ubuntu/app","docker compose pull backend","docker compose up -d --no-deps backend"]}' \
