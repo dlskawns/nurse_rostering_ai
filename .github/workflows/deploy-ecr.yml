@@ -169,7 +169,7 @@ jobs:
           script: |
             set -e
             echo " docker pull $IMAGE_URI"
-            sudo docker pull $IMAGE_URI
+            sudo docker pull "$IMAGE_URI"
         env:
           IMAGE_URI: ${{ env.IMAGE_URI }}
 
