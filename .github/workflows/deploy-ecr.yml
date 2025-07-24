@@ -64,6 +64,7 @@ jobs:
           echo "Anthropic API Key: ${{ env.ANTHROPIC_API_KEY }}"
           echo "Perplexity API Key: ${{ env.GOOGLE_API_KEY }}"
           echo "OPENAI API Key: ${{ env.OPENAI_API_KEY }}"
+          echo "EC2 Instance ID: ${{ env.EC2_INSTANCE_ID }}"
 
         # echo "::group::🔖  Resolved build variables"
         # env | grep -E 'APP_ENV|DOCKER_TAG' || true   # grep 결과 없어도 통과
