@@ -186,7 +186,6 @@ jobs:
             sudo docker run -d \
               --name aide-server \
               -p 8000:8000 \
-              -e APP_ENV= ${{ env.ENVIRONMENT }} \
               --restart unless-stopped \
               "$IMAGE_URI"
             echo "🚀  Container started → http://$HOSTNAME:8000/health"
