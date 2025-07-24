@@ -115,7 +115,7 @@ jobs:
       ##################################################################
       - name: Deploy to EC2 via SSM
         env:
-          INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }} # EC2 ID
+          INSTANCE_ID: ${{ env.EC2_INSTANCE_ID }} # EC2 ID
           IMG_URI: ${{ steps.ecr-login.outputs.registry }}/aide-backend-dev:${{ env.DOCKER_TAG }}
         run: |
           echo "🔄  Pulling new image on EC2"
