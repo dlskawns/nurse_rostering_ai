@@ -39,6 +39,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}" >> $GITHUB_ENV
+            echo "EC2_INSTANCE_ID=${{ secrets.PROD_ENV_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
 
           elif [[ "${{ github.ref_name }}" ==  "dev" ]]; then
             echo "ENVIRONMENT=development" >> $GITHUB_ENV
@@ -46,6 +47,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.DEV_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.DEV_ENV_OPENAI }}" >> $GITHUB_ENV
+            echo "EC2_INSTANCE_ID=${{ secrets.DEV_ENV_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
 
           else
             echo ${{ github.ref_name }}
@@ -54,6 +56,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.LOCAL_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.LOCAL_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.LOCAL_ENV_OPENAI }}" >> $GITHUB_ENV
+            echo "EC2_INSTANCE_ID=${{ secrets.LOCAL_ENV_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
           fi
         shell: bash
       # 2-2. 환경설정 확인 로그 출력
@@ -62,7 +65,7 @@ jobs:
           echo "Running in ${{ env.ENVIRONMENT }} environment"
           echo "Using Docker tag: ${{ env.DOCKER_TAG }}"
           echo "Anthropic API Key: ${{ env.ANTHROPIC_API_KEY }}"
-          echo "Perplexity API Key: ${{ env.GOOGLE_API_KEY }}"
+          echo "GOOGLE API Key: ${{ env.GOOGLE_API_KEY }}"
           echo "OPENAI API Key: ${{ env.OPENAI_API_KEY }}"
           echo "EC2 Instance ID: ${{ env.EC2_INSTANCE_ID }}"
 
