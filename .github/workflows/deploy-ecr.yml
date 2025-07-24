@@ -134,6 +134,12 @@ jobs:
           key: ${{ secrets.DEV_EC2_SSH_KEY }}
           script: |
             set -e
+
+            if ! command -v aws >/dev/null 2>&1; then
+              echo "⏬  installing awscli..."
+              sudo apt-get update -y
+              sudo apt-get install -y awscli
+            fi
             aws ecr get-login-password --region ${{ env.AWS_REGION }} \
               | sudo docker login \
                   --username AWS \
@@ -169,12 +175,6 @@ jobs:
             set -e
             echo " docker pull ${{ env.IMAGE_URI }}"
             sudo docker pull ${{ env.IMAGE_URI }}
-              # 0) AWS CLI 없으면 설치 (1회만 실행됨)
-            if ! command -v aws >/dev/null 2>&1; then
-              echo "⏬  installing awscli..."
-              sudo apt-get update -y
-              sudo apt-get install -y awscli
-            fi
 
       # 5‑5) 컨테이너 실행 (예: 단일 FastAPI 서버)
       - name: Run container
