@@ -28,11 +28,9 @@ ENV OPENAI_API_KEY=${OPENAI_API_KEY}
 RUN apt-get update && \
     apt-get install --no-install-recommends -y curl build-essential && \
     rm -rf /var/lib/apt/lists/* && \
-    # ▸ uv 설치(공식 스크립트)
-    curl -LsSf https://astral.sh/uv/install.sh | sh && \ 
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
     ln -s /root/.local/bin/uv /usr/local/bin/uv && \
-# uv를 pip wrapper처럼 사용해 “시스템 레이어”에 설치
-RUN uv pip install --system --no-cache-dir --upgrade-strategy eager
+    uv pip install --system --no-cache-dir --upgrade-strategy eager
 ENV PATH="/root/.local/bin:${PATH}"
 
 # ───────── 애플리케이션 소스 복사 ─────────
