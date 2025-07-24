@@ -28,8 +28,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     # ▸ uv 설치(공식 스크립트)
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-    source ~/.bashrc
+    ln -s /root/.local/bin/uv /usr/local/bin/uv  
     uv venv
     uv sync
     
