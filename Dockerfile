@@ -33,7 +33,7 @@ RUN apt-get update && \
     ln -s /root/.local/bin/uv /usr/local/bin/uv && \
     uv venv && \
     uv sync
-    
+ENV PATH="/root/.local/bin:${PATH}"
 
 # ───────── 애플리케이션 소스 복사 ─────────
 COPY . /app
