@@ -172,9 +172,6 @@ jobs:
             echo " docker pull $IMAGE_URI"
             sudo docker pull "$IMAGE_URI"
 
-        env:
-          IMAGE_URI: ${{ env.IMAGE_URI }}
-
       # 5‑5) 컨테이너 실행 (예: 단일 FastAPI 서버)
       - name: Run container
         uses: appleboy/ssh-action@v1.0.0
@@ -189,9 +186,9 @@ jobs:
             sudo docker run -d \
               --name aide-server \
               -p 8000:8000 \
-              -e APP_ENV= aide-backend-dev \
+              -e APP_ENV= ${{ env.ENVIRONMENT }} \
               --restart unless-stopped \
-              ${{ env.IMAGE_URI }}
+              "$IMAGE_URI"
             echo "🚀  Container started → http://$HOSTNAME:8000/health"
       # ##################################################################
       # # 6) EC2 Rolling Deploy  (SSM RunShellScript)
