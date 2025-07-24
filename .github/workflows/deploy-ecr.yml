@@ -39,7 +39,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}" >> $GITHUB_ENV
-            echo "EC2_INSTANCE_ID=${{ env.EC2_INSTANCE_ID }}" >> $GITHUB_ENV
+            echo "EC2_INSTANCE_ID=${{ secrets.PROD_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
 
           elif [[ "${{ github.ref_name }}" ==  "dev" ]]; then
             echo "ENVIRONMENT=development" >> $GITHUB_ENV
@@ -47,7 +47,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.DEV_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.DEV_ENV_OPENAI }}" >> $GITHUB_ENV
-            echo "EC2_INSTANCE_ID=${{ env.EC2_INSTANCE_ID }}" >> $GITHUB_ENV
+            echo "EC2_INSTANCE_ID=${{ secrets.DEV_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
 
           else
             echo ${{ github.ref_name }}
@@ -56,7 +56,7 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.LOCAL_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.LOCAL_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.LOCAL_ENV_OPENAI }}" >> $GITHUB_ENV
-            echo "EC2_INSTANCE_ID=${{ env.EC2_INSTANCE_ID }}" >> $GITHUB_ENV
+            echo "EC2_INSTANCE_ID=${{ secrets.LOCAL_EC2_INSTANCE_ID }}" >> $GITHUB_ENV
           fi
         shell: bash
       # 2-2. 환경설정 확인 로그 출력
@@ -67,7 +67,9 @@ jobs:
           echo "Anthropic API Key: ${{ env.ANTHROPIC_API_KEY }}"
           echo "GOOGLE API Key: ${{ env.GOOGLE_API_KEY }}"
           echo "OPENAI API Key: ${{ env.OPENAI_API_KEY }}"
-          echo "EC2 Instance ID: ${{ env.EC2_INSTANCE_ID }}"
+          echo "PROD_EC2 Instance ID: ${{ secrets.PROD_EC2_INSTANCE_ID }}"
+          echo "DEV_EC2 Instance ID: ${{ secrets.DEV_EC2_INSTANCE_ID }}"
+          echo "LOCAL_EC2 Instance ID: ${{ secrets.LOCAL_EC2_INSTANCE_ID }}"
 
         # echo "::group::🔖  Resolved build variables"
         # env | grep -E 'APP_ENV|DOCKER_TAG' || true   # grep 결과 없어도 통과
@@ -119,7 +121,7 @@ jobs:
       ##################################################################
       - name: Deploy to EC2 via SSM
         env:
-          INSTANCE_ID: ${{ env.EC2_INSTANCE_ID }} # EC2 ID
+          INSTANCE_ID: ${{ secrets.DEV_EC2_INSTANCE_ID }} # EC2 ID
           IMG_URI: ${{ steps.ecr-login.outputs.registry }}/aide-backend-dev:${{ env.DOCKER_TAG }}
         run: |
           echo "🔄  Pulling new image on EC2"
