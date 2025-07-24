@@ -9,6 +9,8 @@ ortools
 pandas
 timer
 langchain
+langchain-google-genai
+langchain-anthropic
 langchain-core
 langchain-community
 langchain-openai
@@ -18,4 +20,3 @@ tqdm
 urllib3 
 uvicorn
 psutil>=5.9.0
-uvicorn>=0.34.2

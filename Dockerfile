@@ -7,7 +7,7 @@ WORKDIR /app
 
 # 소스 코드 복사
 COPY app ./app
-COPY requirements.lock .
+COPY requirements.txt .
 
 # ───────── 빌드 인자 (워크플로우에서 주입) ─────────
 ARG ENV=dev
@@ -23,7 +23,7 @@ ENV OPENAI_API_KEY=${OPENAI_API_KEY}
 
 # pip 업그레이드 및 requirements.lock 설치 (해시 옵션 제거)
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.lock
+    && pip install --no-cache-dir -r requirements.txt
 
 # ───────── 런타임 환경 변수 ─────────
 ENV PYTHONUNBUFFERED=1 \
@@ -31,9 +31,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 EXPOSE 8000
 
-# ───────── 헬스체크 (ALB 용) ─────────
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -fs http://localhost:${PORT}/health/alb || exit 1
+# # ───────── 헬스체크 (ALB 용) ─────────
+# HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+#   CMD curl -fs http://localhost:${PORT}/health/alb || exit 1
 
 # ───────── 컨테이너 시작 CMD ─────────
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
