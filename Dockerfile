@@ -27,9 +27,9 @@ RUN apt-get update && \
     apt-get install --no-install-recommends -y curl build-essential && \
     rm -rf /var/lib/apt/lists/* && \
     # ▸ uv 설치(공식 스크립트)
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ln -s /root/.local/bin/uv /usr/local/bin/uv  
-    uv venv
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \ 
+    ln -s /root/.local/bin/uv /usr/local/bin/uv && \
+    uv venv && \
     uv sync
     
 
@@ -38,11 +38,7 @@ COPY . /app
 
 # ───────── 런타임 환경 변수 ─────────
 ENV PYTHONUNBUFFERED=1 \
-    PORT=8000 \
-    APP_ENV=${APP_ENV} \
-    OPENAI_API_KEY=${OPENAI_API_KEY} \
-    PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY} \
-    ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    PORT=8000
 
 EXPOSE 8000
 
