@@ -1003,6 +1003,7 @@ dependencies = [
     { name = "scipy" },
     { name = "sqlalchemy" },
     { name = "timer" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -1028,6 +1029,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "sqlalchemy", specifier = ">=2.0.41" },
     { name = "timer", specifier = ">=0.3.0" },
+    { name = "uvicorn", specifier = ">=0.34.2" },
 ]
 
 [[package]]
