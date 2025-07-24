@@ -28,13 +28,13 @@ ENV OPENAI_API_KEY=${OPENAI_API_KEY}
 RUN apt-get update && \
     apt-get install --no-install-recommends -y curl build-essential && \
     rm -rf /var/lib/apt/lists/* && \
-    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    # ▸ uv 설치(공식 스크립트)
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \ 
     ln -s /root/.local/bin/uv /usr/local/bin/uv && \
+    uv venv && \
+    uv sync && \
+    uv pip install uvicorn
 ENV PATH="/root/.local/bin:${PATH}"
-
-COPY pyproject.toml uv.lock* ./
-
-RUN uv sync --system --no-cache
 
 # ───────── 애플리케이션 소스 복사 ─────────
 COPY . /app
@@ -50,5 +50,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -fs http://localhost:${PORT}/health/alb || exit 1
 
 # ───────── 컨테이너 시작 CMD ─────────
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 # CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
