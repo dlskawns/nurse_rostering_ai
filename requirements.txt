@@ -16,6 +16,7 @@ langchain-community
 langchain-openai
 python-dotenv
 tiktoken
+jwt
 tqdm
 urllib3 
 uvicorn
