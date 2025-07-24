@@ -91,6 +91,10 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Define IMAGE_URI
+        run: |
+          echo "IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/aide-backend-dev:${{ env.DOCKER_TAG }}" >> $GITHUB_ENV
+
       # 5. Docker 이미지 빌드 (빌드 인자에 환경변수 전달)
       - name: Build Docker image
         run: |
@@ -106,29 +110,107 @@ jobs:
         run: |
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }}
 
-      ##################################################################
-      # 6) EC2 Rolling Deploy  (SSM RunShellScript)
-      ##################################################################
-      - name: Deploy to EC2 via SSM
-        env:
-          INSTANCE_ID: i-0aaa81477a68886a6 # EC2 ID
-          IMG_URI: ${{ steps.ecr-login.outputs.registry }}/aide-backend-dev:${{ env.DOCKER_TAG }}
-        run: |
-          echo "🔄  Pulling new image on EC2"
-          echo "INSTANCE_ID: $INSTANCE_ID"
-          echo "IMG_URI: $IMG_URI"
-          aws ssm send-command \
-            --instance-ids ""$INSTANCE_ID"" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Pull new Docker image" \
-            --parameters '{"commands":["docker pull '"$IMG_URI"'"]}' \
-            --output text
+      # 5‑1) 이전 latest 태그 이미지 삭제 (ECR 요금 절감)
+      - name: Delete previous :latest image in ECR
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEV_EC2_HOST }}
+          username: "ubuntu"
+          key: ${{ secrets.DEV_EC2_SSH_KEY }}
+          script: |
+            set -e
+            echo "🗑️  deleting old :latest in ECR (if exists)"
+            aws ecr batch-delete-image \
+              --region ${{ env.AWS_REGION }} \
+              --repository-name aide-backend-dev \
+              --image-ids imageTag=latest || true
 
-          echo "🚀  Restarting backend service via docker‑compose"
-          # backend 서비스가 정의된 디렉터리로 이동 후 재기동 (no‑deps)
-          aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Restart backend container" \
-            --parameters '{"commands":["cd /home/ubuntu/app","docker compose pull backend","docker compose up -d --no-deps backend"]}' \
-            --output text
+      # 5‑2) EC2 → ECR 로그인 (토큰 12h 유지, 재실행 안전)
+      - name: ECR login from EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEV_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.DEV_EC2_SSH_KEY }}
+          script: |
+            set -e
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+              | sudo docker login \
+                  --username AWS \
+                  --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+            echo "✅  ECR login done"
+
+      # 5‑3) 기존 컨테이너/이미지 정리
+      - name: Stop & prune old containers/images
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEV_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.DEV_EC2_SSH_KEY }}
+          script: |
+            set -e
+            echo "⛔  Stopping running containers (if any)"
+            sudo docker ps -q | xargs -r sudo docker stop
+            echo "🗑️  Removing containers"
+            sudo docker ps -a -q | xargs -r sudo docker rm
+            echo "🗑️  Removing images"
+            sudo docker images -q | xargs -r sudo docker rmi
+            echo "🧹 docker system prune"
+            sudo docker system prune -af
+
+      # 5‑4) 새 이미지 Pull
+      - name: Pull new image on EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEV_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.DEV_EC2_SSH_KEY }}
+          script: |
+            set -e
+            echo "📥  docker pull ${{ env.IMAGE_URI }}"
+            sudo docker pull ${{ env.IMAGE_URI }}
+
+      # 5‑5) 컨테이너 실행 (예: 단일 FastAPI 서버)
+      - name: Run container
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEV_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.DEV_EC2_SSH_KEY }}
+          script: |
+            set -e
+            sudo docker stop aide-server || true
+            sudo docker rm   aide-server || true
+            sudo docker run -d \
+              --name aide-server \
+              -p 8000:8000 \
+              -e APP_ENV= aide-backend-dev \
+              --restart unless-stopped \
+              ${{ env.IMAGE_URI }}
+            echo "🚀  Container started → http://$HOSTNAME:8000/health"
+      # ##################################################################
+      # # 6) EC2 Rolling Deploy  (SSM RunShellScript)
+      # ##################################################################
+      # - name: Deploy to EC2 via SSM
+      #   env:
+      #     INSTANCE_ID: i-0aaa81477a68886a6 # EC2 ID
+      #     IMG_URI: ${{ steps.ecr-login.outputs.registry }}/aide-backend-dev:${{ env.DOCKER_TAG }}
+      #   run: |
+      #     echo "🔄  Pulling new image on EC2"
+      #     echo "INSTANCE_ID: $INSTANCE_ID"
+      #     echo "IMG_URI: $IMG_URI"
+      #     aws ssm send-command \
+      #       --instance-ids ""$INSTANCE_ID"" \
+      #       --document-name "AWS-RunShellScript" \
+      #       --comment "Pull new Docker image" \
+      #       --parameters '{"commands":["docker pull '"$IMG_URI"'"]}' \
+      #       --output text
+
+      #     echo "🚀  Restarting backend service via docker‑compose"
+      #     # backend 서비스가 정의된 디렉터리로 이동 후 재기동 (no‑deps)
+      #     aws ssm send-command \
+      #       --instance-ids "$INSTANCE_ID" \
+      #       --document-name "AWS-RunShellScript" \
+      #       --comment "Restart backend container" \
+      #       --parameters '{"commands":["cd /home/ubuntu/app","docker compose pull backend","docker compose up -d --no-deps backend"]}' \
+      #       --output text
