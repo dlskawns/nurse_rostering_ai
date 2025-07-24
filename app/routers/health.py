@@ -57,7 +57,7 @@ router = APIRouter(
 )
 
 
-@router.get("/")
+@router.get("/basic")
 async def health_check():
     """
     기본 헬스체크 엔드포인트
