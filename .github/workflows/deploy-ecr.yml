@@ -128,7 +128,7 @@ jobs:
           echo "🚀  Restarting backend service via docker‑compose"
           # backend 서비스가 정의된 디렉터리로 이동 후 재기동 (no‑deps)
           aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
+            --instance-ids "0aaa81477a68886a6" \
             --document-name "AWS-RunShellScript" \
             --comment "Restart backend container" \
             --parameters '{"commands":["cd /home/ubuntu/app","docker compose pull backend","docker compose up -d --no-deps backend"]}' \
