@@ -167,7 +167,7 @@ jobs:
           key: ${{ secrets.DEV_EC2_SSH_KEY }}
           script: |
             set -e
-            echo "📥  docker pull ${{ env.IMAGE_URI }}"
+            echo " docker pull ${{ env.IMAGE_URI }}"
             sudo docker pull ${{ env.IMAGE_URI }}
 
       # 5‑5) 컨테이너 실행 (예: 단일 FastAPI 서버)
