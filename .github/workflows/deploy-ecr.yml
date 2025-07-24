@@ -165,7 +165,7 @@ jobs:
           host: ${{ secrets.DEV_EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.DEV_EC2_SSH_KEY }}
-          passphrase: ${{ secrets.EC2_SSH_PASSPHRASE }}
+          # passphrase: ${{ secrets.EC2_SSH_PASSPHRASE }}
           script: |
             set -e
             echo " docker pull ${{ env.IMAGE_URI }}"
