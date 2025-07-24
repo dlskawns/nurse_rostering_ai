@@ -31,8 +31,8 @@ RUN apt-get update && \
     # ▸ uv 설치(공식 스크립트)
     curl -LsSf https://astral.sh/uv/install.sh | sh && \ 
     ln -s /root/.local/bin/uv /usr/local/bin/uv && \
-    uv venv && \
-    uv sync
+# uv를 pip wrapper처럼 사용해 “시스템 레이어”에 설치
+RUN uv pip install --system --no-cache-dir --upgrade-strategy eager
 ENV PATH="/root/.local/bin:${PATH}"
 
 # ───────── 애플리케이션 소스 복사 ─────────
@@ -49,5 +49,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -fs http://localhost:${PORT}/health/alb || exit 1
 
 # ───────── 컨테이너 시작 CMD ─────────
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 # CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
