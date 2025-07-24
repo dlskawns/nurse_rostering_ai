@@ -135,11 +135,6 @@ jobs:
           script: |
             set -e
 
-            if ! command -v aws >/dev/null 2>&1; then
-              echo "⏬  installing awscli..."
-              sudo apt-get update -y
-              sudo apt-get install -y awscli
-            fi
             aws ecr get-login-password --region ${{ env.AWS_REGION }} \
               | sudo docker login \
                   --username AWS \
