@@ -162,6 +162,7 @@ jobs:
       # 5‑4) 새 이미지 Pull
       - name: Pull new image on EC2
         uses: appleboy/ssh-action@v1.0.0
+        envs: IMAGE_URI
         with:
           host: ${{ secrets.DEV_EC2_HOST }}
           username: ubuntu
