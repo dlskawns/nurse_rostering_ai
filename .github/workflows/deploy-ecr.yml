@@ -119,7 +119,7 @@ jobs:
         run: |
           echo "🔄  Pulling new image on EC2"
           aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
+            --instance-ids "0aaa81477a68886a6" \
             --document-name "AWS-RunShellScript" \
             --comment "Pull new Docker image" \
             --parameters '{"commands":["docker pull '"$IMG_URI"'"]}' \
