@@ -179,6 +179,7 @@ jobs:
           host: ${{ secrets.DEV_EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.DEV_EC2_SSH_KEY }}
+          envs: IMAGE_URI
           script: |
             set -e
             sudo docker stop aide-server || true
