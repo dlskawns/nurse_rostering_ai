@@ -10,7 +10,7 @@ from schemas.auth_schema import User as UserSchema
 from datetime import datetime
 
 
-def request_wanted_shifts_service(req: WantedInvokeRequest, current_user, db: Session):
+def request_wanted_shifts_service(req: WantedDeadlineRequest, current_user, db: Session):
     """
     Wanted 작성 요청 생성 서비스 함수
     """

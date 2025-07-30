@@ -19,12 +19,12 @@ templates = Jinja2Templates(directory="app/templates")
 # [Wanted] - Wanted 작성 요청 생성 (수간호사용)
 @router.post("/wanted/request")
 async def request_wanted_shifts(
-    req: WantedInvokeRequest,
+    payload: WantedDeadlineRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
     try:
-        return request_wanted_shifts_service(req, current_user, db)
+        return request_wanted_shifts_service(payload, current_user, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Wanted 작성 요청 실패: {str(e)}")
 
@@ -167,9 +167,7 @@ async def invoke_graph(request: WantedInvokeRequest):
     """
     try:
         result = {}
-        print('요청', request.request)
-        print('스키마', request.schema)
-        print('케이스', request.case)
+  
         response =  await graph_service.invoke(request.request, request.schema, request.case)
         print('우라질레이션',  response)
         print('1기여기여기111', response)

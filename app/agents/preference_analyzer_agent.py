@@ -116,30 +116,6 @@ class preferenceAnalyzerPrompt:
             """
 
 async def preference_analyzer(state):
-    # client = state['model']
-    # phase = state['phase']
-    # query = state['requests'][phase]
-    # data = state['schema']
-    # # context = "일단 문선생님이랑은 무조건 따로 하고싶고, 천간호사랑 계속 같이 있고싶어요.. 진짜 많이 도와줘서 행복해요.. 그리고 웬만하면 D는 안하고 싶어요 ㅠ"
-
-    # # query= "정쌤은 무조건 다 겹치게 해주세요"
-    # preference_analyzer_prompt = preferenceAnalyzerPrompt(data, query)
-
-    # print('\n\n\n\n\n\n완료121212\n\n\n\n\n\n')
-    # response = client.models.generate_content(
-    # model="gemini-2.0-flash",
-    # contents=[preference_analyzer_prompt.human],                       # or [pil_img, information]
-    # config=types.GenerateContentConfig(
-    #     response_mime_type="application/json",
-    #     response_schema=preferenceAnalyzer,      # ★ 핵심: Root 모델
-    #     system_instruction=preference_analyzer_prompt.system
-    # ),
-    # )   
-    # print('\n\n\n\n\n\n완료131313\n\n\n\n\n\n')
-    # parts = response.candidates[0].content.parts
-    # print('----------------preference;;;;;;;;;;;;;;;',json.loads(parts[0].text))
-    # json_answer = json.loads(parts[0].text)
-    # print('여기여기여기', json_answer)
     
     phase = state['phase']
     query = state['requests'][phase]
@@ -180,11 +156,13 @@ async def preference_analyzer(state):
     
     for i, client in enumerate(models_to_try):
         try:
+            
             print(f"Preference Analyzer: {i+1}차 모델 시도 중...")
             
             llm = client.with_structured_output(preferenceAnalyzer)
+            # print('llm', llm)
             response = await llm.ainvoke(messages)
-            
+            print('response', response)
             # 성공 시 데이터 추출
             json_answer = {
                 "processor": response.processor,
@@ -196,8 +174,10 @@ async def preference_analyzer(state):
             # ID 검증: schema에 존재하는 간호사인지 확인
             valid_nurse_ids = []
             if isinstance(data, list):
+            
                 valid_nurse_ids = [nurse.get('nurse_id', '') for nurse in data if isinstance(nurse, dict)]
             elif isinstance(data, dict) and 'nurses' in data:
+            
                 nurses = data.get('nurses', [])
                 valid_nurse_ids = [nurse.get('nurse_id', '') for nurse in nurses if isinstance(nurse, dict)]
             
@@ -215,6 +195,7 @@ async def preference_analyzer(state):
             break
             
         except Exception as e:
+            print('문제다e', e)
             error_msg = str(e).lower()
             print(f"Preference Analyzer: {i+1}차 모델 오류 - {e}")
             
@@ -248,7 +229,6 @@ async def create_preference_analyzer(parent_state):
     client = parent_state['model']
     n_requests = len(requests)
     if n_requests == 0:
-        print('preference_analyzer 답변 없음')
         return {"preference_results": []}
     graph = StateGraph(PreferenceSubgraph)
     

@@ -989,6 +989,98 @@
         .edit-deadline-btn.editing:hover {
             background: #1e7e34;
         }
+        
+        /* 고정된 셀 스타일 */
+        .roster-table td.shift-cell.fixed {
+            background: repeating-linear-gradient(
+                45deg,
+                #6c757d,
+                #6c757d 4px,
+                rgba(108, 117, 125, 0.3) 4px,
+                rgba(108, 117, 125, 0.3) 8px
+            ) !important;
+            border: 3px solid #495057 !important;
+            box-shadow: 0 0 8px rgba(73, 80, 87, 0.7) !important;
+            animation: fixed-pulse 2s infinite;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .roster-table td.shift-cell.fixed::after {
+            content: '🔒';
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            font-size: 8px;
+            background: #495057;
+            color: white;
+            border-radius: 50%;
+            width: 12px;
+            height: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        
+        .roster-table td.shift-cell.fixed:hover {
+            background: repeating-linear-gradient(
+                45deg,
+                #dc3545,
+                #dc3545 4px,
+                rgba(220, 53, 69, 0.3) 4px,
+                rgba(220, 53, 69, 0.3) 8px
+            ) !important;
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 8px rgba(220, 53, 69, 0.7) !important;
+        }
+        
+        .roster-table td.shift-cell.fixed:hover::after {
+            content: '✕';
+            background: #dc3545;
+        }
+        
+        @keyframes fixed-pulse {
+            0%, 100% { 
+                border-color: #495057;
+                box-shadow: 0 0 8px rgba(73, 80, 87, 0.7);
+            }
+            50% { 
+                border-color: #6c757d;
+                box-shadow: 0 0 12px rgba(108, 117, 125, 0.9);
+            }
+        }
+        
+        /* 고정 후 생성하기 버튼 스타일 */
+        .hold-generate-btn {
+            padding: 8px 16px;
+            background-color: #17a2b8;
+            color: white;
+            border: 1px solid #17a2b8;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s ease;
+            margin-left: 10px;
+        }
+        
+        .hold-generate-btn:hover {
+            background-color: #138496;
+            border-color: #138496;
+            text-decoration: none;
+            color: white;
+        }
+        
+        .hold-generate-btn:disabled {
+            background-color: #6c757d;
+            border-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
     </style>
 </head>
 <body>
@@ -1045,6 +1137,7 @@
                     </div>
                     <button id="wanted-request-btn" class="request-button" onclick="requestWantedShifts()">Wanted 작성 요청하기</button>
                     <button id="generate-roster-btn" class="request-button" onclick="generateRoster()">근무표 생성하기</button>
+                    <button id="hold-generate-btn" class="hold-generate-btn" onclick="holdGenerateRoster()" style="display: none;">고정 후 생성하기</button>
                 </div>
 
                 <div class="version-list-container" id="version-list-container" style="display: none;">
@@ -1118,6 +1211,7 @@
                             <div class="edit-controls">
                                 <button class="clear-selection-btn" onclick="clearSelection()">✕ 해제</button>
                                 <button class="edit-mode-btn" id="edit-mode-btn" onclick="toggleEditMode()">수정하기</button>
+                                <button class="edit-mode-btn" id="hold-mode-btn" onclick="toggleHoldMode()" disabled>고정하기</button>
                             </div>
                         </div>
                         
@@ -1170,6 +1264,8 @@
         let violationsCollapsed = false;
         let isValidating = false;
         let isEditMode = false; // 편집 모드 상태 추가
+        let isHoldMode = false; // 고정 모드 상태 추가
+        let fixedCells = new Set(); // 고정된 셀들을 관리하는 Set
         
         // 마감일 선택 관련 변수
         let selectedExpDate = null;
@@ -2065,7 +2161,11 @@
                 });
                 
                 cell.addEventListener('click', function() {
-                    if (selectedShift) {
+                    if (isHoldMode) {
+                        // 고정 모드일 때 셀 고정/해제
+                        toggleCellFixed(this);
+                    } else if (selectedShift) {
+                        // 일반 편집 모드일 때 셀 변경
                         updateCell(this);
                     }
                 });
@@ -2080,8 +2180,16 @@
         function updateCell(cell) {
             if (!selectedShift || !isEditMode) return; // 편집 모드가 아니면 변경 불가
             
+            // 고정된 셀은 편집 불가
             const nurseIndex = parseInt(cell.dataset.nurse);
             const dayIndex = parseInt(cell.dataset.day);
+            const cellKey = `${nurseIndex}-${dayIndex}`;
+            
+            if (fixedCells.has(cellKey)) {
+                alert('고정된 셀은 편집할 수 없습니다. 먼저 고정을 해제해주세요.');
+                return;
+            }
+            
             const oldShift = cell.dataset.shift;
             
             if (oldShift === selectedShift) return; // 같은 값이면 변경하지 않음
@@ -2158,6 +2266,7 @@
         function setEditMode(enabled) {
             isEditMode = enabled;
             const editModeBtn = document.getElementById('edit-mode-btn');
+            const holdModeBtn = document.getElementById('hold-mode-btn');
             const shiftSelector = document.getElementById('shift-selector');
             const historyControls = document.getElementById('history-controls');
             
@@ -2165,12 +2274,17 @@
                 // 편집 모드 활성화
                 editModeBtn.textContent = '저장하기';
                 editModeBtn.classList.add('saving');
+                holdModeBtn.disabled = false; // 고정하기 버튼 활성화
                 shiftSelector.classList.remove('disabled');
                 historyControls.classList.remove('disabled');
             } else {
                 // 편집 모드 비활성화
                 editModeBtn.textContent = '수정하기';
                 editModeBtn.classList.remove('saving');
+                holdModeBtn.disabled = true; // 고정하기 버튼 비활성화
+                holdModeBtn.textContent = '고정하기';
+                holdModeBtn.classList.remove('saving');
+                isHoldMode = false; // 고정 모드도 비활성화
                 shiftSelector.classList.add('disabled');
                 historyControls.classList.add('disabled');
                 
@@ -3047,6 +3161,213 @@
             // 명도 계산 (0-255)
             const brightness = (r * 299 + g * 587 + b * 114) / 1000;
             return brightness > 128;
+        }
+
+        // 고정 모드 토글 함수
+        function toggleHoldMode() {
+            setHoldMode(!isHoldMode);
+        }
+
+        // 고정 모드 설정 함수
+        function setHoldMode(enabled) {
+            isHoldMode = enabled;
+            const holdModeBtn = document.getElementById('hold-mode-btn');
+            
+            if (enabled) {
+                // 고정 모드 활성화
+                holdModeBtn.textContent = '고정 해제';
+                holdModeBtn.classList.add('saving');
+                console.log('고정 모드 활성화');
+            } else {
+                // 고정 모드 비활성화
+                holdModeBtn.textContent = '고정하기';
+                holdModeBtn.classList.remove('saving');
+                console.log('고정 모드 비활성화');
+            }
+        }
+
+        // 셀 고정/해제 함수
+        function toggleCellFixed(cell) {
+            const nurseIndex = parseInt(cell.dataset.nurse);
+            const dayIndex = parseInt(cell.dataset.day);
+            const cellKey = `${nurseIndex}-${dayIndex}`;
+            
+            if (fixedCells.has(cellKey)) {
+                // 고정 해제
+                fixedCells.delete(cellKey);
+                cell.classList.remove('fixed');
+                console.log(`셀 고정 해제: 간호사 ${nurseIndex}, 날짜 ${dayIndex + 1}`);
+            } else {
+                // 고정
+                fixedCells.add(cellKey);
+                cell.classList.add('fixed');
+                console.log(`셀 고정: 간호사 ${nurseIndex}, 날짜 ${dayIndex + 1}`);
+            }
+            
+            // 고정 후 생성하기 버튼 표시/숨김 업데이트
+            updateHoldGenerateButton();
+        }
+
+
+
+        // 고정 후 생성하기 버튼 표시/숨김 업데이트
+        function updateHoldGenerateButton() {
+            const holdGenerateBtn = document.getElementById('hold-generate-btn');
+            
+            if (fixedCells.size > 0) {
+                holdGenerateBtn.style.display = 'inline-block';
+                holdGenerateBtn.textContent = `고정 후 생성하기 (${fixedCells.size}개 고정)`;
+            } else {
+                holdGenerateBtn.style.display = 'none';
+            }
+        }
+
+        // 고정된 셀들을 서버로 전송하는 함수
+        async function holdGenerateRoster() {
+            if (fixedCells.size === 0) {
+                alert('고정된 셀이 없습니다.');
+                return;
+            }
+            
+            const holdGenerateBtn = document.getElementById('hold-generate-btn');
+            const originalText = holdGenerateBtn.textContent;
+            holdGenerateBtn.disabled = true;
+            holdGenerateBtn.textContent = '생성 중...';
+
+            try {
+                // 고정된 셀 데이터 준비
+                const fixedData = Array.from(fixedCells).map(cellKey => {
+                    const [nurseIndex, dayIndex] = cellKey.split('-').map(Number);
+                    const cell = document.querySelector(`[data-nurse="${nurseIndex}"][data-day="${dayIndex}"]`);
+                    return {
+                        nurse_index: nurseIndex,
+                        day_index: dayIndex,
+                        shift: cell.dataset.shift
+                    };
+                });
+
+                const response = await fetch('/roster_create/hold_generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        year: currentYear, 
+                        month: currentMonth + 1,
+                        fixed_cells: fixedData
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '고정 후 근무표 생성에 실패했습니다.');
+                }
+
+                const result = await response.json();
+                
+                // API 응답 데이터를 올바른 형식으로 변환
+                if (result.nurses) {
+                    editedRosterData = result.nurses.map(nurse => ({
+                        name: nurse.name,
+                        experience: nurse.experience,
+                        schedule: nurse.schedule,
+                        nurse_id: nurse.id
+                    }));
+                    generatedRosterData = {
+                        year: result.year,
+                        month: result.month,
+                        schedule_id: result.schedule_id,
+                        roster: editedRosterData,
+                        violations: result.violations || []
+                    };
+                } else {
+                    // 기존 형식 지원 (하위 호환성)
+                    editedRosterData = result.roster ? JSON.parse(JSON.stringify(result.roster)) : [];
+                    generatedRosterData = result;
+                }
+
+                // 히스토리 초기화
+                changeHistory = [];
+                historyIndex = -1;
+
+                // Render Roster with editing functionality
+                renderRosterTable(editedRosterData, result.year, result.month);
+
+                // 근무표 생성 후 위반사항 자동 검증
+                try {
+                    const rosterTableContainer = document.getElementById('roster-table-container');
+                    rosterTableContainer.innerHTML += '<p>위반사항 검증 중...</p>';
+                    
+                    const validatePayload = {
+                        year: result.year,
+                        month: result.month,
+                        roster: editedRosterData
+                    };
+
+                    const validateResponse = await fetch('/roster/validate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(validatePayload)
+                    });
+
+                    if (validateResponse.ok) {
+                        const validateResult = await validateResponse.json();
+                        console.log('위반사항 검증 결과:', validateResult.violations);
+                        
+                        // 위반사항 표시
+                        updateViolationsDisplay(validateResult.violations || [], validateResult.detailed_violations || []);
+                        
+                        // generatedRosterData에도 위반사항 정보 업데이트
+                        generatedRosterData.violations = validateResult.violations || [];
+                        generatedRosterData.detailed_violations = validateResult.detailed_violations || [];
+                    } else {
+                        console.warn('위반사항 검증에 실패했습니다.');
+                        updateViolationsDisplay([]);
+                    }
+                } catch (validateError) {
+                    console.error('위반사항 검증 중 오류:', validateError);
+                    updateViolationsDisplay([]);
+                }
+
+                // 로딩 메시지 제거 후 최종 렌더링
+                renderRosterTable(editedRosterData, result.year, result.month);
+                
+                // Enable save button
+                document.getElementById('save-roster-btn').disabled = !editedRosterData || editedRosterData.length === 0;
+                
+                // Show editing controls
+                showEditingControls(true);
+                
+                // 새로 생성된 버전의 ID를 미리 설정 (자동 선택 방지)
+                if (result.schedule_id) {
+                    currentVersion = result.schedule_id;
+                }
+                
+                // 버전 목록 업데이트 (새로 생성된 버전을 강제 선택하기 위해 플래그 설정)
+                const previousCurrentVersion = currentVersion;
+                await updateVersionList(currentYear, currentMonth + 1, result.schedule_id);
+                
+                // 새로 생성된 버전을 활성화 (표시는 이미 되어있으므로 UI만 업데이트)
+                if (result.schedule_id) {
+                    // 버전 목록 업데이트 후에도 currentVersion 유지
+                    currentVersion = result.schedule_id;
+                    
+                    const newVersionItem = document.querySelector(`[data-schedule-id="${result.schedule_id}"]`);
+                    if (newVersionItem) {
+                        document.querySelectorAll('.version-item').forEach(item => {
+                            item.classList.remove('active');
+                        });
+                        newVersionItem.classList.add('active');
+                    }
+                }
+
+                alert('고정된 셀을 반영하여 근무표가 생성되었습니다.');
+
+            } catch (error) {
+                console.error('Error generating roster with fixed cells:', error);
+                alert(error.message);
+            } finally {
+                holdGenerateBtn.disabled = false;
+                holdGenerateBtn.textContent = originalText;
+            }
         }
     </script>
 </body>

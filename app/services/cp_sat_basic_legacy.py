@@ -81,20 +81,6 @@ class CPSATBasicEngine:
             pair_preference_weight=3.0
         )
     
-    def create_shift_manage_from_db(self, shift_manage_data: List[dict]):
-        shift_manage = []
-        for row in shift_manage_data:
-            shift_dict = {
-                'office_id': row['office_id'],
-                'group_id': row['group_id'],
-                'nurse_class': row['nurse_class'],
-                'shift_slot': row['shift_slot'],
-                'main_code': row['main_code'],
-                'codes': row['codes'],
-            }
-            shift_manage.append(ShiftManage(**shift_dict))
-        return shift_manage
-
     def create_nurses_from_db(self, nurses_data: List[dict]) -> List[Nurse]:
         """DB에서 가져온 간호사 데이터를 Nurse 객체 리스트로 변환"""
         nurses = []
@@ -183,7 +169,6 @@ class CPSATBasicEngine:
         config_data: dict,
         year: int, 
         month: int,
-        grouped: List[dict],
         time_limit_seconds: int = 60
     ) -> Dict[str, List[str]]:
         """
@@ -219,14 +204,6 @@ class CPSATBasicEngine:
         # 4. 근무표 시스템 생성
         with Timer("근무표 시스템 초기화"):
             roster_system = RosterSystem(nurses, target_month, config)
-            
-            # 고정된 셀 정보 처리
-            fixed_cells = config_data.get('fixed_cells', [])
-            if fixed_cells:
-                print(f"{self.logger_prefix} 고정된 셀 {len(fixed_cells)}개 처리 중...")
-                roster_system.fixed_cells = fixed_cells
-                for fixed_cell in fixed_cells:
-                    print(f"{self.logger_prefix} 고정 셀: 간호사 {fixed_cell['nurse_index']}, 날짜 {fixed_cell['day_index']+1}, 근무 {fixed_cell['shift']}")
         
         # 5. 선호도 데이터 파싱 및 적용
         with Timer("선호도 데이터 파싱"):
@@ -265,7 +242,7 @@ class CPSATBasicEngine:
         # 9. CP-SAT으로 최적화 (새로운 제약사항 포함)
         with Timer("CP-SAT으로 최적화"):
             print(f"{self.logger_prefix} CP-SAT 최적화 시작 (시간 제한: {time_limit_seconds}초)...")
-            success = self._optimize_with_enhanced_constraints(roster_system, time_limit_seconds, nurses, grouped)
+            success = self._optimize_with_enhanced_constraints(roster_system, time_limit_seconds, nurses)
             
             if not success:
                 print(f"{self.logger_prefix} 개선된 제약사항으로 실패, 기본 알고리즘으로 폴백...")
@@ -281,7 +258,7 @@ class CPSATBasicEngine:
         print(f"{self.logger_prefix} 근무표 생성 완료")
         return result
     
-    def _optimize_with_enhanced_constraints(self, roster_system: RosterSystem, time_limit_seconds: int, nurses, grouped = None) -> bool:
+    def _optimize_with_enhanced_constraints(self, roster_system: RosterSystem, time_limit_seconds: int, nurses) -> bool:
         """법규 제약사항과 병원 내규를 포함한 CP-SAT 최적화"""
         try:
             from ortools.sat.python import cp_model
@@ -300,7 +277,7 @@ class CPSATBasicEngine:
         N = len(roster_system.nurses)
         D = roster_system.num_days
         S = roster_system.config.num_shifts
-        print('roster_system.config', roster_system.config)
+
         first_day: date = roster_system.target_month          # 해당 월 1일
         join_idx:  list[int] = []    # 입사일부터 근무
         leave_idx: list[int] = []    # 퇴사전날까지 근무
@@ -318,44 +295,6 @@ class CPSATBasicEngine:
             else:
                 leave_idx.append(roster_system.num_days - 1)
 
-            # print('\n\n\n\n\njoin_idx', join_idx, '\n\n\n\n\n')
-        # print('\n\n\n\n\nshift_manage_', shift_manage_data  , '\n\n\n\n\n')
-
-        # 0‑a. shift code → main_code 매핑 준비
-        shift_code_to_main = {}
-        if len(grouped) > 0:
-            for row in grouped:
-                main_code = row.get('main_code')
-                for code in row.get('codes', []):
-                    shift_code_to_main[code] = main_code
-        print('shift_code_to_main', shift_code_to_main)
-        # ───── 0‑b. 수간호사 고정 배정 ─────────────────────────────── 🔄
-        fixed = {}                                     # (n,d) → s_idx or str
-        fixed_cnt = [[0]*S for _ in range(D)]        # 일별‑교대별 사전배정 수
-        
-        if hasattr(roster_system, 'fixed_cells') and roster_system.fixed_cells:
-            print('안재낌')
-            for fixed_cell in roster_system.fixed_cells:
-                n_id = fixed_cell['nurse_index']
-                d_idx = fixed_cell['day_index']
-                s_code = fixed_cell['shift']
-                # main_code 환산
-                main_code = shift_code_to_main.get(s_code, s_code)
-                print('main_code', main_code)
-                if main_code in roster_system.config.shift_types:
-                    s_idx = roster_system.config.shift_types.index(main_code)
-                    fixed[(n_id, d_idx)] = s_idx
-                    fixed_cnt[d_idx][s_idx] += 1
-                    print(f"고정 셀 추가: 간호사 {n_id}, 날짜 {d_idx+1}, 근무 {s_code}→{main_code}")
-                    print('what')
-                else:
-                    print('이번엔 여기왔다, 마지막 확인이다')
-                    s_idx = roster_system.config.shift_types.index(main_code)
-                    # shift_types에 없는 근무는 그대로 schedule에 남기고, 알고리즘에서 제외
-                    print('이번엔 여기왔다, 마지막 확인이다')
-                    fixed[(n_id, d_idx)] = s_code
-                    fixed_cnt[d_idx][s_idx] += 1
-                    print(f"고정 셀(shift_types 미포함) 추가: 간호사 {n_id}, 날짜 {d_idx+1}, 근무 {s_code}")
 
         # ───── 1. 변수 정의  x[n,d,s] ∈ {0,1} ──────────────────────────
         x: dict[tuple[int, int, int], cp_model.IntVar] = {}
@@ -363,41 +302,27 @@ class CPSATBasicEngine:
             for d in range(join_idx[n], leave_idx[n] + 1):                   # 입사 전 날짜 skip
                 for s in range(S):
                     x[n, d, s] = model.NewBoolVar(f'n{n}_d{d}_s{s}')
- 
+
         def X(n: int, d: int, s: int):
             """존재하지 않는 인덱스 → 0 반환"""
             return x.get((n, d, s), 0)
 
-        # ───── 2‑A. 고정 배정 반영 ───────────────────────────────── 🔄
-        for (n, d), val in fixed.items():
-            if isinstance(val, int):
-                # shift_types에 있는 경우만 제약
-                model.Add(X(n, d, val) == 1)
-                for s in range(S):
-                    if s != val:
-                        model.Add(X(n, d, s) == 0)
-            # else: shift_types에 없는 근무는 제약 없이 schedule에만 반영
 
-        # ───── 2‑B. exactly‑one 제약 수정 ─────────────────────────── 🔄
+        # ───── 2. 기본 제약 ────────────────────────────────────────────
+        # (1) exactly‑one
         for n in range(N):
             for d in range(join_idx[n], leave_idx[n] + 1):
-                if (n, d) in fixed:
-                    continue
                 model.AddExactlyOne(X(n, d, s) for s in range(S))
 
-        # ───── 2‑C. 일별 인원 충족 제약 수정 ─────────────────────── 🔄
+        # (2) 일별 인원 충족
         for d in range(D):
             for shift_code, req in roster_system.config.daily_shift_requirements.items():
-                main_code = shift_code
-                s = roster_system.config.shift_types.index(main_code)
-                still_needed = req - fixed_cnt[d][s]              # 고정분 제외한 잔여 인원
-                if still_needed <= 0:                             # 이미 충족
-                    continue
+                s = roster_system.config.shift_types.index(shift_code)
                 model.Add(
                     sum(X(n, d, s)
                         for n in range(N)
-                        if (join_idx[n] <= d <= leave_idx[n]) and (n, d) not in fixed)
-                    >= still_needed
+                        if join_idx[n] <= d <= leave_idx[n])       # ★
+                    >= req
                 )
 
         # ───── 3. 법규 하드 제약 ──────────────────────────────────────
@@ -436,10 +361,7 @@ class CPSATBasicEngine:
                     model.Add(X(n, d, eve) == 0)           # E 배정 불가
 
         # (3‑4) 최대 연속 야간
-        if getattr(roster_system.config, 'three_seq_nig', False):
-            L = roster_system.config.max_consecutive_nights
-        else:
-            L = roster_system.config.max_consecutive_nights+1
+        L = roster_system.config.max_consecutive_nights
         for n in range(N):
             for start_d in range(join_idx[n], leave_idx[n] - L + 1):
                 model.Add(
@@ -802,31 +724,26 @@ class CPSATBasicEngine:
         #     return False
     
     def _convert_result_to_db_format(self, roster_system: RosterSystem, nurses: List[Nurse]) -> Dict[str, List[str]]:
-        """RosterSystem 결과를 DB 형식으로 변환 (고정된 셀은 원래 값으로 반환)"""
+        """RosterSystem 결과를 DB 형식으로 변환"""
         result = {}
         shift_map = {i: s for i, s in enumerate(roster_system.config.shift_types)}
-        fixed = getattr(roster_system, 'fixed_cells', None)
-        fixed_lookup = {}
-        if fixed:
-            for cell in fixed:
-                fixed_lookup[(cell['nurse_index'], cell['day_index'])] = cell['shift']
+        
         for n_idx, nurse in enumerate(nurses):
             nurse_schedule = []
             for day_idx in range(roster_system.num_days):
-                # 고정된 셀은 원래 값으로 반환
-                if (n_idx, day_idx) in fixed_lookup:
-                    nurse_schedule.append(fixed_lookup[(n_idx, day_idx)])
-                    continue
                 shift_vector = roster_system.roster[n_idx, day_idx]
                 shift_idx = np.where(shift_vector == 1)[0]
                 if len(shift_idx) > 0:
                     shift_id = shift_map[shift_idx[0]]
+                    # OFF를 O로 변환
                     if shift_id == 'OFF':
                         shift_id = 'O'
                     nurse_schedule.append(shift_id)
                 else:
-                    nurse_schedule.append('-')
+                    nurse_schedule.append('-')  # 기본값
+            
             result[nurse.db_id] = nurse_schedule
+        
         return result
     
     def _print_optimization_results(self, roster_system: RosterSystem):
@@ -863,7 +780,7 @@ class CPSATBasicEngine:
 cp_sat_engine = CPSATBasicEngine()
 
 
-def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month,  shift_manage_data, time_limit_seconds=60):
+def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month, time_limit_seconds=60):
     """
     기존 roster_engine.generate_roster 함수와 호환되는 인터페이스
     
@@ -879,5 +796,5 @@ def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month,  s
         Dict[nurse_id, List[shift]]: 간호사별 일일 근무 배정
     """
     return cp_sat_engine.generate_roster(
-        nurses_data, prefs_data, config_data, year, month, shift_manage_data, time_limit_seconds   
+        nurses_data, prefs_data, config_data, year, month, time_limit_seconds
     ) 

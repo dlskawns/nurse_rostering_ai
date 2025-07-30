@@ -10,7 +10,7 @@ from db.nurse_config import Nurse
 from services.holiday_pack import get_weekends   # ← 주말 헬퍼
 
 def _weekend_set(year: int, month: int) -> set[int]:
-    """해당 월의 주말 날짜(1‑based)를 {0‑based day_idx} 로 반환."""
+    """해당 월의 주말 날짜(1‑based)를 {0‑based day_idx} 로 반환."""
     return {d.day - 1 for d in get_weekends(year, month)}
 
 
@@ -20,20 +20,41 @@ class RosterSystem:
     def __init__(
         self,
         nurses: List[Nurse],
-        target_month: date,
+        target_month: date = None,
         config: NurseRosterConfig = DEFAULT_CONFIG,
+        year: int = None,
+        month: int = None,
+        shift_preferences: Dict = None,
+        day_preferences: Dict = None,
+        off_preferences: Dict = None,
         preference_matrix: Optional[np.ndarray] = None
     ):
         print("\nRosterSystem 초기화 중...")
         start_time = time.time()
         
         self.nurses = nurses
-        self.target_month = target_month
         self.config = config
-        self.num_days = calendar.monthrange(target_month.year, target_month.month)[1]
-        # self.nurse._anchor_date = date(year, month, 1)
+        
+        # target_month 설정 (하위 호환성을 위해)
+        if target_month is not None:
+            self.target_month = target_month
+        elif year is not None and month is not None:
+            self.target_month = date(year, month, 1)
+        else:
+            raise ValueError("target_month 또는 year, month가 필요합니다.")
+            
+        self.num_days = calendar.monthrange(self.target_month.year, self.target_month.month)[1]
+        
         # 근무표 행렬 초기화: [간호사 × 일수 × 교대]
         self.roster = np.zeros((len(nurses), self.num_days, config.num_shifts))
+        
+        # 선호도 데이터 저장
+        self.shift_preferences = shift_preferences or {}
+        self.day_preferences = day_preferences or {}
+        self.off_preferences = off_preferences or {}
+        
+        # 고정된 셀 정보
+        self.fixed_cells = []
         
         # 선호도 행렬 설정
         if preference_matrix is not None:
@@ -77,62 +98,107 @@ class RosterSystem:
                 
         print(f"선호도 행렬 계산 완료: {time.time() - start_time:.4f}초 소요")
         
-    def _check_night_constraints(self, nurse_idx: int, day: int) -> bool:
-        """간호사에 대한 야간 근무 관련 제약 조건을 확인합니다."""
-        if day < 2:  # 확인할 이력이 충분하지 않음
-            return True
+    # def _check_night_constraints(self, nurse_idx: int, day: int) -> bool:
+    #     """간호사에 대한 야간 근무 관련 제약 조건을 확인합니다."""
+    #     if day < 2:  # 확인할 이력이 충분하지 않음
+    #         return True
             
+    #     night_idx = self.config.shift_types.index('N')
+    #     day_idx = self.config.shift_types.index('D')
+        
+    #     # 연속 야간 근무 확인
+    #     if day >= self.config.max_consecutive_nights:
+    #         consecutive_nights = np.all(
+    #             self.roster[nurse_idx, day-self.config.max_consecutive_nights:day, night_idx] == 1
+    #         )
+    #         if consecutive_nights:
+    #             return False
+                
+    #     # 야간 근무 후 주간 근무 확인
+    #     if day > 0 and self.roster[nurse_idx, day-1, night_idx] == 1:
+    #         if self.roster[nurse_idx, day, day_idx] == 1:
+    #             return False
+                
+    #     # 월별 야간 근무 제한 확인
+    #     total_nights = np.sum(self.roster[nurse_idx, :day+1, night_idx])
+    #     if total_nights >= self.config.max_night_shifts_per_month:
+    #         return False
+            
+    #     return True
+        
+    # def _check_consecutive_work_days(self, nurse_idx: int, day: int) -> bool:
+    #     """연속 근무일 제약 조건을 위반하는지 확인합니다."""
+    #     # 충분한 일수가 없으면 위반 없음
+    #     if day < self.config.max_consecutive_work_days:
+    #         return True
+            
+    #     off_idx = self.config.shift_types.index('OFF')
+    #     max_work = self.config.max_consecutive_work_days
+        
+    #     # 현재 날짜를 포함한 연속 근무일 검사
+    #     # day-max_work+1 부터 day까지 (총 max_work+1일) 검사
+    #     start_day = max(0, day - max_work)
+    #     end_day = day + 1  # day 포함
+        
+    #     # 해당 기간의 근무일 수 계산 (OFF가 아닌 날들)
+    #     work_days_count = 0
+    #     for d in range(start_day, end_day):
+    #         # 해당 날짜에 근무(OFF가 아닌 시프트)했는지 확인
+    #         is_working = np.sum(self.roster[nurse_idx, d, :off_idx]) > 0
+    #         if is_working:
+    #             work_days_count += 1
+    #         else:
+    #             # 휴무일이 있으면 연속 근무가 끊어짐
+    #             work_days_count = 0
+        
+    #     # 연속 근무일이 최대치를 초과하면 위반
+    #     return work_days_count <= max_work
+    # ───────── 2. 야간 관련 개별 함수 🔄 ─────────
+    def _check_consecutive_night_limit(self, nurse_idx: int, day: int) -> bool:
+        """연속 야간 근무 수 초과 여부"""
         night_idx = self.config.shift_types.index('N')
-        day_idx = self.config.shift_types.index('D')
+        L = self.config.max_consecutive_nights+1
         
-        # 연속 야간 근무 확인
-        if day >= self.config.max_consecutive_nights:
-            consecutive_nights = np.all(
-                self.roster[nurse_idx, day-self.config.max_consecutive_nights:day, night_idx] == 1
-            )
-            if consecutive_nights:
-                return False
-                
-        # 야간 근무 후 주간 근무 확인
-        if day > 0 and self.roster[nurse_idx, day-1, night_idx] == 1:
-            if self.roster[nurse_idx, day, day_idx] == 1:
-                return False
-                
-        # 월별 야간 근무 제한 확인
-        total_nights = np.sum(self.roster[nurse_idx, :day+1, night_idx])
-        if total_nights >= self.config.max_night_shifts_per_month:
-            return False
-            
-        return True
-        
-    def _check_consecutive_work_days(self, nurse_idx: int, day: int) -> bool:
-        """연속 근무일 제약 조건을 위반하는지 확인합니다."""
-        # 충분한 일수가 없으면 위반 없음
-        if day < self.config.max_consecutive_work_days:
+        if day < L:               # 검사할 이력이 부족
             return True
-            
-        off_idx = self.config.shift_types.index('OFF')
+        return not np.all(self.roster[nurse_idx, day-L:day, night_idx] == 1)
+
+    def _check_day_after_night(self, nurse_idx: int, day: int) -> bool:
+        """전날 Night 근무 후 Day 근무 여부(N→D 금지)"""
+        if day == 0:
+            return True
+        night_idx = self.config.shift_types.index('N')
+        day_idx   = self.config.shift_types.index('D')
+        return not (self.roster[nurse_idx, day-1, night_idx] == 1 and
+                    self.roster[nurse_idx, day,   day_idx]   == 1)
+
+    def _check_monthly_night_limit(self, nurse_idx: int, day: int) -> bool:
+        """월 누적 야간 근무 제한 초과 여부"""
+        night_idx = self.config.shift_types.index('N')
+        total_nights = np.sum(self.roster[nurse_idx, :day+1, night_idx])
+        return total_nights <= self.config.max_night_shifts_per_month
+
+    # ───────── 3. 연속 근무일 함수 리네이밍·정돈 🔄 ─────────
+    def _check_max_consecutive_work_days(self, nurse_idx: int, day: int) -> bool:
+        """max_consecutive_work_days 초과 여부만 판단"""
         max_work = self.config.max_consecutive_work_days
-        
-        # 현재 날짜를 포함한 연속 근무일 검사
-        # day-max_work+1 부터 day까지 (총 max_work+1일) 검사
-        start_day = max(0, day - max_work)
-        end_day = day + 1  # day 포함
-        
-        # 해당 기간의 근무일 수 계산 (OFF가 아닌 날들)
-        work_days_count = 0
-        for d in range(start_day, end_day):
-            # 해당 날짜에 근무(OFF가 아닌 시프트)했는지 확인
+        if day < max_work:
+            return True
+
+        off_idx = self.config.shift_types.index('OFF')
+        consecutive = 0
+        for d in range(day, day-max_work-1, -1):
+            if d < 0:
+                break
             is_working = np.sum(self.roster[nurse_idx, d, :off_idx]) > 0
             if is_working:
-                work_days_count += 1
+                consecutive += 1
+                if consecutive > max_work:
+                    return False
             else:
-                # 휴무일이 있으면 연속 근무가 끊어짐
-                work_days_count = 0
-        
-        # 연속 근무일이 최대치를 초과하면 위반
-        return work_days_count <= max_work
-        
+                break
+        return True
+
     def _check_experience_requirements(self, day: int) -> bool:
         """각 교대에 대한 경력 요구사항이 충족되는지 확인합니다."""
         experienced_nurses = [n for n in self.nurses if n.experience_years >= self.config.min_experience_per_shift]
@@ -290,50 +356,88 @@ class RosterSystem:
         # print('\n\n\n\n\nself.pair_matrix', self.pair_matrix, '\n\n\n\n\n')
         print("간호사 페어링 선호도 초기화 완료")
         
-    def _find_violations(self) -> List[dict]:
-        """Find all constraint violations in current roster."""
-        violations = []
+    # def _find_violations(self) -> List[dict]:
+    #     """Find all constraint violations in current roster."""
+    #     violations = []
         
-        # Check each type of violation
-        for day in range(self.num_days):
-            # Check shift requirements
-            for shift, required in self.config.daily_shift_requirements.items():
-                shift_idx = self.config.shift_types.index(shift)
-                actual = np.sum(self.roster[:, day, shift_idx])
-                if actual < required:  # 필요 인원보다 적을 때만 위반으로 처리
-                    violations.append({
-                        'type': 'shift_requirement',
-                        'day': day,
-                        'shift': shift,
-                        'required': required,
-                        'actual': actual
-                    })
+    #     # Check each type of violation
+    #     for day in range(self.num_days):
+    #         # Check shift requirements
+    #         for shift, required in self.config.daily_shift_requirements.items():
+    #             shift_idx = self.config.shift_types.index(shift)
+    #             actual = np.sum(self.roster[:, day, shift_idx])
+    #             if actual < required:  # 필요 인원보다 적을 때만 위반으로 처리
+    #                 violations.append({
+    #                     'type': 'shift_requirement',
+    #                     'day': day,
+    #                     'shift': shift,
+    #                     'required': required,
+    #                     'actual': actual
+    #                 })
                     
-            # Check experience requirements
-            if not self._check_experience_requirements(day):
-                violations.append({
-                    'type': 'experience',
-                    'day': day
-                })
+    #         # Check experience requirements
+    #         if not self._check_experience_requirements(day):
+    #             violations.append({
+    #                 'type': 'experience',
+    #                 'day': day
+    #             })
                 
-        # Check nurse-specific constraints
+    #     # Check nurse-specific constraints
+    #     for n_idx, nurse in enumerate(self.nurses):
+    #         for day in range(self.num_days):
+    #             if not self._check_night_constraints(n_idx, day):
+    #                 violations.append({
+    #                     'type': 'night',
+    #                     'nurse_idx': n_idx,
+    #                     'day': day
+    #                 })
+
+    #             if not self._check_consecutive_work_days(n_idx, day):
+    #                 violations.append({
+    #                     'type': 'consecutive',
+    #                     'nurse_idx': n_idx,
+    #                     'day': day
+    #                 })
+                    
+    #     return violations
+    
+    # ───────── 1. find_violations 수정 ─────────
+    def _find_violations(self) -> List[dict]:
+        violations = []
+
+        # (1) 일별 ‑ 병동 요구·경력 체크 (변경 없음) ...
+
+        # (2) 간호사별 제약
         for n_idx, nurse in enumerate(self.nurses):
             for day in range(self.num_days):
-                if not self._check_night_constraints(n_idx, day):
-                    violations.append({
-                        'type': 'night',
-                        'nurse_idx': n_idx,
-                        'day': day
-                    })
-                if not self._check_consecutive_work_days(n_idx, day):
-                    violations.append({
-                        'type': 'consecutive',
-                        'nurse_idx': n_idx,
-                        'day': day
-                    })
-                    
+                # ── 2‑A. 야간 제약 3종 🔄
+
+                # Check shift requirements
+                for shift, required in self.config.daily_shift_requirements.items():
+                    shift_idx = self.config.shift_types.index(shift)
+                    actual = np.sum(self.roster[:, day, shift_idx])
+                    if actual < required:  # 필요 인원보다 적을 때만 위반으로 처리
+                        violations.append({
+                            'type': 'shift_requirement',
+                            'day': day,
+                            'shift': shift,
+                            'required': required,
+                            'actual': actual
+                        })
+                    violations.append({'type': 'shift_requirements', 'nurse_idx': n_idx, 'day': day})
+                if not self._check_consecutive_night_limit(n_idx, day):
+                    violations.append({'type': 'night_consecutive', 'nurse_idx': n_idx, 'day': day})
+                if not self._check_day_after_night(n_idx, day):
+                    violations.append({'type': 'night_nd', 'nurse_idx': n_idx, 'day': day})
+                if not self._check_monthly_night_limit(n_idx, day):
+                    violations.append({'type': 'night_month_limit', 'nurse_idx': n_idx, 'day': day})
+
+                # ── 2‑B. 연속 근무일 🔄
+                if not self._check_max_consecutive_work_days(n_idx, day):
+                    violations.append({'type': 'consecutive_work', 'nurse_idx': n_idx, 'day': day})
+
         return violations
-        
+
     def print_roster(self):
         """Print current roster in readable format."""
         shift_map = {i: s for i, s in enumerate(self.config.shift_types)}
@@ -460,10 +564,12 @@ class RosterSystem:
     def _count_constraint_violations(self) -> Dict:
         """Count different types of constraint violations."""
         violations = self._find_violations()
+
         counts = {}
         for v in violations:
             v_type = v['type']
             counts[v_type] = counts.get(v_type, 0) + 1
+        print('\n\n\n\ncounts', counts, '\n\n\n\n')
         return counts
         
     def _analyze_workload_distribution(self) -> Dict:
@@ -1886,3 +1992,42 @@ class RosterSystem:
             metrics_df.to_excel(writer, sheet_name='만족도 지표')
             
         self.logger.info(f"근무표가 {filename}에 저장되었습니다.") 
+
+    def apply_fixed_cells(self, fixed_cells: List[Dict]):
+        """
+        고정된 셀을 근무표에 적용합니다.
+        
+        Args:
+            fixed_cells: 고정된 셀 정보 리스트
+                [{'nurse_index': int, 'day_index': int, 'shift': str}, ...]
+        """
+        if not fixed_cells:
+            return
+            
+        print(f"고정된 셀 {len(fixed_cells)}개 적용 중...")
+        
+        for fixed_cell in fixed_cells:
+            nurse_idx = fixed_cell['nurse_index']
+            day_idx = fixed_cell['day_index']
+            shift = fixed_cell['shift']
+            
+            # 인덱스 범위 확인
+            if (nurse_idx < 0 or nurse_idx >= len(self.nurses) or 
+                day_idx < 0 or day_idx >= self.num_days):
+                print(f"경고: 잘못된 인덱스 - 간호사 {nurse_idx}, 날짜 {day_idx}")
+                continue
+                
+            # 근무 타입 인덱스 찾기
+            try:
+                shift_idx = self.config.shift_types.index(shift)
+            except ValueError:
+                print(f"경고: 잘못된 근무 타입 - {shift}")
+                continue
+                
+            # 고정된 셀 적용
+            self.roster[nurse_idx, day_idx, :] = 0  # 모든 근무 타입 초기화
+            self.roster[nurse_idx, day_idx, shift_idx] = 1  # 지정된 근무 타입 설정
+            
+            print(f"고정 셀 적용: 간호사 {nurse_idx}, 날짜 {day_idx+1}, 근무 {shift}")
+            
+        print("고정된 셀 적용 완료")

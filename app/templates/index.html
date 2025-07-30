@@ -1651,7 +1651,7 @@
                     nurseCharacter.appendChild(papers);
                 }, 3000);
 
-                const response = await fetch('/roster/invoke', {
+                const response = await fetch('/wanted/invoke', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -2355,7 +2355,7 @@ async function renderWishTable() {
                     nurseCharacter.appendChild(papers);
                 }, 3000);
 
-                const response = await fetch('/roster/invoke', {
+                const response = await fetch('/wanted/invoke', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)

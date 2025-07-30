@@ -484,7 +484,9 @@ async def save_roster(
     db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
     
     # Save new roster entries
+    print('\n\n\n\n\n\n\n!!roster:', roster, '\n\n\n\n\n\n\n')
     for nurse in roster:
+        print('\n\n\n\n\n\n\n!!nurse:', nurse, '\n\n\n\n\n\n\n')
         nurse_id = nurse.get('nurse_id') or nurse.get('id')  # 둘 다 체크
         if not nurse_id:
             continue  # nurse_id가 없으면 건너뛰기
@@ -645,7 +647,7 @@ async def validate_roster(
         #  * 같은 nurse_class라도, 사전에 등록된 교대(slot) 기준으로만 조회
         #  * codes 열(JSON) 에 들어있는 파생 코드를 본교대(main_code) 로 매핑
         #
-        from app.db.models import ShiftManage, Nurse, RosterConfig  # local import
+        from db.models import ShiftManage, Nurse, RosterConfig  # local import
 
         # ○ 현 수간호사의 부서 기준으로 조회
         shift_rows = db.query(ShiftManage).filter(
@@ -732,7 +734,6 @@ async def validate_roster(
 
         # ──────────────────────── 5. 위반사항 탐색 & 포매팅 ────────────────────────
         violation_details = system._find_violations()
-
         violation_messages: set[str] = set()
         detailed_violations: list[dict] = []
 
@@ -749,20 +750,38 @@ async def validate_roster(
                     'required': v['required'],
                     'actual': v['actual']
                 })
-            elif v['type'] == 'consecutive':
+            elif v['type'] == 'consecutive_work':
                 nurse_name = system.nurses[v['nurse_idx']].name
                 violation_messages.add(f"{nurse_name}: 최대 연속 근무일 초과")
                 detailed_violations.append({
-                    'type': 'consecutive',
+                    'type': 'consecutive_work',
                     'nurse_idx': v['nurse_idx'],
                     'nurse_name': nurse_name,
                     'day': v['day']
                 })
-            elif v['type'] == 'night':
+            elif v['type'] == 'night_consecutive':
                 nurse_name = system.nurses[v['nurse_idx']].name
-                violation_messages.add(f"{nurse_name}: 야간 근무 제약 위반")
+                violation_messages.add(f"{nurse_name}: 야간 연속 근무 위반")
                 detailed_violations.append({
-                    'type': 'night',
+                    'type': 'night_consecutive',
+                    'nurse_idx': v['nurse_idx'],
+                    'nurse_name': nurse_name,
+                    'day': v['day']
+                })
+            elif v['type'] == 'night_nd':
+                nurse_name = system.nurses[v['nurse_idx']].name
+                violation_messages.add(f"{nurse_name}: 야간 근무 후 주간 근무 위반")
+                detailed_violations.append({
+                    'type': 'night_nd',
+                    'nurse_idx': v['nurse_idx'],
+                    'nurse_name': nurse_name,
+                    'day': v['day']
+                })
+            elif v['type'] == 'night_month_limit':
+                nurse_name = system.nurses[v['nurse_idx']].name
+                violation_messages.add(f"{nurse_name}: 월 야간 근무 초과 위반")
+                detailed_violations.append({
+                    'type': 'night_month_limit',
                     'nurse_idx': v['nurse_idx'],
                     'nurse_name': nurse_name,
                     'day': v['day']

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from schemas.auth_schema import User as UserSchema
 from schemas.roster_schema import RosterRequest
+from pydantic import BaseModel
 from db.client import get_db
 from db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
 from routers.utils import get_days_in_month
@@ -15,7 +16,7 @@ from db.models import Schedule, Shift
 from routers.utils import Timer
 from datetime import date
 import uuid
-from services.roster_create_service import generate_roster_service, request_schedule_service
+from services.roster_create_service import generate_roster_service, request_schedule_service, generate_roster_service_with_fixed_cells
 
 # CP-SAT 기반 엔진들 import
 try:
@@ -42,6 +43,11 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 
+class HoldGenerateRequest(BaseModel):
+    year: int
+    month: int
+    fixed_cells: List[Dict[str, Any]]
+
 # [Roster] - 근무표 생성
 @router.post("/roster_create/generate")
 async def generate_roster_endpoint(
@@ -66,6 +72,20 @@ async def request_schedule(
         return request_schedule_service(req, current_user, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"스케줄 생성 실패: {str(e)}")
+
+
+# [Roster] - 고정된 셀을 반영한 근무표 생성
+@router.post("/roster_create/hold_generate")
+async def hold_generate_roster_endpoint(
+    req: HoldGenerateRequest,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    try:
+        # 고정된 셀 정보를 포함하여 근무표 생성 서비스 호출
+        return generate_roster_service_with_fixed_cells(req, current_user, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"고정 후 근무표 생성 실패: {str(e)}")
 
 
     
