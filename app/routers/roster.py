@@ -81,6 +81,7 @@ async def roster_create(
 @router.get("/roster-configure", response_class=HTMLResponse)
 async def roster_configure(
     request: Request,
+    config_version: Optional[str] = None,
     current_user: Optional[User] = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
@@ -89,10 +90,18 @@ async def roster_configure(
     if not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    latest_config = db.query(RosterConfigModel).filter(
-        RosterConfigModel.office_id == current_user.office_id,
-        RosterConfigModel.group_id == current_user.group_id
-    ).order_by(RosterConfigModel.created_at.desc()).first()
+    # Get config based on version parameter or latest
+    if config_version:
+        latest_config = db.query(RosterConfigModel).filter(
+            RosterConfigModel.office_id == current_user.office_id,
+            RosterConfigModel.group_id == current_user.group_id,
+            RosterConfigModel.config_version == config_version
+        ).order_by(RosterConfigModel.created_at.desc()).first()
+    else:
+        latest_config = db.query(RosterConfigModel).filter(
+            RosterConfigModel.office_id == current_user.office_id,
+            RosterConfigModel.group_id == current_user.group_id
+        ).order_by(RosterConfigModel.created_at.desc()).first()
 
     return templates.TemplateResponse(
         "roster_configure.html",
@@ -118,6 +127,78 @@ async def save_roster_config(
         return save_roster_config_service(config_data, user, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Configuration save failed: {str(e)}")
+
+@router.get("/roster/config/versions")
+async def get_config_versions(
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    """Get unique config versions for the current group"""
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    try:
+        # Get unique config versions with latest created_at for each version
+        versions = db.query(
+            RosterConfigModel.config_version,
+            func.max(RosterConfigModel.created_at).label('latest_created_at')
+        ).filter(
+            RosterConfigModel.office_id == current_user.office_id,
+            RosterConfigModel.group_id == current_user.group_id,
+            RosterConfigModel.config_version.isnot(None)
+        ).group_by(RosterConfigModel.config_version).order_by(
+            func.max(RosterConfigModel.created_at).desc()
+        ).all()
+        
+        return [{"config_version": v.config_version} for v in versions]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get config versions: {str(e)}")
+
+@router.get("/roster/config/version/{config_version}")
+async def get_config_by_version(
+    config_version: str,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    """Get the latest config for a specific version"""
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    try:
+        config = db.query(RosterConfigModel).filter(
+            RosterConfigModel.office_id == current_user.office_id,
+            RosterConfigModel.group_id == current_user.group_id,
+            RosterConfigModel.config_version == config_version
+        ).order_by(RosterConfigModel.created_at.desc()).first()
+        
+        if not config:
+            raise HTTPException(status_code=404, detail="Config version not found")
+        
+        return {
+            "config_id": config.config_id,
+            "config_version": config.config_version,
+            "day_req": config.day_req,
+            "eve_req": config.eve_req,
+            "nig_req": config.nig_req,
+            "min_exp_per_shift": config.min_exp_per_shift,
+            "req_exp_nurses": config.req_exp_nurses,
+            "two_offs_per_week": config.two_offs_per_week,
+            "max_nig_per_month": config.max_nig_per_month,
+            "three_seq_nig": config.three_seq_nig,
+            "two_offs_after_three_nig": config.two_offs_after_three_nig,
+            "two_offs_after_two_nig": config.two_offs_after_two_nig,
+            "banned_day_after_eve": config.banned_day_after_eve,
+            "max_conseq_work": config.max_conseq_work,
+            "off_days": config.off_days,
+            "shift_priority": config.shift_priority,
+            "weekend_shift_ratio": config.weekend_shift_ratio,
+            "patient_amount": config.patient_amount,
+            "sequential_offs": config.sequential_offs,
+            "even_nights": config.even_nights,
+            "created_at": config.created_at.isoformat() if config.created_at else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
     
 
 # [Schedules] - 최신 월과 버전의 스케줄 정보 조회 (수간호사용)
@@ -484,9 +565,9 @@ async def save_roster(
     db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
     
     # Save new roster entries
-    print('\n\n\n\n\n\n\n!!roster:', roster, '\n\n\n\n\n\n\n')
+    # print('\n\n\n\n\n\n\n!!roster:', roster, '\n\n\n\n\n\n\n')
     for nurse in roster:
-        print('\n\n\n\n\n\n\n!!nurse:', nurse, '\n\n\n\n\n\n\n')
+        # print('\n\n\n\n\n\n\n!!nurse:', nurse, '\n\n\n\n\n\n\n')
         nurse_id = nurse.get('nurse_id') or nurse.get('id')  # 둘 다 체크
         if not nurse_id:
             continue  # nurse_id가 없으면 건너뛰기
@@ -634,7 +715,9 @@ async def validate_roster(
     year: int   = roster_data.get('year')
     month: int  = roster_data.get('month')
     roster      = roster_data.get('roster')
-
+    schedule_id = roster_data.get('schedule_id')
+    config_id = db.query(Schedule).filter(Schedule.schedule_id == schedule_id).first().config_id
+    print('\n\n\n\n\n\n\nconfig_id', config_id, '\n\n\n\n\n\n\n')
     if not all([year, month, roster]):
         raise HTTPException(
             status_code=400,
@@ -657,7 +740,7 @@ async def validate_roster(
 
         #    예) { 'D': 'D', 'D1': 'D', 'MD': 'D',  'E': 'E', … }
         alias_map: dict[str, str] = {}
-
+        print('\n\n\n\n\n\n\nshift_rows', [i.main_code for i in shift_rows], '\n\n\n\n\n\n\n')
         for row in shift_rows:
             if not row.main_code:
                 continue
@@ -674,12 +757,22 @@ async def validate_roster(
         alias_map.setdefault('O',   'OFF')
 
         # ──────────────────────── 2. 근무표 설정(인원/제약) 불러오기 ────────────────────────
-        latest_config_db = (
-            db.query(RosterConfig)
-              .filter(RosterConfig.group_id == current_user.group_id)
-              .order_by(RosterConfig.created_at.desc())
-              .first()
-        )
+        if config_id:
+            # config_id가 제공된 경우 해당 config 사용
+            latest_config_db = (
+                db.query(RosterConfig)
+                  .filter(RosterConfig.config_id == config_id)
+                  .first()
+            )
+        else:
+            # config_id가 없는 경우 최신 config 사용
+            latest_config_db = (
+                db.query(RosterConfig)
+                  .filter(RosterConfig.group_id == current_user.group_id)
+                  .order_by(RosterConfig.created_at.desc())
+                  .first()
+            )
+        
         if not latest_config_db:
             return {"violations": ["근무표 설정을 찾을 수 없습니다."]}
 

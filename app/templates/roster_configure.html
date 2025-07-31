@@ -562,6 +562,14 @@
         <div class="container">
             <h1>근무표 환경설정</h1>
             
+            <!-- Config Version Selector -->
+            <div class="config-version-selector" style="margin-bottom: 20px;">
+                <label for="configVersion" style="font-weight: 600; margin-right: 10px;">설정 버전:</label>
+                <select id="configVersion" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px; min-width: 200px;">
+                    <option value="">로딩 중...</option>
+                </select>
+            </div>
+            
             <!-- Tab Container -->
             <div class="tab-container">
                 <div class="tab-buttons">
@@ -693,6 +701,10 @@
                             <section class="config-section">
                                 <h2>기타 설정</h2>
                                 <div class="config-item">
+                                    <span class="label">설정 버전 *</span>
+                                    <input type="text" name="config_version" placeholder="예: v1.0, 2024년 설정" value="{{ config.config_version if config else '' }}" required style="width: 200px;">
+                                </div>
+                                <div class="config-item">
                                     <span class="label">병동 환자수</span>
                                     <input type="number" name="patient_amount" value="{{ config.patient_amount if config else 40 }}">
                                 </div>
@@ -814,6 +826,7 @@
             toggleN3Off();
             loadShifts();
             loadShiftManage('RN'); // Load RN shift management data
+            loadConfigVersions(); // Load config versions
         });
 
         // Tab management
@@ -1158,6 +1171,12 @@
                 }
             });
 
+            // Add config_version from dropdown
+            const configVersionSelect = document.getElementById('configVersion');
+            if (configVersionSelect && configVersionSelect.value) {
+                data.config_version = configVersionSelect.value;
+            }
+
             console.log('저장될 데이터:', data); // 디버깅용
 
             const response = await fetch('/roster/config/save', {
@@ -1170,7 +1189,8 @@
 
             if (response.ok) {
                 alert('설정이 저장되었습니다.');
-                window.location.reload();
+                // Reload config versions instead of full page reload
+                loadConfigVersions();
             } else {
                 alert('저장에 실패했습니다.');
             }
@@ -1538,6 +1558,100 @@
                 console.error('Error saving shift manage:', error);
                 alert('저장에 실패했습니다.');
             }
+        }
+
+        // Load config versions
+        async function loadConfigVersions() {
+            try {
+                const response = await fetch('/roster/config/versions');
+                const versions = await response.json();
+                
+                const select = document.getElementById('configVersion');
+                select.innerHTML = '';
+                
+                if (versions.length === 0) {
+                    select.innerHTML = '<option value="">설정 버전이 없습니다</option>';
+                    return;
+                }
+                
+                versions.forEach(version => {
+                    const option = document.createElement('option');
+                    option.value = version.config_version;
+                    option.textContent = version.config_version;
+                    select.appendChild(option);
+                });
+                
+                // Select the latest version by default
+                if (versions.length > 0) {
+                    select.value = versions[0].config_version;
+                    loadConfigByVersion(versions[0].config_version);
+                }
+                
+                // Add change event listener
+                select.addEventListener('change', function() {
+                    loadConfigByVersion(this.value);
+                    // Switch to roster-config tab when version is selected
+                    showTab('roster-config');
+                });
+                
+            } catch (error) {
+                console.error('설정 버전 로딩 실패:', error);
+            }
+        }
+
+        // Load config by version
+        async function loadConfigByVersion(configVersion) {
+            if (!configVersion) return;
+            
+            try {
+                const response = await fetch(`/roster/config/version/${configVersion}`);
+                const config = await response.json();
+                
+                if (config) {
+                    // Populate form fields with config data
+                    populateConfigForm(config);
+                }
+            } catch (error) {
+                console.error('설정 로딩 실패:', error);
+            }
+        }
+
+        // Populate config form with data
+        function populateConfigForm(config) {
+            // Populate all form fields
+            const form = document.getElementById('configForm');
+            
+            // Set input values
+            if (config.max_conseq_work) form.querySelector('input[name="max_conseq_work"]').value = config.max_conseq_work;
+            if (config.max_nig_per_month) form.querySelector('input[name="max_nig_per_month"]').value = config.max_nig_per_month;
+            if (config.min_exp_per_shift) form.querySelector('input[name="min_exp_per_shift"]').value = config.min_exp_per_shift;
+            if (config.req_exp_nurses) form.querySelector('input[name="req_exp_nurses"]').value = config.req_exp_nurses;
+            if (config.patient_amount) form.querySelector('input[name="patient_amount"]').value = config.patient_amount;
+            if (config.off_days) form.querySelector('input[name="off_days"]').value = config.off_days;
+            if (config.weekend_shift_ratio) form.querySelector('input[name="weekend_shift_ratio"]').value = config.weekend_shift_ratio;
+            if (config.config_version) form.querySelector('input[name="config_version"]').value = config.config_version;
+            if (config.shift_priority) {
+                const priorityInput = form.querySelector('input[name="shift_priority"]');
+                const priorityOutput = priorityInput.nextElementSibling;
+                priorityInput.value = config.shift_priority;
+                priorityOutput.value = config.shift_priority;
+            }
+            
+            // Set checkbox values
+            const checkboxes = [
+                'two_offs_per_week', 'three_seq_nig', 'two_offs_after_three_nig', 
+                'two_offs_after_two_nig', 'banned_day_after_eve', 'sequential_offs', 'even_nights'
+            ];
+            
+            checkboxes.forEach(field => {
+                const checkbox = form.querySelector(`input[name="${field}"]`);
+                if (checkbox) {
+                    checkbox.checked = config[field] === true;
+                }
+            });
+            
+            // Trigger toggleN3Off to update dependent fields
+            toggleN3Off();
         }
     </script>
 </body>

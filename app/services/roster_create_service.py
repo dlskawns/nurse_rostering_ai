@@ -64,9 +64,14 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
             ).order_by(ShiftPreference.created_at.desc()).first()
             if draft_pref:
                 preferences.append(draft_pref)
-    latest_config = db.query(RosterConfig).filter(
-        RosterConfig.group_id == current_user.group_id
-    ).order_by(RosterConfig.created_at.desc()).first()
+    if req.config_id:
+        latest_config = db.query(RosterConfig).filter(
+            RosterConfig.config_id == req.config_id
+        ).first()
+    else:
+        latest_config = db.query(RosterConfig).filter(
+            RosterConfig.group_id == current_user.group_id
+        ).order_by(RosterConfig.created_at.desc()).first()
     ####
     shift_manage_data = db.query(ShiftManage).filter(
         ShiftManage.office_id == current_user.office_id,
@@ -242,9 +247,16 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
             if draft_pref:
                 preferences.append(draft_pref)
     
-    latest_config = db.query(RosterConfig).filter(
-        RosterConfig.group_id == current_user.group_id
-    ).order_by(RosterConfig.created_at.desc()).first()
+    # config_id가 제공된 경우 해당 config 사용, 아니면 최신 config 사용
+    if  req.config_id:
+        latest_config = db.query(RosterConfig).filter(
+            RosterConfig.config_id == req.config_id
+        ).first()
+    else:
+        latest_config = db.query(RosterConfig).filter(
+            RosterConfig.group_id == current_user.group_id
+        ).order_by(RosterConfig.created_at.desc()).first()
+    print('\n\n\n\n\n111latest_config여길봐', latest_config.config_id, latest_config.config_version, latest_config.day_req,'\n\n\n\n\n')
     if not latest_config:
         raise Exception("설정값을 입력해주세요")
     
@@ -259,11 +271,7 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
     ).order_by(ShiftManage.shift_slot.asc()).all()
     shift_manage_data = [s.__dict__ for s in shift_manages]
     print('\n\n\n\nshift_manage_data', shift_manage_data, '\n\n\n\n')
-    # grouped = {}
-    # for row in shift_manage_data:
-    #     main = row['main_code']
-    #     grouped.setdefault(main, []).extend(row.get('codes', []))
-    # print('\n\n\n\n\ngrouped', grouped, '\n\n\n\n\n')
+
     daily_shift_requirements = {}
     for shift_manage in shift_manages:
         if shift_manage.codes:
@@ -354,10 +362,17 @@ def request_schedule_service(req: RosterRequest, current_user, db: Session):
     nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
     if not nurse or not nurse.group:
         raise Exception("User group information not found")
-    latest_config = db.query(RosterConfig).filter(
-        RosterConfig.office_id == nurse.group.office_id,
-        RosterConfig.group_id == nurse.group_id
-    ).order_by(RosterConfig.created_at.desc()).first()
+    # config_id가 제공된 경우 해당 config 사용, 아니면 최신 config 사용
+    if req.config_id:
+        latest_config = db.query(RosterConfig).filter(
+            RosterConfig.config_id == req.config_id
+        ).first()
+    else:
+        latest_config = db.query(RosterConfig).filter(
+            RosterConfig.office_id == nurse.group.office_id,
+            RosterConfig.group_id == nurse.group_id
+        ).order_by(RosterConfig.created_at.desc()).first()
+    print('\n\n\n\n\nlatest_config여길봐', latest_config.config_id, latest_config.config_version, latest_config.day_req,'\n\n\n\n\n')
     if not latest_config:
         raise Exception("설정값을 입력해주세요")
     latest_version = db.query(func.max(Schedule.version)).filter(

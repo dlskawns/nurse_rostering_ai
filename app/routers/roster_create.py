@@ -47,6 +47,7 @@ class HoldGenerateRequest(BaseModel):
     year: int
     month: int
     fixed_cells: List[Dict[str, Any]]
+    config_id: Optional[int] = None
 
 # [Roster] - 근무표 생성
 @router.post("/roster_create/generate")
@@ -55,7 +56,6 @@ async def generate_roster_endpoint(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-
     try:
         return generate_roster_service(req, current_user, db)
     except Exception as e:

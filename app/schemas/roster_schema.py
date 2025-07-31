@@ -35,6 +35,7 @@ class RosterRequest(BaseModel):
     year: int
     month: int
     algorithm: str = "cp_sat"  # "cp_sat" or "random_sampling"
+    config_id: Optional[int] = None
 
 class PreferenceSubmit(BaseModel):
     year: int
@@ -79,6 +80,7 @@ class RosterConfigBase(BaseModel):
     sequential_offs: bool
 
 class RosterConfigCreate(RosterConfigBase):
+    # config_version: Optional[str] = None
     pass
 
 class RosterConfig(RosterConfigBase):

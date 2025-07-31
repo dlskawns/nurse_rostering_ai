@@ -9,7 +9,7 @@ from schemas.roster_schema import RosterConfigCreate, PublishRequest, RosterRequ
 from db.roster_config import NurseRosterConfig
 from db.nurse_config import Nurse as NurseEngine
 from services.roster_system import RosterSystem
-from datetime import date
+from datetime import date, datetime
 from sqlalchemy import func
 import uuid
 
@@ -45,6 +45,10 @@ def save_roster_config_service(config_data: RosterConfigCreate, user, db: Sessio
             'eve_req': eve_req,
             'nig_req': nig_req
         })
+        
+        # config_version이 None이면 기본값 설정
+        if not config_dict.get('config_version'):
+            config_dict['config_version'] = f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         db_config = RosterConfigModel(
             **config_dict,
             office_id=user.office_id,

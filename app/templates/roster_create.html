@@ -1146,6 +1146,14 @@
                         <!-- Version items will be populated here -->
                     </div>
                     
+                    <!-- 설정 버전 선택기 -->
+                    <div class="config-version-selector" style="margin-top: 15px; padding: 10px; border-top: 1px solid #dee2e6;">
+                        <h5 style="margin: 0 0 8px 0; font-size: 13px; color: #495057;">설정 버전</h5>
+                        <select id="configVersionSelect" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;">
+                            <option value="">로딩 중...</option>
+                        </select>
+                    </div>
+                    
                     <!-- 알고리즘 선택 라디오 버튼 -->
                     <div class="algorithm-selector" style="margin-top: 15px; padding: 10px; border-top: 1px solid #dee2e6;">
                         <h5 style="margin: 0 0 8px 0; font-size: 13px; color: #495057;">생성 알고리즘</h5>
@@ -1320,6 +1328,9 @@
             // Shift 버튼들을 미리 로드
             await loadShiftButtons();
             
+            // Config versions 로드
+            await loadConfigVersions();
+            
             // Try to load the latest schedule first
             const latestSchedule = await fetchLatestSchedule();
             if (latestSchedule) {
@@ -1339,6 +1350,51 @@
                 return data;
             } catch (error) {
                 console.error('최신 스케줄 조회 실패:', error);
+                return null;
+            }
+        }
+
+        // Load config versions
+        async function loadConfigVersions() {
+            try {
+                const response = await fetch('/roster/config/versions');
+                const versions = await response.json();
+                
+                const select = document.getElementById('configVersionSelect');
+                select.innerHTML = '';
+                
+                if (versions.length === 0) {
+                    select.innerHTML = '<option value="">설정 버전이 없습니다</option>';
+                    return;
+                }
+                
+                versions.forEach(version => {
+                    const option = document.createElement('option');
+                    option.value = version.config_version;
+                    option.textContent = version.config_version;
+                    select.appendChild(option);
+                });
+                
+                // Select the latest version by default
+                if (versions.length > 0) {
+                    select.value = versions[0].config_version;
+                }
+                
+            } catch (error) {
+                console.error('설정 버전 로딩 실패:', error);
+            }
+        }
+
+        // Get config_id for selected config_version
+        async function getConfigIdForVersion(configVersion) {
+            if (!configVersion) return null;
+            
+            try {
+                const response = await fetch(`/roster/config/version/${configVersion}`);
+                const config = await response.json();
+                return config.config_id;
+            } catch (error) {
+                console.error('설정 ID 조회 실패:', error);
                 return null;
             }
         }
@@ -1816,13 +1872,18 @@
             rosterOutputSection.style.display = 'block';
 
             try {
+                // Get config_id for selected config_versionget
+                const configVersionSelect = document.getElementById('configVersionSelect');
+                const selectedConfigVersion = configVersionSelect ? configVersionSelect.value : null;
+                const configId = selectedConfigVersion ? await getConfigIdForVersion(selectedConfigVersion) : null;
                 const response = await fetch('/roster_create/generate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ 
                         year: currentYear, 
                         month: currentMonth + 1,
-                        algorithm: selectedAlgorithm
+                        algorithm: selectedAlgorithm,
+                        config_id: configId
                     })
                 });
 
@@ -1868,7 +1929,8 @@
                     const validatePayload = {
                         year: result.year,
                         month: result.month,
-                        roster: editedRosterData
+                        roster: editedRosterData,
+                        schedule_id: generatedRosterData.schedule_id,
                     };
 
                     const validateResponse = await fetch('/roster/validate', {
@@ -1976,7 +2038,8 @@
                     const validatePayload = {
                         year: year,
                         month: month,
-                        roster: editedRosterData
+                        roster: editedRosterData,
+                        schedule_id: generatedRosterData.schedule_id,
                     };
 
                     const validateResponse = await fetch('/roster/validate', {
@@ -2719,7 +2782,9 @@
             if (!editedRosterData || !generatedRosterData || isValidating) return;
             
             isValidating = true;
-            
+            console.log('generatedRosterData', generatedRosterData)
+            console.log('editedRosterData', editedRosterData)
+            console.log('schedule_id', generatedRosterData.schedule_id)
             try {
                 const response = await fetch('/roster/validate', {
                     method: 'POST',
@@ -2727,7 +2792,8 @@
                     body: JSON.stringify({
                         year: generatedRosterData.year,
                         month: generatedRosterData.month,
-                        roster: editedRosterData
+                        roster: editedRosterData,
+                        schedule_id: generatedRosterData.schedule_id
                     })
                 });
                 
@@ -2950,9 +3016,10 @@
                     const validatePayload = {
                         year: rosterData.year,
                         month: rosterData.month,
-                        roster: editedRosterData
+                        roster: editedRosterData,
+                        schedule_id: rosterData.schedule_id
                     };
-
+                    console.log('validatePayload', validatePayload)
                     const validateResponse = await fetch('/roster/validate', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
@@ -3246,13 +3313,19 @@
                     };
                 });
 
+                // Get config_id for selected config_version
+                const configVersionSelect = document.getElementById('configVersionSelect');
+                const selectedConfigVersion = configVersionSelect ? configVersionSelect.value : null;
+                const configId = selectedConfigVersion ? await getConfigIdForVersion(selectedConfigVersion) : null;
+                
                 const response = await fetch('/roster_create/hold_generate', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ 
                         year: currentYear, 
                         month: currentMonth + 1,
-                        fixed_cells: fixedData
+                        fixed_cells: fixedData,
+                        config_id: configId
                     })
                 });
 
@@ -3290,7 +3363,7 @@
 
                 // Render Roster with editing functionality
                 renderRosterTable(editedRosterData, result.year, result.month);
-
+                console.log('generatedRosterData11', generatedRosterData)
                 // 근무표 생성 후 위반사항 자동 검증
                 try {
                     const rosterTableContainer = document.getElementById('roster-table-container');
@@ -3299,7 +3372,8 @@
                     const validatePayload = {
                         year: result.year,
                         month: result.month,
-                        roster: editedRosterData
+                        roster: editedRosterData,
+                        schedule_id: generatedRosterData.schedule_id
                     };
 
                     const validateResponse = await fetch('/roster/validate', {
