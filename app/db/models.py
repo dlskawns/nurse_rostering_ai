@@ -115,6 +115,7 @@ class ShiftPreference(Base):
 class RosterConfig(Base):
     __tablename__ = 'roster_config'
     config_id = Column(INTEGER, primary_key=True, autoincrement=True)
+    config_vesion = Column(VARCHAR(20))
     office_id = Column(VARCHAR(50), ForeignKey('offices.office_id'))
     group_id = Column(VARCHAR(50), ForeignKey('groups.group_id'))
     day_req = Column(INTEGER)

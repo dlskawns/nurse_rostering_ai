@@ -20,7 +20,7 @@ from services.roster_system import RosterSystem
 from datetime import date
 from services.roster_service import save_roster_config_service, get_latest_schedule_service, get_issued_schedules_service, get_schedule_status_service
 import uuid
-
+import pprint
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
@@ -182,13 +182,15 @@ async def get_roster_by_schedule_id(
         Nurse.group_id == current_user.group_id
     ).order_by(Nurse.experience.desc(), Nurse.nurse_id.asc()).all()
 
+# Get shift manage data
     # Get shift colors
     shifts_db = db.query(Shift).all()
     shift_colors = {s.shift_id: s.color for s in shifts_db}
     
     # Get schedule entries
     entries = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule_id).all()
-    
+    for e in entries:
+        print(e.entry_id, e.nurse_id, e.work_date, e.shift_id)
     roster_data = {
         "year": schedule.year, 
         "month": schedule.month,
@@ -197,7 +199,6 @@ async def get_roster_by_schedule_id(
         "shift_colors": shift_colors,
         "nurses": []
     }
-    
     # Structure data by nurse
     entries_by_nurse = {}
     for entry in entries:
@@ -220,7 +221,6 @@ async def get_roster_by_schedule_id(
             "counts": counts
         })
     roster_data["violations"] = violations
-        
     return roster_data
 # [Schedules] - 특정 월의 모든 버전 목록 조회 (수간호사용)
 @router.get("/roster/{year:int}/{month:int}/versions")

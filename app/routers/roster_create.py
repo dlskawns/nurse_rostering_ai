@@ -55,6 +55,7 @@ async def generate_roster_endpoint(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
+
     try:
         return generate_roster_service(req, current_user, db)
     except Exception as e:

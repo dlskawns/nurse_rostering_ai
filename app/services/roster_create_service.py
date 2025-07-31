@@ -67,11 +67,14 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
     latest_config = db.query(RosterConfig).filter(
         RosterConfig.group_id == current_user.group_id
     ).order_by(RosterConfig.created_at.desc()).first()
+    ####
     shift_manage_data = db.query(ShiftManage).filter(
-        ShiftManage.office_id == current_user.group.office_id,
+        ShiftManage.office_id == current_user.office_id,
         ShiftManage.group_id == current_user.group_id,
         ShiftManage.nurse_class == 'RN'        
     ).order_by(ShiftManage.shift_slot.asc()).all()
+    print('\n\n\n\nshift_manage_data', shift_manage_data, '\n\n\n\n')
+    ####
     if not latest_config:
         raise Exception("설정값을 입력해주세요")
     nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
@@ -82,6 +85,7 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
         ShiftManage.group_id == current_user.group_id,
         ShiftManage.nurse_class == 'RN'
     ).order_by(ShiftManage.shift_slot.asc()).all()
+    shift_manage_data = [s.__dict__ for s in shift_manages]
     print('\n\n\n\nshift_manage_data', shift_manage_data, '\n\n\n\n')
     daily_shift_requirements = {}
     for shift_manage in shift_manages:
