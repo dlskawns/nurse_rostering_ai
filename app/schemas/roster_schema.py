@@ -80,8 +80,8 @@ class RosterConfigBase(BaseModel):
     sequential_offs: bool
 
 class RosterConfigCreate(RosterConfigBase):
-    # config_version: Optional[str] = None
-    pass
+    config_version: Optional[str] = None
+    # pass
 
 class RosterConfig(RosterConfigBase):
     config_id: int

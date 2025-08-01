@@ -73,22 +73,30 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
             RosterConfig.group_id == current_user.group_id
         ).order_by(RosterConfig.created_at.desc()).first()
     ####
+    if not latest_config:
+        raise Exception("설정값을 입력해주세요")
+    
+    # config_version을 사용하여 ShiftManage 조회
+    config_version = latest_config.config_version
+    if not config_version:
+        raise Exception("설정 버전이 없습니다.")
+        
     shift_manage_data = db.query(ShiftManage).filter(
         ShiftManage.office_id == current_user.office_id,
         ShiftManage.group_id == current_user.group_id,
-        ShiftManage.nurse_class == 'RN'        
+        ShiftManage.nurse_class == 'RN',
+        ShiftManage.config_version == config_version
     ).order_by(ShiftManage.shift_slot.asc()).all()
     print('\n\n\n\nshift_manage_data', shift_manage_data, '\n\n\n\n')
     ####
-    if not latest_config:
-        raise Exception("설정값을 입력해주세요")
     nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
     if not nurse or not nurse.group:
         raise Exception("User group information not found")
     shift_manages = db.query(ShiftManage).filter(
         ShiftManage.office_id == nurse.group.office_id,
         ShiftManage.group_id == current_user.group_id,
-        ShiftManage.nurse_class == 'RN'
+        ShiftManage.nurse_class == 'RN',
+        ShiftManage.config_version == config_version
     ).order_by(ShiftManage.shift_slot.asc()).all()
     shift_manage_data = [s.__dict__ for s in shift_manages]
     print('\n\n\n\nshift_manage_data', shift_manage_data, '\n\n\n\n')
@@ -256,9 +264,14 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
         latest_config = db.query(RosterConfig).filter(
             RosterConfig.group_id == current_user.group_id
         ).order_by(RosterConfig.created_at.desc()).first()
-    print('\n\n\n\n\n111latest_config여길봐', latest_config.config_id, latest_config.config_version, latest_config.day_req,'\n\n\n\n\n')
+    
     if not latest_config:
         raise Exception("설정값을 입력해주세요")
+    
+    # config_version을 사용하여 ShiftManage 조회
+    config_version = latest_config.config_version
+    if not config_version:
+        raise Exception("설정 버전이 없습니다.")
     
     nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
     if not nurse or not nurse.group:
@@ -267,7 +280,8 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
     shift_manages = db.query(ShiftManage).filter(
         ShiftManage.office_id == nurse.group.office_id,
         ShiftManage.group_id == current_user.group_id,
-        ShiftManage.nurse_class == 'RN'
+        ShiftManage.nurse_class == 'RN',
+        ShiftManage.config_version == config_version
     ).order_by(ShiftManage.shift_slot.asc()).all()
     shift_manage_data = [s.__dict__ for s in shift_manages]
     print('\n\n\n\nshift_manage_data', shift_manage_data, '\n\n\n\n')

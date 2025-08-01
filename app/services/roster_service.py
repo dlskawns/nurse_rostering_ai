@@ -22,11 +22,18 @@ def save_roster_config_service(config_data: RosterConfigCreate, user, db: Sessio
         nurse = db.query(Nurse).filter(Nurse.nurse_id == user.nurse_id).first()
         if not nurse or not nurse.group:
             raise Exception("User group information not found")
+        # config_version을 사용하여 ShiftManage 조회
+        config_version = config_data.config_version
+        if not config_version:
+            config_version = f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            
         shift_manages = db.query(ShiftManage).filter(
             ShiftManage.office_id == nurse.group.office_id,
             ShiftManage.group_id == user.group_id,
-            ShiftManage.nurse_class == 'RN'
+            ShiftManage.nurse_class == 'RN',
+            ShiftManage.config_version == config_version
         ).all()
+        print('\n\n\n\n\nshift_manages', shift_manages[0].config_version, '\n\n\n\n\n')
         day_req = eve_req = nig_req = 0
         if shift_manages:
             for sm in shift_manages:

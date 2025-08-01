@@ -92,6 +92,7 @@ class ShiftManage(Base):
     shift_slot = Column(INTEGER, nullable=False, primary_key=True)  # 슬롯 번호 (1, 2, 3...)
     main_code = Column(VARCHAR(10), nullable=True)  # 메인 근무코드 (하나만)
     codes = Column(JSON, nullable=True)  # 근무코드 리스트 ['D', 'E', 'N']
+    config_version = Column(VARCHAR(20), primary_key=True)
     manpower = Column(INTEGER, nullable=False, default=0)  # 인력 수
 
     office = relationship("Office")

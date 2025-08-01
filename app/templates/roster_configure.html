@@ -1218,8 +1218,26 @@
         // Load shift manage data for specific class
         async function loadShiftManage(className) {
             try {
-                const response = await fetch(`/shift-manage/${className}`);
+                // Get current config version
+                const configVersionSelect = document.getElementById('configVersion');
+                const configVersion = configVersionSelect ? configVersionSelect.value : null;
+                
+                // configVersion이 없으면 기본 슬롯만 표시
+                if (!configVersion) {
+                    const defaultSlots = [
+                        { shift_slot: 1, main_code: 'D', codes: [], manpower: 3 },
+                        { shift_slot: 2, main_code: 'E', codes: [], manpower: 3 },
+                        { shift_slot: 3, main_code: 'N', codes: [], manpower: 2 }
+                    ];
+                    shiftManageData[className] = defaultSlots;
+                    renderShiftSlots(defaultSlots);
+                    return;
+                }
+                
+                console.log(`Loading shift manage for class: ${className}, config_version: ${configVersion}`);
+                const response = await fetch(`/shift-manage/${className}?config_version=${configVersion}`);
                 const data = await response.json();
+                console.log('Shift manage data loaded:', data);
                 
                 shiftManageData[className] = data;
                 renderShiftSlots(data);
@@ -1532,7 +1550,16 @@
         // Save shift manage data
         async function saveShiftManage() {
             try {
-                const response = await fetch('/shift-manage/save', {
+                // Get current config version
+                const configVersionSelect = document.getElementById('configVersion');
+                const configVersion = configVersionSelect ? configVersionSelect.value : null;
+                
+                if (!configVersion) {
+                    alert('설정 버전을 먼저 선택해주세요.');
+                    return;
+                }
+                
+                const response = await fetch(`/shift-manage/save?config_version=${configVersion}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1585,6 +1612,9 @@
                 if (versions.length > 0) {
                     select.value = versions[0].config_version;
                     loadConfigByVersion(versions[0].config_version);
+                } else {
+                    // No versions available, load default shift manage data
+                    loadShiftManage(currentShiftClass);
                 }
                 
                 // Add change event listener
@@ -1610,6 +1640,8 @@
                 if (config) {
                     // Populate form fields with config data
                     populateConfigForm(config);
+                    // Reload shift manage data for the selected config version
+                    loadShiftManage(currentShiftClass);
                 }
             } catch (error) {
                 console.error('설정 로딩 실패:', error);

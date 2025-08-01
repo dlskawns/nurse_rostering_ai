@@ -1997,85 +1997,85 @@
             }
         }
 
-        async function displayIssuedRoster(year, month) {
-            const container = document.getElementById('roster-table-container');
-            container.innerHTML = '발행된 근무표 불러오는 중...';
-            try {
-                const response = await fetch(`/roster/${year}/${month}`);
-                if (!response.ok) throw new Error('발행된 근무표를 불러올 수 없습니다.');
-                const rosterData = await response.json();
+        // async function displayIssuedRoster(year, month) {
+        //     const container = document.getElementById('roster-table-container');
+        //     container.innerHTML = '발행된 근무표 불러오는 중...';
+        //     try {
+        //         const response = await fetch(`/roster/${year}/${month}`);
+        //         if (!response.ok) throw new Error('발행된 근무표를 불러올 수 없습니다.');
+        //         const rosterData = await response.json();
                 
-                // API 응답 데이터를 renderRosterTable에 맞는 형식으로 변환
-                if (rosterData.nurses) {
-                    editedRosterData = rosterData.nurses.map(nurse => ({
-                        name: nurse.name,
-                        experience: nurse.experience,
-                        schedule: nurse.schedule,
-                        nurse_id: nurse.id
-                    }));
-                    generatedRosterData = {
-                        year: rosterData.year,
-                        month: rosterData.month,
-                        schedule_id: rosterData.schedule_id,
-                        roster: editedRosterData,
-                        violations: rosterData.violations || []
-                    };
-                } else {
-                    editedRosterData = rosterData.roster || rosterData;
-                }
+        //         // API 응답 데이터를 renderRosterTable에 맞는 형식으로 변환
+        //         if (rosterData.nurses) {
+        //             editedRosterData = rosterData.nurses.map(nurse => ({
+        //                 name: nurse.name,
+        //                 experience: nurse.experience,
+        //                 schedule: nurse.schedule,
+        //                 nurse_id: nurse.id
+        //             }));
+        //             generatedRosterData = {
+        //                 year: rosterData.year,
+        //                 month: rosterData.month,
+        //                 schedule_id: rosterData.schedule_id,
+        //                 roster: editedRosterData,
+        //                 violations: rosterData.violations || []
+        //             };
+        //         } else {
+        //             editedRosterData = rosterData.roster || rosterData;
+        //         }
                 
-                // 히스토리 초기화
-                changeHistory = [];
-                historyIndex = -1;
+        //         // 히스토리 초기화
+        //         changeHistory = [];
+        //         historyIndex = -1;
                 
-                renderRosterTable(editedRosterData, year, month);
-                showEditingControls(true);
+        //         renderRosterTable(editedRosterData, year, month);
+        //         showEditingControls(true);
                 
-                // 발행된 근무표 위반사항 검증
-                try {
-                    container.innerHTML += '<p>위반사항 검증 중...</p>';
+        //         // 발행된 근무표 위반사항 검증
+        //         try {
+        //             container.innerHTML += '<p>위반사항 검증 중...</p>';
                     
-                    const validatePayload = {
-                        year: year,
-                        month: month,
-                        roster: editedRosterData,
-                        schedule_id: generatedRosterData.schedule_id,
-                    };
+        //             const validatePayload = {
+        //                 year: year,
+        //                 month: month,
+        //                 roster: editedRosterData,
+        //                 schedule_id: generatedRosterData.schedule_id,
+        //             };
 
-                    const validateResponse = await fetch('/roster/validate', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(validatePayload)
-                    });
+        //             const validateResponse = await fetch('/roster/validate', {
+        //                 method: 'POST',
+        //                 headers: {'Content-Type': 'application/json'},
+        //                 body: JSON.stringify(validatePayload)
+        //             });
 
-                    if (validateResponse.ok) {
-                        const validateResult = await validateResponse.json();
-                        console.log('발행된 근무표 위반사항 검증 결과:', validateResult.violations);
+        //             if (validateResponse.ok) {
+        //                 const validateResult = await validateResponse.json();
+        //                 console.log('발행된 근무표 위반사항 검증 결과:', validateResult.violations);
                         
-                        // 위반사항 표시
-                        updateViolationsDisplay(validateResult.violations || [], validateResult.detailed_violations || []);
+        //                 // 위반사항 표시
+        //                 updateViolationsDisplay(validateResult.violations || [], validateResult.detailed_violations || []);
                         
-                        // generatedRosterData에도 위반사항 정보 업데이트
-                        generatedRosterData.violations = validateResult.violations || [];
-                        generatedRosterData.detailed_violations = validateResult.detailed_violations || [];
-                    } else {
-                        console.warn('발행된 근무표 위반사항 검증에 실패했습니다.');
-                        updateViolationsDisplay(rosterData.violations || []);
-                    }
-                } catch (validateError) {
-                    console.error('발행된 근무표 위반사항 검증 중 오류:', validateError);
-                    updateViolationsDisplay(rosterData.violations || []);
-                }
+        //                 // generatedRosterData에도 위반사항 정보 업데이트
+        //                 generatedRosterData.violations = validateResult.violations || [];
+        //                 generatedRosterData.detailed_violations = validateResult.detailed_violations || [];
+        //             } else {
+        //                 console.warn('발행된 근무표 위반사항 검증에 실패했습니다.');
+        //                 updateViolationsDisplay(rosterData.violations || []);
+        //             }
+        //         } catch (validateError) {
+        //             console.error('발행된 근무표 위반사항 검증 중 오류:', validateError);
+        //             updateViolationsDisplay(rosterData.violations || []);
+        //         }
 
-                // 로딩 메시지 제거 후 최종 렌더링
-                renderRosterTable(editedRosterData, year, month);
+        //         // 로딩 메시지 제거 후 최종 렌더링
+        //         renderRosterTable(editedRosterData, year, month);
                 
-            } catch (error) {
-                console.error(error);
-                container.innerHTML = `<p style="color: red;">${error.message}</p>`;
-                showEditingControls(false);
-            }
-        }
+        //     } catch (error) {
+        //         console.error(error);
+        //         container.innerHTML = `<p style="color: red;">${error.message}</p>`;
+        //         showEditingControls(false);
+        //     }
+        // }
 
         async function updateNurseStatusDisplay(year, month) {
             const grid = document.getElementById('nurse-card-grid');

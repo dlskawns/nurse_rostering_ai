@@ -270,8 +270,8 @@ async def get_roster_by_schedule_id(
     
     # Get schedule entries
     entries = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule_id).all()
-    for e in entries:
-        print(e.entry_id, e.nurse_id, e.work_date, e.shift_id)
+    # for e in entries:
+        # print(e.entry_id, e.nurse_id, e.work_date, e.shift_id)
     roster_data = {
         "year": schedule.year, 
         "month": schedule.month,
@@ -717,7 +717,8 @@ async def validate_roster(
     roster      = roster_data.get('roster')
     schedule_id = roster_data.get('schedule_id')
     config_id = db.query(Schedule).filter(Schedule.schedule_id == schedule_id).first().config_id
-    print('\n\n\n\n\n\n\nconfig_id', config_id, '\n\n\n\n\n\n\n')
+    config_version = db.query(RosterConfigModel).filter(RosterConfigModel.config_id == config_id).first().config_version
+    # print('\n\n\n\n\n\n\nconfig_id', config_id, '\n\n\n\n\n\n\n')
     if not all([year, month, roster]):
         raise HTTPException(
             status_code=400,
@@ -732,15 +733,32 @@ async def validate_roster(
         #
         from db.models import ShiftManage, Nurse, RosterConfig  # local import
 
+        # config_version을 가져오기 위해 config_id로 RosterConfig 조회
+        if config_id:
+            config_for_version = db.query(RosterConfig).filter(
+                RosterConfig.config_id == config_id
+            ).first()
+            config_version = config_for_version.config_version if config_for_version else None
+        else:
+            # config_id가 없는 경우 최신 config의 version 사용
+            latest_config_for_version = db.query(RosterConfig).filter(
+                RosterConfig.group_id == current_user.group_id
+            ).order_by(RosterConfig.created_at.desc()).first()
+            config_version = latest_config_for_version.config_version if latest_config_for_version else None
+        
+        if not config_version:
+            return {"violations": ["설정 버전을 찾을 수 없습니다."]}
+            
         # ○ 현 수간호사의 부서 기준으로 조회
         shift_rows = db.query(ShiftManage).filter(
             ShiftManage.office_id == current_user.office_id,
-            ShiftManage.group_id  == current_user.group_id
+            ShiftManage.group_id  == current_user.group_id,
+            ShiftManage.config_version == config_version
         ).all()
 
         #    예) { 'D': 'D', 'D1': 'D', 'MD': 'D',  'E': 'E', … }
         alias_map: dict[str, str] = {}
-        print('\n\n\n\n\n\n\nshift_rows', [i.main_code for i in shift_rows], '\n\n\n\n\n\n\n')
+        # print('\n\n\n\n\n\n\nshift_rows', [i.main_code for i in shift_rows], '\n\n\n\n\n\n\n')
         for row in shift_rows:
             if not row.main_code:
                 continue

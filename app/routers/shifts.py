@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from db.client import get_db
-from db.models import Shift, Nurse, ScheduleEntry, ShiftManage
+from db.models import Shift, Nurse, ScheduleEntry, ShiftManage, RosterConfig
 from schemas.auth_schema import User as UserSchema
 from routers.auth import get_current_user_from_cookie
 from schemas.roster_schema import ShiftAddRequest, RemoveShiftRequest, MoveShiftRequest, ShiftManageSaveRequest
@@ -14,7 +14,7 @@ from services.shift_service import (
     remove_shift_service,
     move_shift_service
 )
-
+from typing import Optional
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
@@ -96,6 +96,7 @@ async def move_shift(
 @router.get("/shift-manage/{class_name}")
 async def get_shift_manage(
     class_name: str,
+    config_version: Optional[str] = None,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
@@ -107,11 +108,22 @@ async def get_shift_manage(
     if not nurse or not nurse.group:
         raise HTTPException(status_code=404, detail="User group information not found")
     
+    # config_version이 없으면 최신 config의 version 사용
+    if not config_version:
+        latest_config = db.query(RosterConfig).filter(
+            RosterConfig.group_id == current_user.group_id
+        ).order_by(RosterConfig.created_at.desc()).first()
+        config_version = latest_config.config_version if latest_config else None
+    
+    if not config_version:
+        raise HTTPException(status_code=404, detail="설정 버전을 찾을 수 없습니다.")
+    
     # 해당 클래스의 shift_manage 데이터 조회
     shift_manages = db.query(ShiftManage).filter(
         ShiftManage.office_id == nurse.group.office_id,
         ShiftManage.group_id == current_user.group_id,
-        ShiftManage.nurse_class == class_name
+        ShiftManage.nurse_class == class_name,
+        ShiftManage.config_version == config_version
     ).order_by(ShiftManage.shift_slot.asc()).all()
     
     # 데이터가 없으면 기본 슬롯 생성
@@ -131,7 +143,8 @@ async def get_shift_manage(
                 shift_slot=slot_data["shift_slot"],
                 main_code=slot_data["main_code"],
                 codes=slot_data["codes"],
-                manpower=slot_data["manpower"]
+                manpower=slot_data["manpower"],
+                config_version=config_version
             )
             db.add(shift_manage)
         
@@ -141,7 +154,8 @@ async def get_shift_manage(
         shift_manages = db.query(ShiftManage).filter(
             ShiftManage.office_id == nurse.group.office_id,
             ShiftManage.group_id == current_user.group_id,
-            ShiftManage.nurse_class == class_name
+            ShiftManage.nurse_class == class_name,
+            ShiftManage.config_version == config_version
         ).order_by(ShiftManage.shift_slot.asc()).all()
     
     return [
@@ -158,6 +172,7 @@ async def get_shift_manage(
 @router.post("/shift-manage/save")
 async def save_shift_manage(
     req: ShiftManageSaveRequest,
+    config_version: Optional[str] = None,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
@@ -169,11 +184,22 @@ async def save_shift_manage(
     if not nurse or not nurse.group:
         raise HTTPException(status_code=404, detail="User group information not found")
     
+    # config_version이 없으면 최신 config의 version 사용
+    if not config_version:
+        latest_config = db.query(RosterConfig).filter(
+            RosterConfig.group_id == current_user.group_id
+        ).order_by(RosterConfig.created_at.desc()).first()
+        config_version = latest_config.config_version if latest_config else None
+    
+    if not config_version:
+        raise HTTPException(status_code=404, detail="설정 버전을 찾을 수 없습니다.")
+    
     # 기존 데이터 삭제 (특정 클래스의 모든 슬롯)
     db.query(ShiftManage).filter(
         ShiftManage.office_id == nurse.group.office_id,
         ShiftManage.group_id == current_user.group_id,
-        ShiftManage.nurse_class == req.class_name
+        ShiftManage.nurse_class == req.class_name,
+        ShiftManage.config_version == config_version
     ).delete()
     
     # 새 데이터 저장
@@ -185,7 +211,8 @@ async def save_shift_manage(
             shift_slot=slot_data["shift_slot"],
             main_code=slot_data.get("main_code"),
             codes=slot_data["codes"],
-            manpower=slot_data["manpower"]
+            manpower=slot_data["manpower"],
+            config_version=config_version
         )
         db.add(shift_manage)
     
