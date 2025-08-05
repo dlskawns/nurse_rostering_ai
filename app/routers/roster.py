@@ -115,6 +115,12 @@ async def roster_view_page(request: Request, user: User = Depends(get_current_us
         return templates.TemplateResponse("unauthorized.html", {"request": request}, status_code=403)
     return templates.TemplateResponse("roster_view.html", {"request": request, "user": user})
 
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request, user: User = Depends(get_current_user_from_cookie)):
+    if not user or not user.is_head_nurse:
+        return templates.TemplateResponse("unauthorized.html", {"request": request}, status_code=403)
+    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
+
 @router.post("/roster/config/save")
 async def save_roster_config(
     config_data: RosterConfigCreate,
@@ -546,17 +552,19 @@ async def save_roster(
 
     year = roster_data.get('year')
     month = roster_data.get('month')
+    schedule_id = roster_data.get('schedule_id')
     roster = roster_data.get('roster')
     
-    if not all([year, month, roster]):
-        raise HTTPException(status_code=400, detail="Missing required fields: year, month, roster")
+    if not all([year, month, schedule_id, roster]):
+        raise HTTPException(status_code=400, detail="Missing required fields: year, month, schedule_id, roster")
 
     # Get the latest schedule for the month
     schedule = db.query(Schedule).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.year == year,
-        Schedule.month == month
-    ).order_by(Schedule.version.desc()).first()
+        Schedule.month == month,
+        Schedule.schedule_id == schedule_id
+    ).order_by(Schedule.schedule_id.desc()).first()
     
     if not schedule:
         raise HTTPException(status_code=404, detail="No schedule found for this month")
