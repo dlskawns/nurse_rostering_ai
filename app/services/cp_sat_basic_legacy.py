@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta
-import time
+import time, os
 import numpy as np
 from typing import List, Dict, Optional, Tuple
 from db.roster_config import NurseRosterConfig
@@ -81,6 +81,20 @@ class CPSATBasicEngine:
             pair_preference_weight=3.0
         )
     
+    def create_shift_manage_from_db(self, shift_manage_data: List[dict]):
+        shift_manage = []
+        for row in shift_manage_data:
+            shift_dict = {
+                'office_id': row['office_id'],
+                'group_id': row['group_id'],
+                'nurse_class': row['nurse_class'],
+                'shift_slot': row['shift_slot'],
+                'main_code': row['main_code'],
+                'codes': row['codes'],
+            }
+            shift_manage.append(ShiftManage(**shift_dict))
+        return shift_manage
+
     def create_nurses_from_db(self, nurses_data: List[dict]) -> List[Nurse]:
         """DB에서 가져온 간호사 데이터를 Nurse 객체 리스트로 변환"""
         nurses = []
@@ -169,6 +183,7 @@ class CPSATBasicEngine:
         config_data: dict,
         year: int, 
         month: int,
+        grouped: List[dict],
         time_limit_seconds: int = 60
     ) -> Dict[str, List[str]]:
         """
@@ -204,6 +219,14 @@ class CPSATBasicEngine:
         # 4. 근무표 시스템 생성
         with Timer("근무표 시스템 초기화"):
             roster_system = RosterSystem(nurses, target_month, config)
+            
+            # 고정된 셀 정보 처리
+            fixed_cells = config_data.get('fixed_cells', [])
+            if fixed_cells:
+                print(f"{self.logger_prefix} 고정된 셀 {len(fixed_cells)}개 처리 중...")
+                roster_system.fixed_cells = fixed_cells
+                for fixed_cell in fixed_cells:
+                    print(f"{self.logger_prefix} 고정 셀: 간호사 {fixed_cell['nurse_index']}, 날짜 {fixed_cell['day_index']+1}, 근무 {fixed_cell['shift']}")
         
         # 5. 선호도 데이터 파싱 및 적용
         with Timer("선호도 데이터 파싱"):
@@ -242,7 +265,7 @@ class CPSATBasicEngine:
         # 9. CP-SAT으로 최적화 (새로운 제약사항 포함)
         with Timer("CP-SAT으로 최적화"):
             print(f"{self.logger_prefix} CP-SAT 최적화 시작 (시간 제한: {time_limit_seconds}초)...")
-            success = self._optimize_with_enhanced_constraints(roster_system, time_limit_seconds, nurses)
+            success = self._optimize_with_enhanced_constraints(roster_system, time_limit_seconds, nurses, grouped)
             
             if not success:
                 print(f"{self.logger_prefix} 개선된 제약사항으로 실패, 기본 알고리즘으로 폴백...")
@@ -252,502 +275,295 @@ class CPSATBasicEngine:
         with Timer("결과 변환"):
             result = self._convert_result_to_db_format(roster_system, nurses)
         
-        # 11. 최적화 결과 출력
-        self._print_optimization_results(roster_system)
+        # 11. 최적화 결과 출력 및 만족도 데이터 수집
+        satisfaction_data = self._print_optimization_results(roster_system)
+        
+        # 12. 대시보드 분석 데이터 저장 (스케줄 생성 후)
+        try:
+            from services.dashboard_service import save_roster_analytics
+            # 스케줄 ID는 roster_create_service에서 생성된 후 전달받아야 함
+            # 여기서는 임시로 None을 전달하고, 실제 저장은 roster_create_service에서 처리
+            print(f"{self.logger_prefix} 대시보드 분석 데이터 저장 준비 완료")
+        except ImportError:
+            print(f"{self.logger_prefix} 대시보드 서비스를 찾을 수 없습니다.")
         
         print(f"{self.logger_prefix} 근무표 생성 완료")
-        return result
+        return {
+            "roster": result,
+            "satisfaction_data": satisfaction_data,
+            "roster_system": roster_system
+        }
     
-    def _optimize_with_enhanced_constraints(self, roster_system: RosterSystem, time_limit_seconds: int, nurses) -> bool:
-        """법규 제약사항과 병원 내규를 포함한 CP-SAT 최적화"""
-        try:
-            from ortools.sat.python import cp_model
-        except ImportError:
-            print("OR-Tools를 찾을 수 없습니다.")
-            return False
-
-
-        """입사일·법규·내규를 모두 반영한 CP‑SAT 최적화"""
-        from datetime import date
+    # ---------------- cp_sat_basic.py ----------------
+  # =================================================================
+    # 1.  _optimize_with_enhanced_constraints  (엔진 클래스 내부에 교체)
+    # =================================================================
+    def _optimize_with_enhanced_constraints(
+        self,
+        roster_system: 'RosterSystem',
+        time_limit_seconds: int,
+        nurses,
+        grouped=None
+    ) -> bool:
+        """
+        입사·퇴사일, 법규(하드), 병원 내규(소프트) 전부 반영한 CP-SAT 최적화.
+        성공 시 roster_system.roster 갱신 후 True 반환.
+        """
         from ortools.sat.python import cp_model
+        from datetime import date
         import time
-        start_time = time.time()
-        model = cp_model.CpModel()
-        # ───── 0. 사전 계산 ─────────────────────────────────────────────
-        N = len(roster_system.nurses)
-        D = roster_system.num_days
-        S = roster_system.config.num_shifts
 
-        first_day: date = roster_system.target_month          # 해당 월 1일
-        join_idx:  list[int] = []    # 입사일부터 근무
-        leave_idx: list[int] = []    # 퇴사전날까지 근무
-        for nurse in roster_system.nurses:
-            if nurse.joining_date:
-                idx = (nurse.joining_date - first_day).days
-                join_idx.append(max(idx, 0))                  # 음수(기존 입사) → 0
-            else:
-                join_idx.append(0)
-            # ─ leave ─
-            if nurse.resignation_date:
-                delta = (nurse.resignation_date - first_day).days
-                # Δ < 0 👉 이미 퇴사 → 이번 달엔 근무 X
-                leave_idx.append(min(delta, roster_system.num_days - 1))
-            else:
-                leave_idx.append(roster_system.num_days - 1)
+        start_t = time.time()
+        cfg      = roster_system.config
+        N, D, S  = len(roster_system.nurses), roster_system.num_days, cfg.num_shifts
+        firstDay = roster_system.target_month            # 해당 월 1일
 
+        # ───────────────────────────────────────────── join/leave index
+        join_idx, leave_idx = [], []
+        for n in roster_system.nurses:
+            join_idx.append(max((n.joining_date  - firstDay).days, 0)
+                            if n.joining_date else 0)
+            leave_idx.append(min((n.resignation_date - firstDay).days, D-1)
+                             if n.resignation_date else D-1)
 
-        # ───── 1. 변수 정의  x[n,d,s] ∈ {0,1} ──────────────────────────
-        x: dict[tuple[int, int, int], cp_model.IntVar] = {}
+        # ───────────────────────────────────────────── fixed cells
+        shift_code_to_main = {c: r['main_code']
+                              for r in (grouped or [])
+                              for c in r.get('codes', [])}
+        fixed  : Dict[Tuple[int, int], int] = {}
+        fixed_cnt = [[0]*S for _ in range(D)]
+        if getattr(roster_system, 'fixed_cells', None):
+            for cell in roster_system.fixed_cells:
+                n, d, code = cell['nurse_index'], cell['day_index'], cell['shift']
+                main = shift_code_to_main.get(code, code)
+                if main not in cfg.shift_types:              # 미등록 시 건너뛰기
+                    continue
+                s = cfg.shift_types.index(main)
+                fixed[(n, d)]     = s
+                fixed_cnt[d][s]  += 1
+
+        # ───────────────────────────────────────────── CP-SAT Model
+        m  = cp_model.CpModel()
+        x  = {}                                             # (n,d,s) → BoolVar
         for n in range(N):
-            for d in range(join_idx[n], leave_idx[n] + 1):                   # 입사 전 날짜 skip
+            for d in range(join_idx[n], leave_idx[n]+1):
                 for s in range(S):
-                    x[n, d, s] = model.NewBoolVar(f'n{n}_d{d}_s{s}')
+                    x[n, d, s] = m.NewBoolVar(f'x_{n}_{d}_{s}')
 
-        def X(n: int, d: int, s: int):
-            """존재하지 않는 인덱스 → 0 반환"""
-            return x.get((n, d, s), 0)
+        # helper
+        def X(n, d, s): return x.get((n, d, s), 0)
 
+        # 2-A) 고정 셀
+        for (n, d), s_fix in fixed.items():
+            m.Add(X(n, d, s_fix) == 1)
+            for s in range(S):
+                if s != s_fix:
+                    m.Add(X(n, d, s) == 0)
 
-        # ───── 2. 기본 제약 ────────────────────────────────────────────
-        # (1) exactly‑one
+        # 2-B) exactly-one
         for n in range(N):
-            for d in range(join_idx[n], leave_idx[n] + 1):
-                model.AddExactlyOne(X(n, d, s) for s in range(S))
+            for d in range(join_idx[n], leave_idx[n]+1):
+                if (n, d) in fixed:   # 이미 지정됨
+                    continue
+                m.AddExactlyOne(X(n, d, s) for s in range(S))
 
-        # (2) 일별 인원 충족
+        # 2-C) 일별 인원
         for d in range(D):
-            for shift_code, req in roster_system.config.daily_shift_requirements.items():
-                s = roster_system.config.shift_types.index(shift_code)
-                model.Add(
-                    sum(X(n, d, s)
-                        for n in range(N)
-                        if join_idx[n] <= d <= leave_idx[n])       # ★
-                    >= req
-                )
+            for sh, req in cfg.daily_shift_requirements.items():
+                s = cfg.shift_types.index(sh)
+                need = req - fixed_cnt[d][s]
+                if need <= 0:
+                    continue
+                m.Add(sum(X(n, d, s)
+                          for n in range(N)
+                          if join_idx[n] <= d <= leave_idx[n]
+                          and (n, d) not in fixed) >= need)
 
-        # ───── 3. 법규 하드 제약 ──────────────────────────────────────
-        night = roster_system.config.shift_types.index('N')
-        day   = roster_system.config.shift_types.index('D')
-        eve   = roster_system.config.shift_types.index('E')
-        off   = roster_system.config.shift_types.index('OFF')
+        # 3) 법규 하드 제약
+        night, day, eve, off = (cfg.shift_types.index(x)
+                                for x in ('N', 'D', 'E', 'OFF'))
 
-        # (3‑1) 최대 연속 근무 K+1‑윈도우에 OFF ≥1
-        K = roster_system.config.max_consecutive_work_days
+        # 최대 연속 근무 (K+1 창에 OFF ≥1)
+        K = cfg.max_consecutive_work_days
         for n in range(N):
-            for start_d in range(join_idx[n], leave_idx[n] - K + 1):
-                model.Add(
-                    sum(X(n, start_d + t, off)
-                        for t in range(K + 1)
-                        if start_d + t <= leave_idx[n]) >= 1
-                )
+            for s_d in range(join_idx[n], leave_idx[n]-K+1):
+                m.Add(sum(X(n, s_d+t, off)
+                          for t in range(K+1)
+                          if s_d+t <= leave_idx[n]) >= 1)
 
-        # (3‑2) E→D 금지
-        if getattr(roster_system.config, 'banned_day_after_eve', False):
+        # E→D, N→D 금지
+        if cfg.banned_day_after_eve:
             for n in range(N):
-                for d in range(max(1, join_idx[n]), leave_idx[n] + 1):
-                    model.Add(X(n, d, day) + X(n, d - 1, eve) <= 1)
-
-        # (3‑3) N→D 금지
+                for d in range(join_idx[n]+1, leave_idx[n]+1):
+                    m.Add(X(n, d, day) + X(n, d-1, eve) <= 1)
         for n in range(N):
-            for d in range(max(1, join_idx[n]), leave_idx[n] + 1):
-                model.Add(X(n, d, day) + X(n, d - 1, night) <= 1)
-                
-        # (3‑7) Night 전담 간호사는 Day(D)‧Evening(E) 근무 금지
+            for d in range(join_idx[n]+1, leave_idx[n]+1):
+                m.Add(X(n, d, day) + X(n, d-1, night) <= 1)
+
+        # night only nurse
         for n, nurse in enumerate(roster_system.nurses):
-            if nurse.is_night_nurse:                       # ★ night 전담 여부
-                for d in range(join_idx[n], leave_idx[n] + 1):
-                    # print(f'n: {n}, d: {d}, day: {X(n, d, day)}, eve: {X(n, d, eve)}')
-                    model.Add(X(n, d, day) == 0)           # D 배정 불가
-                    model.Add(X(n, d, eve) == 0)           # E 배정 불가
+            if nurse.is_night_nurse:
+                for d in range(join_idx[n], leave_idx[n]+1):
+                    m.Add(X(n, d, day) == 0)
+                    m.Add(X(n, d, eve) == 0)
 
-        # (3‑4) 최대 연속 야간
-        L = roster_system.config.max_consecutive_nights
+        # 최대 연속 야간
+        L = cfg.max_consecutive_nights
         for n in range(N):
-            for start_d in range(join_idx[n], leave_idx[n] - L + 1):
-                model.Add(
-                    sum(X(n, start_d + t, night)
-                        for t in range(L + 1)
-                        if start_d + t <= leave_idx[n]) <= L
-                )
+            for s_d in range(join_idx[n], leave_idx[n]-L):
+                m.Add(sum(X(n, s_d+t, night)
+                          for t in range(L+1)
+                          if s_d+t <= leave_idx[n]) <= L)
 
-        # (3‑5) 월 야간 근무 수
-        max_N_month = roster_system.config.max_night_shifts_per_month
+        # 월 야간 총량
         for n in range(N):
-            model.Add(
-                sum(X(n, d, night) for d in range(join_idx[n], leave_idx[n] + 1))
-                <= max_N_month
-            )
+            m.Add(sum(X(n, d, night)
+                      for d in range(join_idx[n], leave_idx[n]+1))
+                  <= cfg.max_night_shifts_per_month)
 
-        # (3‑6) N연속→OFF 법규
-        if getattr(roster_system.config, 'two_offs_after_three_nig', False):
+        # (N N N) 뒤 OFF×2, (N N) 뒤 OFF×2
+        if cfg.two_offs_after_three_nig:
             for n in range(N):
-                for d in range(join_idx[n] + 2, leave_idx[n] - 1):
-                    threeN = X(n, d - 2, night) + X(n, d - 1, night) + X(n, d, night)
-                    twoOff = X(n, d + 1, off)   + X(n, d + 2, off)
-                    model.Add(twoOff >= 2 * (threeN - 2))
-
-        if getattr(roster_system.config, 'two_offs_after_two_nig', False):
+                for d in range(join_idx[n]+2, leave_idx[n]-1):
+                    threeN = X(n,d-2,night)+X(n,d-1,night)+X(n,d,night)
+                    off2   = X(n,d+1,off)+X(n,d+2,off)
+                    m.Add(off2 >= 2*(threeN-2))
+        if cfg.two_offs_after_two_nig:
             for n in range(N):
-                for d in range(join_idx[n] + 1, leave_idx[n] - 1):
-                    twoN  = X(n, d - 1, night) + X(n, d, night)
-                    twoOff = X(n, d + 1, off)  + X(n, d + 2, off)
-                    model.Add(twoOff >= 2 * (twoN - 1))
+                for d in range(join_idx[n]+1, leave_idx[n]-1):
+                    twoN = X(n,d-1,night)+X(n,d,night)
+                    off2 = X(n,d+1,off)+X(n,d+2,off)
+                    m.Add(off2 >= 2*(twoN-1))
 
-        # ───── 4. 병원 내규 (Soft) ───────────────────────────────────
-        penalty_vars = []
+        # 4) 병원 내규 (soft → 패널티 변수)
+        pen = []
 
-        # (4‑1) 경력자 부족 ────────────────────────────────────────
-        exp_short_vars = []
-        min_exp  = roster_system.config.min_experience_per_shift
-        need_exp = roster_system.config.required_experienced_nurses
-
+        # 4-1 경력자 부족
+        min_exp, need_exp = cfg.min_experience_per_shift, cfg.required_experienced_nurses
         for d in range(D):
-            for shift_code in ('D', 'E', 'N'):
-                s = roster_system.config.shift_types.index(shift_code)
-
-                # d 가 각 간호사의 근무 기간 안에 있을 때만 카운트
+            for sh in ('D','E','N'):
+                s = cfg.shift_types.index(sh)
                 exp_assigned = sum(
-                    X(n, d, s)
-                    for n, nurse in enumerate(roster_system.nurses)
-                    if (join_idx[n] <= d <= leave_idx[n])                # ★ NEW
-                    and nurse.experience_years >= min_exp
-                )
+                    X(n,d,s) for n,p in enumerate(roster_system.nurses)
+                    if p.experience_years >= min_exp and join_idx[n]<=d<=leave_idx[n])
+                short = m.NewIntVar(0, need_exp, f'exp_short_{d}_{sh}')
+                m.Add(short >= need_exp - exp_assigned)
+                pen.append(100*short)
 
-                shortage = model.NewIntVar(
-                    0, need_exp, f'expShort_d{d}_s{shift_code}'
-                )
-                model.Add(shortage >= need_exp - exp_assigned)
-                exp_short_vars.append(shortage)
-
-        # (4‑2) 주 2OFF ───────────────────────────────────────────
-        weekly_short = []
-        if getattr(roster_system.config, 'enforce_two_offs_per_week', False):
-            weeks = D // 7
+        # 4-2 주당 2OFF
+        if cfg.enforce_two_offs_per_week:
             for n in range(N):
-                for w in range(weeks):
-                    w_start, w_end = w * 7, min(w * 7 + 7, D)
-
-                    # 해당 주가 간호사의 근무 기간과 겹치지 않으면 skip
-                    if w_end   <= join_idx[n] or w_start > leave_idx[n]:
+                for w in range(D//7):
+                    w0, w1 = w*7, min(w*7+7, D)
+                    if w1   <= join_idx[n] or w0 > leave_idx[n]:
                         continue
+                    offs = sum(X(n,d,off) for d in range(max(w0,join_idx[n]),
+                                                         min(w1,leave_idx[n]+1)))
+                    lack = m.NewIntVar(0,2,f'week_off_{n}_{w}')
+                    m.Add(lack >= 2 - offs)
+                    pen.append(500*lack)
 
-                    offs = sum(
-                        X(n, d, off)
-                        for d in range(max(w_start, join_idx[n]),
-                                    min(w_end,   leave_idx[n] + 1))    # ★ NEW
-                    )
-
-                    short = model.NewIntVar(0, 2, f'weekOffShort_n{n}_w{w}')
-                    model.Add(short >= 2 - offs)
-                    weekly_short.append(short)
-
-        # (4‑3) 야간 균등 ─────────────────────────────────────────
-        night_dev = []
-        if getattr(roster_system.config, 'even_nights', False):
-            non_night = [
-                i for i, nurse in enumerate(roster_system.nurses)
-                if not nurse.is_night_nurse
-            ]
-            if len(non_night) > 1:
-                total_N_req = sum(
-                    roster_system.config.daily_shift_requirements.get('N', 2)
-                    for d in range(D)
-                )
-                target = total_N_req // len(non_night)
-
+        # 4-3 N 균등
+        if cfg.even_nights:
+            non_night = [i for i,p in enumerate(roster_system.nurses) if not p.is_night_nurse]
+            if len(non_night)>1:
+                totalN = sum(cfg.daily_shift_requirements.get('N',2) for _ in range(D))
+                target = totalN//len(non_night)
                 for n in non_night:
-                    totN = sum(
-                        X(n, d, night)
-                        for d in range(join_idx[n], leave_idx[n] + 1)     # ★ NEW
-                    )
-                    pos = model.NewIntVar(0, D, f'Npos_n{n}')
-                    neg = model.NewIntVar(0, D, f'Nneg_n{n}')
-                    model.Add(pos - neg == totN - target)
-                    night_dev.extend([pos, neg])
-        # (4‑4) N → O → D/E 패턴 패널티  (‑100점)
-        no_de_pattern = []            # 패널티 변수 모음
+                    tot = sum(X(n,d,night) for d in range(join_idx[n], leave_idx[n]+1))
+                    pos = m.NewIntVar(0,D,f'posN_{n}')
+                    neg = m.NewIntVar(0,D,f'negN_{n}')
+                    m.Add(pos-neg == tot-target)
+                    pen.extend([50*pos, 50*neg])
 
+        # 4-4 N-O-D/E 패턴, 4-5 고립 OFF
         for n in range(N):
-            # 패턴 길이가 3일이므로 leave‑2 까지만 검사
-            for d in range(join_idx[n], max(join_idx[n], leave_idx[n] - 1) - 1):
-                # (i) N‑O‑D
-                pat_NOD = model.NewIntVar(0, 1, f'NOD_n{n}_d{d}')
-                model.Add(pat_NOD >=
-                        X(n, d,     night) +     # N
-                        X(n, d + 1, off)   +     # O
-                        X(n, d + 2, day)   - 2)  # D
-                no_de_pattern.append(pat_NOD)
+            for d in range(join_idx[n]+2, leave_idx[n]-1):
+                nod = m.NewIntVar(0,1,f'nod_{n}_{d}')
+                noe = m.NewIntVar(0,1,f'noe_{n}_{d}')
+                m.Add(nod >= X(n,d-2,night)+X(n,d-1,off)+X(n,d,day)-2)
+                m.Add(noe >= X(n,d-2,night)+X(n,d-1,off)+X(n,d,eve)-2)
+                pen.extend([100*nod,100*noe])
+            for d in range(join_idx[n], leave_idx[n]+1):
+                iso = m.NewIntVar(0,1,f'iso_{n}_{d}')
+                m.Add(iso >= X(n,d,off)-X(n,d-1,off)-X(n,d+1,off))
+                m.Add(iso <= X(n,d,off))
+                pen.append(100*iso)
 
-                # (ii) N‑O‑E
-                pat_NOE = model.NewIntVar(0, 1, f'NOE_n{n}_d{d}')
-                model.Add(pat_NOE >=
-                        X(n, d,     night) +     # N
-                        X(n, d + 1, off)   +     # O
-                        X(n, d + 2, eve)   - 2)  # E
-                no_de_pattern.append(pat_NOE)
-        # (4‑5) OFF 클러스터 – ‘O’가 양쪽 모두 근무(D/E/N)인 경우 패널티 100
-        iso_off_vars = []
-
-        for n in range(N):
-            for d in range(join_idx[n], leave_idx[n] + 1):
-                iso = model.NewIntVar(0, 1, f'isoOff_n{n}_d{d}')
-
-                # iso == 1  ⇔  [d]가 OFF 이고 [d‑1], [d+1] 이 모두 OFF 가 아님
-                model.Add(iso >= X(n, d, off) - X(n, d - 1, off) - X(n, d + 1, off))
-                model.Add(iso <= X(n, d, off))           # OFF 가 아니면 iso = 0
-                model.Add(iso <= 1 - X(n, d - 1, off))   # 앞날 OFF 면 iso = 0
-                model.Add(iso <= 1 - X(n, d + 1, off))   # 뒷날 OFF 면 iso = 0
-
-
-                iso_off_vars.append(iso)
-        # ───── 5. 목적함수 ────────────────────────────────────────────
+        # 5) 목적함수 = 선호 점수 – 패널티
         obj = []
-
-        # 선호도
         for n in range(N):
-            for d in range(join_idx[n], leave_idx[n] + 1):
+            for d in range(join_idx[n], leave_idx[n]+1):
                 for s in range(S):
-                    score = int(roster_system.preference_matrix[n, d, s] * 100)
-                    obj.append(score * X(n, d, s))
+                    score = int(roster_system.preference_matrix[n,d,s]*100)
+                    obj.append(score * X(n,d,s))
+        obj.extend(-v for v in pen)
+        m.Maximize(sum(obj))
 
-        # 패널티
-        obj.extend(-100 * v for v in exp_short_vars)
-        obj.extend(-500 * v for v in weekly_short)
-        obj.extend( -50 * v for v in night_dev)
-        obj.extend(-100 * v for v in no_de_pattern)   # ★ 추가
-        obj.extend(-100 * v for v in iso_off_vars)   # ★ 추가
-        model.Maximize(sum(obj))
+        # 6) 힌트 주입 + Solver 실행
+        greedy = _seed_schedule(roster_system.preference_matrix,
+                                cfg.daily_shift_requirements,
+                                cfg.shift_types, fixed)
+        for n in range(N):
+            for d in range(D):
+                var = x.get((n, d, greedy[n, d]), None)
+                if var is not None:
+                    m.AddHint(var, 1)
 
-        # ───── 6. Solve ──────────────────────────────────────────────
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = time_limit_seconds
-        solver.parameters.num_search_workers  = 8
-        solver.parameters.log_search_progress = True
+        solver.parameters.num_search_workers  = min(2, os.cpu_count())
+        print('파라미터', solver.parameters.num_search_workers)
+        solver.parameters.relative_gap_limit  = 0.05
+        start = time.time()
+        status = solver.Solve(m)
 
-        status = solver.Solve(model)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            print("❌ 해를 찾지 못했습니다.")
+            print("❌   solve failed")
             return False
-        # ───── 7. 결과 반영 ──────────────────────────────────────────
+        print('소요시간:', time.time()-start)
+        # 7) 결과 반영
         roster_system.roster.fill(0)
         for n in range(N):
-            for d in range(join_idx[n], leave_idx[n] + 1):
+            for d in range(join_idx[n], leave_idx[n]+1):
                 for s in range(S):
-                    if solver.Value(X(n, d, s)):
-                        roster_system.roster[n, d, s] = 1
+                    if solver.Value(X(n,d,s)):
+                        roster_system.roster[n,d,s] = 1
 
-        print(
-            f"✅ 완료 – {time.time()-start_time:.1f}s, "
-            f"obj {solver.ObjectiveValue():.0f}"
-        )
+        print(f"✅  OK – {time.time()-start_t:.2f}s  obj={solver.ObjectiveValue():.0f}")
         return True
 
-        # # 변수 정의: x[nurse, day, shift] = 1 if nurse is assigned to shift on day
-        # x = {}
-        # for n_idx in range(len(roster_system.nurses)):
-        #     for day in range(roster_system.num_days):
-        #         for s_idx in range(roster_system.config.num_shifts):
-        #             x[n_idx, day, s_idx] = model.NewBoolVar(f'n{n_idx}_d{day}_s{s_idx}')
-
-        # # ============ 기본 제약사항 ============
-        
-        # # 1. 각 간호사는 하루에 정확히 하나의 근무만 배정
-        # for n_idx in range(len(roster_system.nurses)):
-        #     for day in range(roster_system.num_days):
-        #         model.AddExactlyOne(x[n_idx, day, s_idx] for s_idx in range(roster_system.config.num_shifts))
-
-        # # 2. 일일 교대별 인원 요구사항 (하드 제약)
-        # for day in range(roster_system.num_days):
-        #     for shift, required in roster_system.config.daily_shift_requirements.items():
-        #         s_idx = roster_system.config.shift_types.index(shift)
-        #         model.Add(sum(x[n_idx, day, s_idx] for n_idx in range(len(roster_system.nurses))) >= required)
-
-        # # ============ 법규 제약사항 (Hard Constraints) ============
-        
-        # night_idx = roster_system.config.shift_types.index('N')
-        # day_idx = roster_system.config.shift_types.index('D')
-        # eve_idx = roster_system.config.shift_types.index('E')
-        # off_idx = roster_system.config.shift_types.index('OFF')
-        
-        # # 3. 최대 연속 근무일 수 제한
-        # max_work = roster_system.config.max_consecutive_work_days
-        # for n_idx in range(len(roster_system.nurses)):
-        #     for start_day in range(roster_system.num_days - max_work):
-        #         # 연속된 (max_work + 1)일 중 적어도 1일은 반드시 휴무여야 함
-        #         off_days_in_window = []
-        #         for d in range(max_work + 1):
-        #             if start_day + d < roster_system.num_days:
-        #                 off_days_in_window.append(x[n_idx, start_day + d, off_idx])
-                
-        #         if off_days_in_window:
-        #             model.Add(sum(off_days_in_window) >= 1)
-
-        # # 4. E → D 근무 금지 (법규)
-        # if hasattr(roster_system.config, 'banned_day_after_eve') and roster_system.config.banned_day_after_eve:
-        #     for n_idx in range(len(roster_system.nurses)):
-        #         for day in range(1, roster_system.num_days):
-        #             model.Add(x[n_idx, day, day_idx] + x[n_idx, day-1, eve_idx] <= 1)
-
-        # # 5. N → D 근무 금지 (항상 적용)
-        # for n_idx in range(len(roster_system.nurses)):
-        #     for day in range(1, roster_system.num_days):
-        #         model.Add(x[n_idx, day, day_idx] + x[n_idx, day-1, night_idx] <= 1)
-
-        # # 6. 최대 연속 야간 근무 제한
-        # max_nights = roster_system.config.max_consecutive_nights
-        # for n_idx in range(len(roster_system.nurses)):
-        #     for day in range(roster_system.num_days - max_nights):
-        #         model.Add(sum(x[n_idx, d, night_idx] for d in range(day, day + max_nights + 1) if d < roster_system.num_days) <= max_nights)
-
-        # # 7. 월 최대 야간 근무 수 제한
-        # for n_idx in range(len(roster_system.nurses)):
-        #     model.Add(sum(x[n_idx, day, night_idx] for day in range(roster_system.num_days)) <= roster_system.config.max_night_shifts_per_month)
-
-        # # 8. N 3회 후 OFF 2회 (법규)
-        # if hasattr(roster_system.config, 'two_offs_after_three_nig') and roster_system.config.two_offs_after_three_nig:
-        #     for n_idx in range(len(roster_system.nurses)):
-        #         for day in range(2, roster_system.num_days - 2):
-        #             # 3일 연속 N이면 다음 2일은 반드시 OFF
-        #             three_nights = x[n_idx, day-2, night_idx] + x[n_idx, day-1, night_idx] + x[n_idx, day, night_idx]
-        #             if day + 2 < roster_system.num_days:
-        #                 two_offs = x[n_idx, day+1, off_idx] + x[n_idx, day+2, off_idx]
-        #                 # 3일 연속 N(three_nights=3)이면 다음 2일 반드시 OFF(two_offs=2)
-        #                 model.Add(two_offs >= 2 * (three_nights - 2))
-
-        # # 9. N 2회 후 OFF 2회 (법규)
-        # if hasattr(roster_system.config, 'two_offs_after_two_nig') and roster_system.config.two_offs_after_two_nig:
-        #     for n_idx in range(len(roster_system.nurses)):
-        #         for day in range(1, roster_system.num_days - 2):
-        #             # 2일 연속 N이면 다음 2일은 반드시 OFF
-        #             two_nights = x[n_idx, day-1, night_idx] + x[n_idx, day, night_idx]
-        #             if day + 2 < roster_system.num_days:
-        #                 two_offs = x[n_idx, day+1, off_idx] + x[n_idx, day+2, off_idx]
-        #                 # 2일 연속 N(two_nights=2)이면 다음 2일 반드시 OFF(two_offs=2)
-        #                 model.Add(two_offs >= 2 * (two_nights - 1))
-
-        # # ============ 병원 내규 (Soft Constraints via Penalty) ============
-        
-        # penalty_terms = []
-        
-        # # 10. 경력 간호사 요구사항 (소프트)
-        # exp_penalty_vars = []
-        # for day in range(roster_system.num_days):
-        #     for shift in ['D', 'E', 'N']:
-        #         s_idx = roster_system.config.shift_types.index(shift)
-        #         experienced_assigned = sum(
-        #             x[n_idx, day, s_idx] 
-        #             for n_idx, nurse in enumerate(roster_system.nurses)
-        #             if nurse.experience_years >= roster_system.config.min_experience_per_shift
-        #         )
-        #         exp_shortage = model.NewIntVar(0, roster_system.config.required_experienced_nurses, f'exp_shortage_d{day}_s{shift}')
-        #         model.Add(exp_shortage >= roster_system.config.required_experienced_nurses - experienced_assigned)
-        #         exp_penalty_vars.append(exp_shortage)
-
-        # # 11. 주 2회 이상 OFF (소프트)
-        # if hasattr(roster_system.config, 'enforce_two_offs_per_week') and roster_system.config.enforce_two_offs_per_week:
-        #     weekly_off_penalty_vars = []
-        #     weeks = roster_system.num_days // 7
-        #     for n_idx in range(len(roster_system.nurses)):
-        #         for week in range(weeks):
-        #             week_start = week * 7
-        #             week_end = min(week_start + 7, roster_system.num_days)
-        #             week_offs = sum(x[n_idx, day, off_idx] for day in range(week_start, week_end))
-        #             off_shortage = model.NewIntVar(0, 2, f'week_off_shortage_n{n_idx}_w{week}')
-        #             model.Add(off_shortage >= 2 - week_offs)
-        #             weekly_off_penalty_vars.append(off_shortage)
-
-        # # 12. N 개수 균등 배정 (소프트)
-        # if hasattr(roster_system.config, 'even_nights') and roster_system.config.even_nights:
-        #     night_penalty_vars = []
-        #     # 야간전담 간호사 제외하고 균등 배정
-        #     non_night_nurses = [n_idx for n_idx, nurse in enumerate(roster_system.nurses) if not nurse.is_night_nurse]
-        #     if len(non_night_nurses) > 1:
-        #         target_nights = sum(roster_system.config.daily_shift_requirements.get('N', 2) for _ in range(roster_system.num_days)) // len(non_night_nurses)
-                
-        #         for n_idx in non_night_nurses:
-        #             total_nights = sum(x[n_idx, day, night_idx] for day in range(roster_system.num_days))
-        #             night_deviation_pos = model.NewIntVar(0, roster_system.num_days, f'night_dev_pos_n{n_idx}')
-        #             night_deviation_neg = model.NewIntVar(0, roster_system.num_days, f'night_dev_neg_n{n_idx}')
-        #             model.Add(night_deviation_pos - night_deviation_neg == total_nights - target_nights)
-        #             night_penalty_vars.extend([night_deviation_pos, night_deviation_neg])
-
-        # # ============ 목적 함수 ============
-        
-        # objective_terms = []
-        
-        # # 선호도 만족
-        # for n_idx in range(len(roster_system.nurses)):
-        #     for day in range(roster_system.num_days):
-        #         for s_idx in range(roster_system.config.num_shifts):
-        #             pref_score = int(roster_system.preference_matrix[n_idx, day, s_idx] * 100)
-        #             objective_terms.append(pref_score * x[n_idx, day, s_idx])
-        
-        # # 소프트 제약 위반 패널티
-        # for var in exp_penalty_vars:
-        #     # print('\n\n\n\n\nvar', -100 * var, '\n\n\n\n\n')
-        #     objective_terms.append(-100 * var)  # 경력 간호사 부족 패널티
-            
-        # if hasattr(roster_system.config, 'enforce_two_offs_per_week') and roster_system.config.enforce_two_offs_per_week:
-        #     for var in weekly_off_penalty_vars:
-        #         objective_terms.append(-500 * var)  # 주간 휴무 부족 패널티
-        
-        # if hasattr(roster_system.config, 'even_nights') and roster_system.config.even_nights:
-        #     for var in night_penalty_vars:
-        #         objective_terms.append(-50 * var)  # 야간 근무 불균등 패널티
-
-        # model.Maximize(sum(objective_terms))
-
-        # # ============ 솔버 실행 ============
-        
-        # solver = cp_model.CpSolver()
-        # solver.parameters.max_time_in_seconds = time_limit_seconds
-        # solver.parameters.log_search_progress = True
-        # solver.parameters.num_search_workers = 8
-        
-        # status = solver.Solve(model)
-
-        # if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-        #     print(f"{self.logger_prefix} 최적화 완료: {time.time() - start_time:.2f}초 소요")
-        #     print(f"목적값: {solver.ObjectiveValue()}")
-            
-        #     # 결과를 roster_system에 저장
-        #     roster_system.roster.fill(0)
-        #     for n_idx in range(len(roster_system.nurses)):
-        #         for day in range(roster_system.num_days):
-        #             for s_idx in range(roster_system.config.num_shifts):
-        #                 if solver.Value(x[n_idx, day, s_idx]) == 1:
-        #                     roster_system.roster[n_idx, day, s_idx] = 1
-            
-        #     return True
-        # else:
-        #     print(f"{self.logger_prefix} 해를 찾지 못했습니다. 상태: {status}")
-        #     return False
     
     def _convert_result_to_db_format(self, roster_system: RosterSystem, nurses: List[Nurse]) -> Dict[str, List[str]]:
-        """RosterSystem 결과를 DB 형식으로 변환"""
+        """RosterSystem 결과를 DB 형식으로 변환 (고정된 셀은 원래 값으로 반환)"""
         result = {}
         shift_map = {i: s for i, s in enumerate(roster_system.config.shift_types)}
-        
+        fixed = getattr(roster_system, 'fixed_cells', None)
+        fixed_lookup = {}
+        if fixed:
+            for cell in fixed:
+                fixed_lookup[(cell['nurse_index'], cell['day_index'])] = cell['shift']
         for n_idx, nurse in enumerate(nurses):
             nurse_schedule = []
             for day_idx in range(roster_system.num_days):
+                # 고정된 셀은 원래 값으로 반환
+                if (n_idx, day_idx) in fixed_lookup:
+                    nurse_schedule.append(fixed_lookup[(n_idx, day_idx)])
+                    continue
                 shift_vector = roster_system.roster[n_idx, day_idx]
                 shift_idx = np.where(shift_vector == 1)[0]
                 if len(shift_idx) > 0:
                     shift_id = shift_map[shift_idx[0]]
-                    # OFF를 O로 변환
                     if shift_id == 'OFF':
                         shift_id = 'O'
                     nurse_schedule.append(shift_id)
                 else:
-                    nurse_schedule.append('-')  # 기본값
-            
+                    nurse_schedule.append('-')
             result[nurse.db_id] = nurse_schedule
-        
         return result
     
     def _print_optimization_results(self, roster_system: RosterSystem):
-        """최적화 결과 출력"""
+        """최적화 결과 출력 및 만족도 데이터 반환"""
         print(f"\n{self.logger_prefix} 최적화 결과:")
         
         # 위반사항 확인
@@ -761,26 +577,100 @@ class CPSATBasicEngine:
         else:
             print("  - 모든 제약 조건 충족!")
         
+        # 만족도 데이터 수집
+        satisfaction_data = {
+            "off_satisfaction": 0.0,
+            "shift_satisfaction": 0.0,
+            "pair_satisfaction": 0.0,
+            "individual_satisfaction": {},
+            "detailed_analysis": {}
+        }
+        
         # 선호도 만족도 계산
         try:
             off_satisfaction = roster_system._calculate_off_preference_satisfaction()
+            satisfaction_data["off_satisfaction"] = off_satisfaction
             print(f"  - 선호 휴무일 만족도: {off_satisfaction:.2f}%")
             
             shift_satisfaction = roster_system._calculate_shift_preference_satisfaction()
+            satisfaction_data["shift_satisfaction"] = shift_satisfaction
             print(f"  - 근무 유형 선호도 만족도: {shift_satisfaction:.2f}%")
             
             if hasattr(roster_system, 'pair_matrix'):
                 pair_satisfaction = roster_system._calculate_pair_preference_satisfaction()
-                print(f"  - 페어링 선호도 만족도: {pair_satisfaction['overall']:.2f}%")
+                satisfaction_data["pair_satisfaction"] = pair_satisfaction.get('overall', 0.0)
+                print(f"  - 페어링 선호도 만족도: {pair_satisfaction.get('overall', 0.0):.2f}%")
+            
+            # 개인별 만족도 계산
+            individual_satisfaction = roster_system.calculate_individual_satisfaction()
+            satisfaction_data["individual_satisfaction"] = individual_satisfaction
+            
+            # 상세 요청 분석
+            detailed_analysis = roster_system.calculate_detailed_request_analysis()
+            satisfaction_data["detailed_analysis"] = detailed_analysis
+            
         except Exception as e:
             print(f"  - 만족도 계산 중 오류: {e}")
+        
+        return satisfaction_data
+
+# ──────────────────────────────────────────────────────────────
+# 0. 보조 헬퍼 ― 안전한 shift_types + greedy 시드
+#    (cp_sat_basic.py 최상단 import 아래 아무 곳 넣기)
+# ──────────────────────────────────────────────────────────────
+from db.roster_config import NurseRosterConfig
+import numpy as np
+from typing import Dict, List, Tuple
+
+# (0-a) shift_types 보호 – 기본 교대 누락 방지
+_orig_shift_types = NurseRosterConfig.shift_types.fget
+def _safe_shift_types(self):
+    lst = list(_orig_shift_types(self))
+    for s in ('D', 'E', 'N'):
+        if s not in lst:
+            lst.insert(0, s)
+    if 'OFF' not in lst:
+        lst.append('OFF')
+    return lst
+NurseRosterConfig.shift_types = property(_safe_shift_types)
+
+# (0-b) 아주 단순한 feasible 시드 생성
+def _seed_schedule(pref: np.ndarray,
+                   daily_need: Dict[str, int],
+                   shift_types: List[str],
+                   fixed: Dict[Tuple[int, int], int]) -> np.ndarray:
+    N, D, S  = pref.shape
+    OFF      = S - 1                         # shift_types[-1] == 'OFF' 라고 가정
+    quota    = np.zeros((D, S), dtype=int)
+    for d in range(D):
+        for s, sh in enumerate(shift_types[:-1]):        # OFF 제외
+            quota[d, s] = daily_need.get(sh, 0)
+    for (_, d), s in fixed.items():                      # 고정 셀 차감
+        if s != OFF:
+            quota[d, s] -= 1
+
+    sched = np.full((N, D), OFF, dtype=int)
+    for (n, d), s in fixed.items():
+        sched[n, d] = s
+
+    order = np.dstack(np.unravel_index(
+        np.argsort(-pref.max(axis=2), axis=None), (N, D)))[0]
+    for n, d in order:
+        if (n, d) in fixed:
+            continue
+        best_s = int(np.argmax(pref[n, d, :-1]))         # OFF 제외
+        if quota[d, best_s] > 0:
+            sched[n, d]  = best_s
+            quota[d, best_s] -= 1
+    return sched
+# ──────────────────────────────────────────────────────────────
 
 
 # 전역 엔진 인스턴스
 cp_sat_engine = CPSATBasicEngine()
 
 
-def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month, time_limit_seconds=60):
+def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month,  shift_manage_data, time_limit_seconds=60):
     """
     기존 roster_engine.generate_roster 함수와 호환되는 인터페이스
     
@@ -796,5 +686,5 @@ def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month, ti
         Dict[nurse_id, List[shift]]: 간호사별 일일 근무 배정
     """
     return cp_sat_engine.generate_roster(
-        nurses_data, prefs_data, config_data, year, month, time_limit_seconds
+        nurses_data, prefs_data, config_data, year, month, shift_manage_data, time_limit_seconds   
     ) 

@@ -97,62 +97,7 @@ class RosterSystem:
                 )
                 
         print(f"선호도 행렬 계산 완료: {time.time() - start_time:.4f}초 소요")
-        
-    # def _check_night_constraints(self, nurse_idx: int, day: int) -> bool:
-    #     """간호사에 대한 야간 근무 관련 제약 조건을 확인합니다."""
-    #     if day < 2:  # 확인할 이력이 충분하지 않음
-    #         return True
-            
-    #     night_idx = self.config.shift_types.index('N')
-    #     day_idx = self.config.shift_types.index('D')
-        
-    #     # 연속 야간 근무 확인
-    #     if day >= self.config.max_consecutive_nights:
-    #         consecutive_nights = np.all(
-    #             self.roster[nurse_idx, day-self.config.max_consecutive_nights:day, night_idx] == 1
-    #         )
-    #         if consecutive_nights:
-    #             return False
-                
-    #     # 야간 근무 후 주간 근무 확인
-    #     if day > 0 and self.roster[nurse_idx, day-1, night_idx] == 1:
-    #         if self.roster[nurse_idx, day, day_idx] == 1:
-    #             return False
-                
-    #     # 월별 야간 근무 제한 확인
-    #     total_nights = np.sum(self.roster[nurse_idx, :day+1, night_idx])
-    #     if total_nights >= self.config.max_night_shifts_per_month:
-    #         return False
-            
-    #     return True
-        
-    # def _check_consecutive_work_days(self, nurse_idx: int, day: int) -> bool:
-    #     """연속 근무일 제약 조건을 위반하는지 확인합니다."""
-    #     # 충분한 일수가 없으면 위반 없음
-    #     if day < self.config.max_consecutive_work_days:
-    #         return True
-            
-    #     off_idx = self.config.shift_types.index('OFF')
-    #     max_work = self.config.max_consecutive_work_days
-        
-    #     # 현재 날짜를 포함한 연속 근무일 검사
-    #     # day-max_work+1 부터 day까지 (총 max_work+1일) 검사
-    #     start_day = max(0, day - max_work)
-    #     end_day = day + 1  # day 포함
-        
-    #     # 해당 기간의 근무일 수 계산 (OFF가 아닌 날들)
-    #     work_days_count = 0
-    #     for d in range(start_day, end_day):
-    #         # 해당 날짜에 근무(OFF가 아닌 시프트)했는지 확인
-    #         is_working = np.sum(self.roster[nurse_idx, d, :off_idx]) > 0
-    #         if is_working:
-    #             work_days_count += 1
-    #         else:
-    #             # 휴무일이 있으면 연속 근무가 끊어짐
-    #             work_days_count = 0
-        
-    #     # 연속 근무일이 최대치를 초과하면 위반
-    #     return work_days_count <= max_work
+       
     # ───────── 2. 야간 관련 개별 함수 🔄 ─────────
     def _check_consecutive_night_limit(self, nurse_idx: int, day: int) -> bool:
         """연속 야간 근무 수 초과 여부"""
@@ -355,51 +300,6 @@ class RosterSystem:
                         print(f"경고: ID {nurse_2_id}인 간호사를 찾을 수 없습니다.")
         # print('\n\n\n\n\nself.pair_matrix', self.pair_matrix, '\n\n\n\n\n')
         print("간호사 페어링 선호도 초기화 완료")
-        
-    # def _find_violations(self) -> List[dict]:
-    #     """Find all constraint violations in current roster."""
-    #     violations = []
-        
-    #     # Check each type of violation
-    #     for day in range(self.num_days):
-    #         # Check shift requirements
-    #         for shift, required in self.config.daily_shift_requirements.items():
-    #             shift_idx = self.config.shift_types.index(shift)
-    #             actual = np.sum(self.roster[:, day, shift_idx])
-    #             if actual < required:  # 필요 인원보다 적을 때만 위반으로 처리
-    #                 violations.append({
-    #                     'type': 'shift_requirement',
-    #                     'day': day,
-    #                     'shift': shift,
-    #                     'required': required,
-    #                     'actual': actual
-    #                 })
-                    
-    #         # Check experience requirements
-    #         if not self._check_experience_requirements(day):
-    #             violations.append({
-    #                 'type': 'experience',
-    #                 'day': day
-    #             })
-                
-    #     # Check nurse-specific constraints
-    #     for n_idx, nurse in enumerate(self.nurses):
-    #         for day in range(self.num_days):
-    #             if not self._check_night_constraints(n_idx, day):
-    #                 violations.append({
-    #                     'type': 'night',
-    #                     'nurse_idx': n_idx,
-    #                     'day': day
-    #                 })
-
-    #             if not self._check_consecutive_work_days(n_idx, day):
-    #                 violations.append({
-    #                     'type': 'consecutive',
-    #                     'nurse_idx': n_idx,
-    #                     'day': day
-    #                 })
-                    
-    #     return violations
     
     # ───────── 1. find_violations 수정 ─────────
     def _find_violations(self) -> List[dict]:
@@ -1355,6 +1255,7 @@ class RosterSystem:
     def _calculate_off_preference_satisfaction(self):
         """선호 휴무일 만족도를 계산합니다."""
         off_idx = self.config.shift_types.index('OFF')
+        print('off_index:',off_idx)
         total_preferences = 0
         satisfied_preferences = 0
         
@@ -1419,7 +1320,7 @@ class RosterSystem:
                 # 이 근무 유형에 배정된 간호사 찾기
                 assigned_nurses = [i for i in range(len(self.nurses)) 
                                  if self.roster[i, day, shift_idx] == 1]
-                
+                print(assigned_nurses)
                 # 함께 일하는 선호도 계산
                 for i in range(len(assigned_nurses)):
                     for j in range(i+1, len(assigned_nurses)):
@@ -1497,6 +1398,216 @@ class RosterSystem:
             "apart": apart_satisfaction,
             "overall": overall_satisfaction
         }
+
+    def calculate_individual_satisfaction(self) -> Dict[str, Dict]:
+        """개개인의 만족도를 계산합니다."""
+        individual_satisfaction = {}
+        
+        for n_idx, nurse in enumerate(self.nurses):
+            nurse_id = nurse.db_id
+            satisfaction = {
+                "nurse_id": nurse_id,
+                "name": nurse.name,
+                "off_satisfaction": 0.0,
+                "shift_satisfaction": 0.0,
+                "pair_satisfaction": 0.0,
+                "total_requests": 0,
+                "satisfied_requests": 0,
+                "overall_satisfaction": 0.0
+            }
+            
+            # 휴무 선호도 만족도 계산
+            off_idx = self.config.shift_types.index('OFF')
+            total_off_requests = 0
+            satisfied_off_requests = 0
+            
+            for day in range(self.num_days):
+                if self.preference_matrix[n_idx, day, off_idx] >= 4:
+                    total_off_requests += 1
+                    if self.roster[n_idx, day, off_idx] == 1:
+                        satisfied_off_requests += 1
+            
+            satisfaction["off_satisfaction"] = (satisfied_off_requests / total_off_requests * 100) if total_off_requests > 0 else 100.0
+            
+            # 근무 유형 선호도 만족도 계산
+            total_shift_requests = 0
+            satisfied_shift_requests = 0
+            
+            for day in range(self.num_days):
+                for shift_idx, shift_type in enumerate(self.config.shift_types):
+                    if shift_type != 'OFF' and self.preference_matrix[n_idx, day, shift_idx] >= 4:
+                        total_shift_requests += 1
+                        if self.roster[n_idx, day, shift_idx] == 1:
+                            satisfied_shift_requests += 1
+            
+            satisfaction["shift_satisfaction"] = (satisfied_shift_requests / total_shift_requests * 100) if total_shift_requests > 0 else 100.0
+            
+            # 페어링 선호도 만족도 계산
+            total_pair_requests = 0
+            satisfied_pair_requests = 0
+            
+            if hasattr(self, 'pair_matrix') and self.pair_matrix is not None:
+                for other_n_idx in range(len(self.nurses)):
+                    if other_n_idx != n_idx:
+                        for day in range(self.num_days):
+                            if hasattr(self.pair_matrix, 'get'):
+                                # pair_matrix가 dict 형태인 경우
+                                if (self.pair_matrix.get("together", {}).get((n_idx, other_n_idx), 0) > 0 or
+                                    self.pair_matrix.get("apart", {}).get((n_idx, other_n_idx), 0) > 0):
+                                    total_pair_requests += 1
+                                    # 함께 근무하기를 원함
+                                    if self.pair_matrix.get("together", {}).get((n_idx, other_n_idx), 0) > 0:
+                                        if self._are_nurses_working_together(n_idx, other_n_idx, day):
+                                            satisfied_pair_requests += 1
+                                    # 떨어져서 근무하기를 원함
+                                    elif self.pair_matrix.get("apart", {}).get((n_idx, other_n_idx), 0) > 0:
+                                        if not self._are_nurses_working_together(n_idx, other_n_idx, day):
+                                            satisfied_pair_requests += 1
+            
+            satisfaction["pair_satisfaction"] = (satisfied_pair_requests / total_pair_requests * 100) if total_pair_requests > 0 else 100.0
+            
+            # 전체 요청 수와 만족한 요청 수 계산
+            satisfaction["total_requests"] = total_off_requests + total_shift_requests + total_pair_requests
+            satisfaction["satisfied_requests"] = satisfied_off_requests + satisfied_shift_requests + satisfied_pair_requests
+            
+            # 전체 만족도 계산
+            if satisfaction["total_requests"] > 0:
+                satisfaction["overall_satisfaction"] = (satisfaction["satisfied_requests"] / satisfaction["total_requests"]) * 100
+            else:
+                satisfaction["overall_satisfaction"] = 100.0
+            
+            individual_satisfaction[nurse_id] = satisfaction
+        
+        return individual_satisfaction
+
+    def calculate_detailed_request_analysis(self) -> Dict:
+        """요청별 상세 분석을 계산합니다."""
+        analysis = {
+            "total_requests": {
+                "off": 0,
+                "shift": 0,
+                "pair": 0
+            },
+            "satisfied_requests": {
+                "off": 0,
+                "shift": 0,
+                "pair": 0
+            },
+            "satisfaction_rate": {
+                "off": 0.0,
+                "shift": 0.0,
+                "pair": 0.0,
+                "overall": 0.0
+            },
+            "request_details": []
+        }
+        
+        # 휴무 요청 분석
+        off_idx = self.config.shift_types.index('OFF')
+        for n_idx in range(len(self.nurses)):
+            for day in range(self.num_days):
+                if self.preference_matrix[n_idx, day, off_idx] >= 4:
+                    analysis["total_requests"]["off"] += 1
+                    if self.roster[n_idx, day, off_idx] == 1:
+                        analysis["satisfied_requests"]["off"] += 1
+                        analysis["request_details"].append({
+                            "nurse_id": self.nurses[n_idx].db_id,
+                            "nurse_name": self.nurses[n_idx].name,
+                            "day": day + 1,
+                            "request_type": "off",
+                            "satisfied": True,
+                            "preference_score": self.preference_matrix[n_idx, day, off_idx]
+                        })
+                    else:
+                        analysis["request_details"].append({
+                            "nurse_id": self.nurses[n_idx].db_id,
+                            "nurse_name": self.nurses[n_idx].name,
+                            "day": day + 1,
+                            "request_type": "off",
+                            "satisfied": False,
+                            "preference_score": self.preference_matrix[n_idx, day, off_idx]
+                        })
+        
+        # 근무 유형 요청 분석
+        for n_idx in range(len(self.nurses)):
+            for day in range(self.num_days):
+                for shift_idx, shift_type in enumerate(self.config.shift_types):
+                    if shift_type != 'OFF' and self.preference_matrix[n_idx, day, shift_idx] >= 4:
+                        analysis["total_requests"]["shift"] += 1
+                        if self.roster[n_idx, day, shift_idx] == 1:
+                            analysis["satisfied_requests"]["shift"] += 1
+                            analysis["request_details"].append({
+                                "nurse_id": self.nurses[n_idx].db_id,
+                                "nurse_name": self.nurses[n_idx].name,
+                                "day": day + 1,
+                                "request_type": "shift",
+                                "shift_type": shift_type,
+                                "satisfied": True,
+                                "preference_score": self.preference_matrix[n_idx, day, shift_idx]
+                            })
+                        else:
+                            analysis["request_details"].append({
+                                "nurse_id": self.nurses[n_idx].db_id,
+                                "nurse_name": self.nurses[n_idx].name,
+                                "day": day + 1,
+                                "request_type": "shift",
+                                "shift_type": shift_type,
+                                "satisfied": False,
+                                "preference_score": self.preference_matrix[n_idx, day, shift_idx]
+                            })
+        
+        # 페어링 요청 분석
+        if hasattr(self, 'pair_matrix') and self.pair_matrix is not None:
+            for n1 in range(len(self.nurses)):
+                for n2 in range(n1 + 1, len(self.nurses)):
+                    for day in range(self.num_days):
+                        together_pref = self.pair_matrix.get("together", {}).get((n1, n2), 0)
+                        apart_pref = self.pair_matrix.get("apart", {}).get((n1, n2), 0)
+                        
+                        if together_pref > 0 or apart_pref > 0:
+                            analysis["total_requests"]["pair"] += 1
+                            request_type = "work_together" if together_pref > 0 else "work_apart"
+                            satisfied = False
+                            
+                            if together_pref > 0:
+                                satisfied = self._are_nurses_working_together(n1, n2, day)
+                            else:
+                                satisfied = not self._are_nurses_working_together(n1, n2, day)
+                            
+                            if satisfied:
+                                analysis["satisfied_requests"]["pair"] += 1
+                            
+                            analysis["request_details"].append({
+                                "nurse_1_id": self.nurses[n1].db_id,
+                                "nurse_1_name": self.nurses[n1].name,
+                                "nurse_2_id": self.nurses[n2].db_id if n2 < len(self.nurses) else None,
+                                "nurse_2_name": self.nurses[n2].name if n2 < len(self.nurses) else None,
+                                "day": day + 1,
+                                "request_type": "pair",
+                                "pair_type": request_type,
+                                "satisfied": satisfied,
+                                "preference_score": max(together_pref, apart_pref)
+                            })
+        
+        # 만족도 계산
+        for request_type in ["off", "shift", "pair"]:
+            total = analysis["total_requests"][request_type]
+            satisfied = analysis["satisfied_requests"][request_type]
+            analysis["satisfaction_rate"][request_type] = (satisfied / total * 100) if total > 0 else 100.0
+        
+        total_requests = sum(analysis["total_requests"].values())
+        total_satisfied = sum(analysis["satisfied_requests"].values())
+        analysis["satisfaction_rate"]["overall"] = (total_satisfied / total_requests * 100) if total_requests > 0 else 100.0
+        
+        return analysis
+
+    def _are_nurses_working_together(self, n1: int, n2: int, day: int) -> bool:
+        """두 간호사가 같은 날 같은 근무에 배정되었는지 확인합니다."""
+        for shift_idx in range(len(self.config.shift_types)):
+            if (self.roster[n1, day, shift_idx] == 1 and 
+                self.roster[n2, day, shift_idx] == 1):
+                return True
+        return False
         
     def _optimize_neighborhood(self, fixed_assignments, time_limit_seconds):
         """Optimize a neighborhood of the roster with some assignments fixed."""

@@ -205,9 +205,7 @@ class CPSATBasicEngine:
         year: int, 
         month: int,
         grouped: List[dict],
-        time_limit_seconds: int = 60,
-        randomize: bool = True,           # ← 추가
-        seed: int | None = None           # ← 추가 (재현 원하면 지정)
+        time_limit_seconds: int = 60
     ) -> Dict[str, List[str]]:
         """
         DB 데이터를 기반으로 CP-SAT를 사용해 근무표를 생성
@@ -291,7 +289,7 @@ class CPSATBasicEngine:
         # 9. CP-SAT으로 최적화 (새로운 제약사항 포함)
         with Timer("CP-SAT으로 최적화"):
             print(f"{self.logger_prefix} CP-SAT 최적화 시작 (시간 제한: {time_limit_seconds}초)...")
-            success = self._optimize_with_enhanced_constraints(roster_system, time_limit_seconds, nurses, grouped, randomize=randomize, seed=seed)
+            success = self._optimize_with_enhanced_constraints(roster_system, time_limit_seconds, nurses, grouped)
             
             if not success:
                 print(f"{self.logger_prefix} 개선된 제약사항으로 실패, 기본 알고리즘으로 폴백...")
@@ -324,18 +322,14 @@ class CPSATBasicEngine:
     def _optimize_with_enhanced_constraints(    # <- generate_roster 에서 호출
         self, roster_system: RosterSystem,
         time_limit_seconds: int,
-        nurses_data, grouped=None,
-        randomize: bool = True,
-        seed: int | None = None
+        nurses_data, grouped=None
     )->bool:
         from ortools.sat.python import cp_model
-        if randomize:
-            run_seed = seed if seed is not None else ((int(time.time()*1000) ^ random.getrandbits(31)) & 0x7fffffff)
 
         # ① 0.3× time_limit 으로 “전체 모델” 한번 돌려 feasible 확보
         base_tl = max(5, int(time_limit_seconds*0.3))
         feasible = self._quick_initial_solve(
-            roster_system, base_tl, grouped, run_seed)
+            roster_system, base_tl, grouped)
 
         # hard 위반 수 세는 헬퍼
         HARD_TYPES = {
@@ -364,7 +358,7 @@ class CPSATBasicEngine:
         for it in range(max_iter):
             n_sel, d_sel = policy.select()
             ok = _solve_neighbourhood(roster_system, n_sel, d_sel,
-                                      per_iter, grouped, run_seed, it = it)
+                                      per_iter, grouped)
             if not ok: policy.update(False, n_sel, d_sel); continue
 
             curr_viol = hard_violation_cnt()
@@ -384,20 +378,10 @@ class CPSATBasicEngine:
     #                    ※ 아래는 helper 들 – 모두 완전판               │
     # ────────────────────────────────────────────────────────────────────
     def _quick_initial_solve(self, rs: RosterSystem,
-                             tl:int, grouped, run_seed: int | None = None):
+                             tl:int, grouped):
         from ortools.sat.python import cp_model
         model,X,j,l,fixed = _build_full_model(rs,grouped)
         solver=cp_model.CpSolver()
-        # ▼▼ 랜덤화 추가 ▼▼
-        # seed = getattr(rs.config, 'random_seed', None)
-        # if seed is None:
-        #     # 매 실행마다 다르게: 시간+랜덤믹스
-        #     seed = (int(time.time()*1000) ^ random.getrandbits(31)) & 0x7fffffff
-        solver.parameters.randomize_search = True
-        solver.parameters.random_seed = (run_seed ^ 0x9E3779B1) & 0x7fffffff
-        solver.parameters.solution_pool_size = 10
-        # ▲▲ 랜덤화 추가 ▲▲
-
         solver.parameters.max_time_in_seconds=tl
         solver.parameters.num_search_workers=2
         solver.parameters.relative_gap_limit = 0.2
@@ -410,6 +394,347 @@ class CPSATBasicEngine:
                 for s in range(S):
                     if solver.Value(X(n,d,s)): rs.roster[n,d,s]=1
         return True
+
+
+    
+    # def _optimize_with_enhanced_constraints(self, roster_system: RosterSystem, time_limit_seconds: int, nurses, grouped = None) -> bool:
+    #     """법규 제약사항과 병원 내규를 포함한 CP-SAT 최적화"""
+    #     try:
+    #         from ortools.sat.python import cp_model
+    #     except ImportError:
+    #         print("OR-Tools를 찾을 수 없습니다.")
+    #         return False
+
+
+    #     """입사일·법규·내규를 모두 반영한 CP‑SAT 최적화"""
+    #     from datetime import date
+    #     from ortools.sat.python import cp_model
+    #     import time
+    #     start_time = time.time()
+    #     model = cp_model.CpModel()
+    #     # ───── 0. 사전 계산 ─────────────────────────────────────────────
+    #     N = len(roster_system.nurses)
+    #     D = roster_system.num_days
+    #     S = roster_system.config.num_shifts
+    #     print('roster_system.config', roster_system.config)
+    #     first_day: date = roster_system.target_month          # 해당 월 1일
+    #     join_idx:  list[int] = []    # 입사일부터 근무
+    #     leave_idx: list[int] = []    # 퇴사전날까지 근무
+    #     for nurse in roster_system.nurses:
+    #         if nurse.joining_date:
+    #             idx = (nurse.joining_date - first_day).days
+    #             join_idx.append(max(idx, 0))                  # 음수(기존 입사) → 0
+    #         else:
+    #             join_idx.append(0)
+    #         # ─ leave ─
+    #         if nurse.resignation_date:
+    #             delta = (nurse.resignation_date - first_day).days
+    #             # Δ < 0 👉 이미 퇴사 → 이번 달엔 근무 X
+    #             leave_idx.append(min(delta, roster_system.num_days - 1))
+    #         else:
+    #             leave_idx.append(roster_system.num_days - 1)
+
+    #         # print('\n\n\n\n\njoin_idx', join_idx, '\n\n\n\n\n')
+    #     # print('\n\n\n\n\nshift_manage_', shift_manage_data  , '\n\n\n\n\n')
+
+    #     # 0‑a. shift code → main_code 매핑 준비
+    #     shift_code_to_main = {}
+    #     if len(grouped) > 0:
+    #         for row in grouped:
+    #             main_code = row.get('main_code')
+    #             for code in row.get('codes', []):
+    #                 shift_code_to_main[code] = main_code
+    #     print('shift_code_to_main', shift_code_to_main)
+    #     # ───── 0‑b. 수간호사 고정 배정 ─────────────────────────────── 🔄
+    #     fixed = {}                                     # (n,d) → s_idx or str
+    #     fixed_cnt = [[0]*S for _ in range(D)]        # 일별‑교대별 사전배정 수
+        
+    #     if hasattr(roster_system, 'fixed_cells') and roster_system.fixed_cells:
+    #         print('안재낌')
+    #         for fixed_cell in roster_system.fixed_cells:
+    #             n_id = fixed_cell['nurse_index']
+    #             d_idx = fixed_cell['day_index']
+    #             s_code = fixed_cell['shift']
+    #             # main_code 환산
+    #             main_code = shift_code_to_main.get(s_code, s_code)
+    #             print('main_code', main_code)
+    #             if main_code in roster_system.config.shift_types:
+    #                 s_idx = roster_system.config.shift_types.index(main_code)
+    #                 fixed[(n_id, d_idx)] = s_idx
+    #                 fixed_cnt[d_idx][s_idx] += 1
+    #                 print(f"고정 셀 추가: 간호사 {n_id}, 날짜 {d_idx+1}, 근무 {s_code}→{main_code}")
+    #                 print('what')
+    #             else:
+    #                 print('이번엔 여기왔다, 마지막 확인이다')
+    #                 s_idx = roster_system.config.shift_types.index(main_code)
+    #                 # shift_types에 없는 근무는 그대로 schedule에 남기고, 알고리즘에서 제외
+    #                 print('이번엔 여기왔다, 마지막 확인이다')
+    #                 fixed[(n_id, d_idx)] = s_code
+    #                 fixed_cnt[d_idx][s_idx] += 1
+    #                 print(f"고정 셀(shift_types 미포함) 추가: 간호사 {n_id}, 날짜 {d_idx+1}, 근무 {s_code}")
+
+    #     # ───── 1. 변수 정의  x[n,d,s] ∈ {0,1} ──────────────────────────
+    #     x: dict[tuple[int, int, int], cp_model.IntVar] = {}
+    #     for n in range(N):
+    #         for d in range(join_idx[n], leave_idx[n] + 1):                   # 입사 전 날짜 skip
+    #             for s in range(S):
+    #                 x[n, d, s] = model.NewBoolVar(f'n{n}_d{d}_s{s}')
+ 
+    #     def X(n: int, d: int, s: int):
+    #         """존재하지 않는 인덱스 → 0 반환"""
+    #         return x.get((n, d, s), 0)
+
+    #     # ───── 2‑A. 고정 배정 반영 ───────────────────────────────── 🔄
+    #     for (n, d), val in fixed.items():
+    #         if isinstance(val, int):
+    #             # shift_types에 있는 경우만 제약
+    #             model.Add(X(n, d, val) == 1)
+    #             for s in range(S):
+    #                 if s != val:
+    #                     model.Add(X(n, d, s) == 0)
+    #         # else: shift_types에 없는 근무는 제약 없이 schedule에만 반영
+
+    #     # ───── 2‑B. exactly‑one 제약 수정 ─────────────────────────── 🔄
+    #     for n in range(N):
+    #         for d in range(join_idx[n], leave_idx[n] + 1):
+    #             if (n, d) in fixed:
+    #                 continue
+    #             model.AddExactlyOne(X(n, d, s) for s in range(S))
+
+    #     # ───── 2‑C. 일별 인원 충족 제약 수정 ─────────────────────── 🔄
+    #     for d in range(D):
+    #         for shift_code, req in roster_system.config.daily_shift_requirements.items():
+    #             main_code = shift_code
+    #             s = roster_system.config.shift_types.index(main_code)
+    #             still_needed = req - fixed_cnt[d][s]              # 고정분 제외한 잔여 인원
+    #             if still_needed <= 0:                             # 이미 충족
+    #                 continue
+    #             model.Add(
+    #                 sum(X(n, d, s)
+    #                     for n in range(N)
+    #                     if (join_idx[n] <= d <= leave_idx[n]) and (n, d) not in fixed)
+    #                 >= still_needed
+    #             )
+
+    #     # ───── 3. 법규 하드 제약 ──────────────────────────────────────
+    #     night = roster_system.config.shift_types.index('N')
+    #     day   = roster_system.config.shift_types.index('D')
+    #     eve   = roster_system.config.shift_types.index('E')
+    #     off   = roster_system.config.shift_types.index('OFF')
+
+    #     # (3‑1) 최대 연속 근무 K+1‑윈도우에 OFF ≥1
+    #     K = roster_system.config.max_consecutive_work_days
+    #     for n in range(N):
+    #         for start_d in range(join_idx[n], leave_idx[n] - K + 1):
+    #             model.Add(
+    #                 sum(X(n, start_d + t, off)
+    #                     for t in range(K + 1)
+    #                     if start_d + t <= leave_idx[n]) >= 1
+    #             )
+
+    #     # (3‑2) E→D 금지
+    #     if getattr(roster_system.config, 'banned_day_after_eve', False):
+    #         for n in range(N):
+    #             for d in range(max(1, join_idx[n]), leave_idx[n] + 1):
+    #                 model.Add(X(n, d, day) + X(n, d - 1, eve) <= 1)
+
+    #     # (3‑3) N→D 금지
+    #     for n in range(N):
+    #         for d in range(max(1, join_idx[n]), leave_idx[n] + 1):
+    #             model.Add(X(n, d, day) + X(n, d - 1, night) <= 1)
+                
+    #     # (3‑7) Night 전담 간호사는 Day(D)‧Evening(E) 근무 금지
+    #     for n, nurse in enumerate(roster_system.nurses):
+    #         if nurse.is_night_nurse:                       # ★ night 전담 여부
+    #             for d in range(join_idx[n], leave_idx[n] + 1):
+    #                 # print(f'n: {n}, d: {d}, day: {X(n, d, day)}, eve: {X(n, d, eve)}')
+    #                 model.Add(X(n, d, day) == 0)           # D 배정 불가
+    #                 model.Add(X(n, d, eve) == 0)           # E 배정 불가
+
+    #     # (3‑4) 최대 연속 야간
+    #     if getattr(roster_system.config, 'three_seq_nig', False):
+    #         L = roster_system.config.max_consecutive_nights
+    #     else:
+    #         L = roster_system.config.max_consecutive_nights+1
+    #     for n in range(N):
+    #         for start_d in range(join_idx[n], leave_idx[n] - L + 1):
+    #             model.Add(
+    #                 sum(X(n, start_d + t, night)
+    #                     for t in range(L + 1)
+    #                     if start_d + t <= leave_idx[n]) <= L
+    #             )
+
+    #     # (3‑5) 월 야간 근무 수
+    #     max_N_month = roster_system.config.max_night_shifts_per_month
+    #     for n in range(N):
+    #         model.Add(
+    #             sum(X(n, d, night) for d in range(join_idx[n], leave_idx[n] + 1))
+    #             <= max_N_month
+    #         )
+
+    #     # (3‑6) N연속→OFF 법규
+    #     if getattr(roster_system.config, 'two_offs_after_three_nig', False):
+    #         for n in range(N):
+    #             for d in range(join_idx[n] + 2, leave_idx[n] - 1):
+    #                 threeN = X(n, d - 2, night) + X(n, d - 1, night) + X(n, d, night)
+    #                 twoOff = X(n, d + 1, off)   + X(n, d + 2, off)
+    #                 model.Add(twoOff >= 2 * (threeN - 2))
+
+    #     if getattr(roster_system.config, 'two_offs_after_two_nig', False):
+    #         for n in range(N):
+    #             for d in range(join_idx[n] + 1, leave_idx[n] - 1):
+    #                 twoN  = X(n, d - 1, night) + X(n, d, night)
+    #                 twoOff = X(n, d + 1, off)  + X(n, d + 2, off)
+    #                 model.Add(twoOff >= 2 * (twoN - 1))
+
+    #     # ───── 4. 병원 내규 (Soft) ───────────────────────────────────
+    #     penalty_vars = []
+
+    #     # (4‑1) 경력자 부족 ────────────────────────────────────────
+    #     exp_short_vars = []
+    #     min_exp  = roster_system.config.min_experience_per_shift
+    #     need_exp = roster_system.config.required_experienced_nurses
+
+    #     for d in range(D):
+    #         for shift_code in ('D', 'E', 'N'):
+    #             s = roster_system.config.shift_types.index(shift_code)
+
+    #             # d 가 각 간호사의 근무 기간 안에 있을 때만 카운트
+    #             exp_assigned = sum(
+    #                 X(n, d, s)
+    #                 for n, nurse in enumerate(roster_system.nurses)
+    #                 if (join_idx[n] <= d <= leave_idx[n])                # ★ NEW
+    #                 and nurse.experience_years >= min_exp
+    #             )
+
+    #             shortage = model.NewIntVar(
+    #                 0, need_exp, f'expShort_d{d}_s{shift_code}'
+    #             )
+    #             model.Add(shortage >= need_exp - exp_assigned)
+    #             exp_short_vars.append(shortage)
+
+    #     # (4‑2) 주 2OFF ───────────────────────────────────────────
+    #     weekly_short = []
+    #     if getattr(roster_system.config, 'enforce_two_offs_per_week', False):
+    #         weeks = D // 7
+    #         for n in range(N):
+    #             for w in range(weeks):
+    #                 w_start, w_end = w * 7, min(w * 7 + 7, D)
+
+    #                 # 해당 주가 간호사의 근무 기간과 겹치지 않으면 skip
+    #                 if w_end   <= join_idx[n] or w_start > leave_idx[n]:
+    #                     continue
+
+    #                 offs = sum(
+    #                     X(n, d, off)
+    #                     for d in range(max(w_start, join_idx[n]),
+    #                                 min(w_end,   leave_idx[n] + 1))    # ★ NEW
+    #                 )
+
+    #                 short = model.NewIntVar(0, 2, f'weekOffShort_n{n}_w{w}')
+    #                 model.Add(short >= 2 - offs)
+    #                 weekly_short.append(short)
+
+    #     # (4‑3) 야간 균등 ─────────────────────────────────────────
+    #     night_dev = []
+    #     if getattr(roster_system.config, 'even_nights', False):
+    #         non_night = [
+    #             i for i, nurse in enumerate(roster_system.nurses)
+    #             if not nurse.is_night_nurse
+    #         ]
+    #         if len(non_night) > 1:
+    #             total_N_req = sum(
+    #                 roster_system.config.daily_shift_requirements.get('N', 2)
+    #                 for d in range(D)
+    #             )
+    #             target = total_N_req // len(non_night)
+
+    #             for n in non_night:
+    #                 totN = sum(
+    #                     X(n, d, night)
+    #                     for d in range(join_idx[n], leave_idx[n] + 1)     # ★ NEW
+    #                 )
+    #                 pos = model.NewIntVar(0, D, f'Npos_n{n}')
+    #                 neg = model.NewIntVar(0, D, f'Nneg_n{n}')
+    #                 model.Add(pos - neg == totN - target)
+    #                 night_dev.extend([pos, neg])
+    #     # (4‑4) N → O → D/E 패턴 패널티  (‑100점)
+    #     no_de_pattern = []            # 패널티 변수 모음
+
+    #     for n in range(N):
+    #         # 패턴 길이가 3일이므로 leave‑2 까지만 검사
+    #         for d in range(join_idx[n], max(join_idx[n], leave_idx[n] - 1) - 1):
+    #             # (i) N‑O‑D
+    #             pat_NOD = model.NewIntVar(0, 1, f'NOD_n{n}_d{d}')
+    #             model.Add(pat_NOD >=
+    #                     X(n, d,     night) +     # N
+    #                     X(n, d + 1, off)   +     # O
+    #                     X(n, d + 2, day)   - 2)  # D
+    #             no_de_pattern.append(pat_NOD)
+
+    #             # (ii) N‑O‑E
+    #             pat_NOE = model.NewIntVar(0, 1, f'NOE_n{n}_d{d}')
+    #             model.Add(pat_NOE >=
+    #                     X(n, d,     night) +     # N
+    #                     X(n, d + 1, off)   +     # O
+    #                     X(n, d + 2, eve)   - 2)  # E
+    #             no_de_pattern.append(pat_NOE)
+    #     # (4‑5) OFF 클러스터 – ‘O’가 양쪽 모두 근무(D/E/N)인 경우 패널티 100
+    #     iso_off_vars = []
+
+    #     for n in range(N):
+    #         for d in range(join_idx[n], leave_idx[n] + 1):
+    #             iso = model.NewIntVar(0, 1, f'isoOff_n{n}_d{d}')
+
+    #             # iso == 1  ⇔  [d]가 OFF 이고 [d‑1], [d+1] 이 모두 OFF 가 아님
+    #             model.Add(iso >= X(n, d, off) - X(n, d - 1, off) - X(n, d + 1, off))
+    #             model.Add(iso <= X(n, d, off))           # OFF 가 아니면 iso = 0
+    #             model.Add(iso <= 1 - X(n, d - 1, off))   # 앞날 OFF 면 iso = 0
+    #             model.Add(iso <= 1 - X(n, d + 1, off))   # 뒷날 OFF 면 iso = 0
+
+
+    #             iso_off_vars.append(iso)
+    #     # ───── 5. 목적함수 ────────────────────────────────────────────
+    #     obj = []
+
+    #     # 선호도
+    #     for n in range(N):
+    #         for d in range(join_idx[n], leave_idx[n] + 1):
+    #             for s in range(S):
+    #                 score = int(roster_system.preference_matrix[n, d, s] * 100)
+    #                 obj.append(score * X(n, d, s))
+
+    #     # 패널티
+    #     obj.extend(-100 * v for v in exp_short_vars)
+    #     obj.extend(-500 * v for v in weekly_short)
+    #     obj.extend( -50 * v for v in night_dev)
+    #     obj.extend(-100 * v for v in no_de_pattern)   # ★ 추가
+    #     obj.extend(-100 * v for v in iso_off_vars)   # ★ 추가
+    #     model.Maximize(sum(obj))
+
+    #     # ───── 6. Solve ──────────────────────────────────────────────
+    #     solver = cp_model.CpSolver()
+    #     solver.parameters.max_time_in_seconds = time_limit_seconds
+    #     solver.parameters.num_search_workers  = 2
+    #     solver.parameters.log_search_progress = True
+    #     solver.parameters.relative_gap_limit = 0.2
+    #     status = solver.Solve(model)
+    #     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+    #         print("❌ 해를 찾지 못했습니다.")
+    #         return False
+    #     # ───── 7. 결과 반영 ──────────────────────────────────────────
+    #     roster_system.roster.fill(0)
+    #     for n in range(N):
+    #         for d in range(join_idx[n], leave_idx[n] + 1):
+    #             for s in range(S):
+    #                 if solver.Value(X(n, d, s)):
+    #                     roster_system.roster[n, d, s] = 1
+
+    #     print(
+    #         f"✅ 완료 – {time.time()-start_time:.1f}s, "
+    #         f"obj {solver.ObjectiveValue():.0f}"
+    #     )
+    #     return True
     
     def _convert_result_to_db_format(self, roster_system: RosterSystem, nurses: List[Nurse]) -> Dict[str, List[str]]:
         """RosterSystem 결과를 DB 형식으로 변환 (고정된 셀은 원래 값으로 반환)"""
@@ -566,9 +891,6 @@ def _solve_single_nurse(args):
     m.Maximize(sum(obj))          # dual 최대화
 
     solver = cp_model.CpSolver()
-    solver.parameters.randomize_search = True
-    # solver.parameters.random_seed = seed
-    solver.parameters.solution_pool_size = 10
     solver.parameters.max_time_in_seconds = tl
     if nurse.is_night_nurse:       # 보통 night-전담 모델은 작아서 싱글스레드가 낫다
         solver.parameters.num_search_workers = 1
@@ -819,7 +1141,7 @@ def _build_full_model(rs: RosterSystem, grouped):
 # ─────────────────────────────────────────────────────────────
 #           Neighbourhood solver  (전역 변수·제약 그대로)     │
 # ─────────────────────────────────────────────────────────────
-def _solve_neighbourhood(rs, n_set, d_set, tl, grouped, run_seed: int | None = None, it:int=0):
+def _solve_neighbourhood(rs, n_set, d_set, tl, grouped):
     from ortools.sat.python import cp_model
     model,X,j,l,fixed=_build_full_model(rs,grouped)
 
@@ -836,12 +1158,6 @@ def _solve_neighbourhood(rs, n_set, d_set, tl, grouped, run_seed: int | None = N
                     if s!=s0: model.Add(X(n,d,s)==0)
 
     solver=cp_model.CpSolver()
-    if run_seed is not None:
-        # 이웃/반복에 따라 seed 살짝 변조 → 다양성
-        tweak = (hash(tuple(sorted(n_set))) ^ hash(tuple(sorted(d_set))) ^ (it * 0x9E3779B1)) & 0x7fffffff
-        solver.parameters.randomize_search = True
-        solver.parameters.random_seed = (run_seed ^ tweak) & 0x7fffffff
-        solver.parameters.solution_pool_size = 10
     solver.parameters.max_time_in_seconds=tl
     solver.parameters.num_search_workers=10
     solver.parameters.relative_gap_limit = 0.8
@@ -856,7 +1172,7 @@ def _solve_neighbourhood(rs, n_set, d_set, tl, grouped, run_seed: int | None = N
     return True
 
 
-def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month,  shift_manage_data, time_limit_seconds=60, randomize=True, seed=None):
+def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month,  shift_manage_data, time_limit_seconds=60):
     """
     기존 roster_engine.generate_roster 함수와 호환되는 인터페이스
     
@@ -872,5 +1188,5 @@ def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month,  s
         Dict[nurse_id, List[shift]]: 간호사별 일일 근무 배정
     """
     return cp_sat_engine.generate_roster(
-        nurses_data, prefs_data, config_data, year, month, shift_manage_data, time_limit_seconds, randomize=randomize, seed=seed
+        nurses_data, prefs_data, config_data, year, month, shift_manage_data, time_limit_seconds   
     ) 

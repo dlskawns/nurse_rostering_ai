@@ -169,3 +169,56 @@ class IssuedRoster(Base):
     group = relationship("Group")
     nurse = relationship("Nurse")
     schedule = relationship("Schedule") 
+
+class RosterAnalytics(Base):
+    __tablename__ = 'roster_analytics'
+    analytics_id = Column(INTEGER, primary_key=True, autoincrement=True)
+    schedule_id = Column(CHAR(12), ForeignKey('schedules.schedule_id'), nullable=False)
+    nurse_id = Column(VARCHAR(50), ForeignKey('nurses.nurse_id'), nullable=False)
+    year = Column(SMALLINT, nullable=False)
+    month = Column(TINYINT, nullable=False)
+    
+    # 개인별 만족도 지표
+    off_satisfaction = Column(FLOAT, nullable=False, default=0.0)
+    shift_satisfaction = Column(FLOAT, nullable=False, default=0.0)
+    pair_satisfaction = Column(FLOAT, nullable=False, default=0.0)
+    overall_satisfaction = Column(FLOAT, nullable=False, default=0.0)
+    
+    # 요청 통계
+    total_requests = Column(INTEGER, nullable=False, default=0)
+    satisfied_requests = Column(INTEGER, nullable=False, default=0)
+    off_requests = Column(INTEGER, nullable=False, default=0)
+    satisfied_off_requests = Column(INTEGER, nullable=False, default=0)
+    shift_requests = Column(INTEGER, nullable=False, default=0)
+    satisfied_shift_requests = Column(INTEGER, nullable=False, default=0)
+    pair_requests = Column(INTEGER, nullable=False, default=0)
+    satisfied_pair_requests = Column(INTEGER, nullable=False, default=0)
+    
+    # 생성 시간
+    created_at = Column(DATETIME, default=func.now())
+    
+    # 관계 설정
+    schedule = relationship("Schedule")
+    nurse = relationship("Nurse")
+
+class RosterRequestDetails(Base):
+    __tablename__ = 'roster_request_details'
+    detail_id = Column(INTEGER, primary_key=True, autoincrement=True)
+    analytics_id = Column(INTEGER, ForeignKey('roster_analytics.analytics_id'), nullable=False)
+    nurse_id = Column(VARCHAR(50), ForeignKey('nurses.nurse_id'), nullable=False)
+    day = Column(INTEGER, nullable=False)
+    request_type = Column(VARCHAR(20), nullable=False)  # 'off', 'shift', 'pair'
+    shift_type = Column(VARCHAR(10), nullable=True)  # 'D', 'E', 'N' (shift 요청의 경우)
+    pair_type = Column(VARCHAR(20), nullable=True)  # 'work_together', 'work_apart' (pair 요청의 경우)
+    nurse_2_id = Column(VARCHAR(50), nullable=True)  # pair 요청의 경우 (외래키 제약조건 제거)
+    satisfied = Column(BOOLEAN, nullable=False, default=False)
+    preference_score = Column(FLOAT, nullable=False, default=0.0)
+    
+    # 생성 시간
+    created_at = Column(DATETIME, default=func.now())
+    
+    # 관계 설정
+    analytics = relationship("RosterAnalytics")
+    nurse = relationship("Nurse", foreign_keys=[nurse_id])
+    # nurse_2 관계는 필요시에만 사용하도록 주석 처리
+    # nurse_2 = relationship("Nurse", foreign_keys=[nurse_2_id])

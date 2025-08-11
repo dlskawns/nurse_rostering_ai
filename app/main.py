@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import sys, os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from routers import roster, auth, nurses, dates, wanted, preferences, roster_create, shifts, health
+from routers import roster, auth, nurses, dates, wanted, preferences, roster_create, shifts, health, dashboard
 
 app = FastAPI()
 
@@ -18,6 +18,7 @@ app.include_router(preferences.router)
 app.include_router(roster_create.router) 
 app.include_router(shifts.router)
 app.include_router(health.router)
+app.include_router(dashboard.router)
 
 import uvicorn
 
