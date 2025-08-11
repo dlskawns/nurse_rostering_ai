@@ -583,7 +583,8 @@ def request_schedule_service(req: RosterRequest, current_user, db: Session):
         version=latest_version + 1,
         config_id=latest_config.config_id,
         created_by=current_user.account_id,
-        status='draft'
+        status='draft',
+        dropped=False
     )
     db.add(new_schedule)
     db.commit()

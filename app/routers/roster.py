@@ -243,6 +243,27 @@ async def get_schedule_status(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get schedule status: {str(e)}")
 
+# 삭제(드롭) 엔드포인트: schedule.dropped=1로 마킹
+@router.delete("/roster/{schedule_id}")
+async def drop_schedule(
+    schedule_id: str,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    schedule = db.query(Schedule).filter(
+        Schedule.schedule_id == schedule_id,
+        Schedule.group_id == current_user.group_id,
+        Schedule.dropped == False
+    ).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="삭제할 스케줄을 찾을 수 없습니다.")
+    schedule.dropped = True
+    schedule.updated_at = datetime.now()
+    db.add(schedule)
+    db.commit()
+    return {"message": "스케줄이 삭제(숨김)되었습니다.", "schedule_id": schedule_id}
 
 
  # [Roster] - 특정 schedule_id의 근무표 조회
@@ -258,7 +279,8 @@ async def get_roster_by_schedule_id(
     # Get schedule info
     schedule = db.query(Schedule).filter(
         Schedule.schedule_id == schedule_id,
-        Schedule.group_id == current_user.group_id
+        Schedule.group_id == current_user.group_id,
+        Schedule.dropped == False
     ).first()
     
     if not schedule:
@@ -322,7 +344,8 @@ async def get_schedule_versions(
     schedules = db.query(Schedule).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.year == year,
-        Schedule.month == month
+        Schedule.month == month,
+        Schedule.dropped == False
     ).order_by(Schedule.version.desc()).all()
     
     return [{
@@ -348,7 +371,8 @@ async def get_roster_for_month(
         Schedule.group_id == current_user.group_id,
         Schedule.year == year,
         Schedule.month == month,
-        Schedule.status == 'issued'
+        Schedule.status == 'issued',
+        Schedule.dropped == False
     ).order_by(Schedule.version.desc()).first()
 
     if not schedule_info:

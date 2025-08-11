@@ -77,7 +77,8 @@ def get_latest_schedule_service(current_user, db: Session):
     if not current_user or not current_user.is_head_nurse:
         raise Exception("Permission denied")
     latest_schedule = db.query(Schedule).filter(
-        Schedule.group_id == current_user.group_id
+        Schedule.group_id == current_user.group_id,
+        Schedule.dropped == False
     ).order_by(
         Schedule.year.desc(),
         Schedule.month.desc(),
@@ -101,7 +102,8 @@ def get_issued_schedules_service(current_user, db: Session):
         raise Exception("Not authenticated")
     schedules_query = db.query(Schedule.year, Schedule.month).filter(
         Schedule.group_id == current_user.group_id,
-        Schedule.status == 'issued'
+        Schedule.status == 'issued',
+        Schedule.dropped == False
     ).distinct().order_by(Schedule.year.desc(), Schedule.month.desc()).all()
     schedules = [{"year": r.year, "month": r.month} for r in schedules_query]
     return schedules
@@ -116,7 +118,8 @@ def get_schedule_status_service(year: int, month: int, current_user, db: Session
         schedules = db.query(Schedule).filter(
             Schedule.group_id == current_user.group_id,
             Schedule.year == year,
-            Schedule.month == month
+            Schedule.month == month,
+            Schedule.dropped == False
         ).all()
         has_schedules = len(schedules) > 0
         latest_status = schedules[0].status if schedules else None
@@ -128,7 +131,8 @@ def get_schedule_status_service(year: int, month: int, current_user, db: Session
     schedule = db.query(Schedule).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.year == year,
-        Schedule.month == month
+        Schedule.month == month,
+        Schedule.dropped == False
     ).order_by(Schedule.version.desc()).first()
     submitted_preference = db.query(ShiftPreference).filter(
         ShiftPreference.nurse_id == current_user.nurse_id,

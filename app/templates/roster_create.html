@@ -1659,10 +1659,11 @@
                     
                     versionItem.innerHTML = `
                         <div class="version-number">v${version.version}</div>
-                        <div class="version-name" onclick="event.stopPropagation()">${version.name}</div>
+                        <div class="version-name" onclick="event.stopPropagation()">${version.name || ''}</div>
                         <div class="version-status">${statusText}</div>
                         <div class="edit-buttons" style="display: none;" onclick="event.stopPropagation()">
                             <button class="edit-btn" onclick="startEditName('${version.schedule_id}')">이름 변경</button>
+                            <button class="cancel-btn" onclick="dropVersion(event, '${version.schedule_id}')">삭제✕</button>
                         </div>
                     `;
                     
@@ -3442,6 +3443,26 @@
             } finally {
                 holdGenerateBtn.disabled = false;
                 holdGenerateBtn.textContent = originalText;
+            }
+        }
+
+        async function dropVersion(event, scheduleId) {
+            event.stopPropagation();
+            if (!confirm('선택한 근무표 버전을 삭제하시겠습니까? 삭제 후 목록에서 숨겨집니다.')) {
+                return;
+            }
+            try {
+                const res = await fetch(`/roster/${scheduleId}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || '삭제에 실패했습니다.');
+                }
+                // 삭제 후 페이지 상태 갱신
+                await updateVersionList(currentYear, currentMonth + 1);
+                const rosterOutputSection = document.getElementById('roster-output-section');
+                rosterOutputSection.style.display = 'none';
+            } catch (e) {
+                alert(e.message);
             }
         }
     </script>
