@@ -74,7 +74,7 @@ class Shift(Base):
     color = Column(VARCHAR(10), nullable=False)
     start_time = Column(VARCHAR(5), nullable=True)  # HH:MM format
     end_time = Column(VARCHAR(5), nullable=True)    # HH:MM format
-    type = Column(VARCHAR(10), nullable=False, default='work')  # 'work' or 'off'
+    type = Column(VARCHAR(10), nullable=False, default='근무')  # 'work' or 'off'
     allday = Column(INTEGER, nullable=False, default=0)
     auto_schedule = Column(INTEGER, nullable=False, default=1)
     # time_type = Column(VARCHAR(10), nullable=False, default='range')  # 'range', 'allday', 'hours'

@@ -35,10 +35,12 @@ async def get_shifts(
 
 def _format_time_display(shift):
     """근무 시간 정보를 표시용으로 포맷팅"""
-    if shift.allday == 1:
-        return '종일'
-    elif shift.duration:
-        return f'{shift.duration}시간'
+    print(shift)
+    if 'allday' in shift:
+        if shift.allday == 1:
+            return '종일'
+    # elif shift.duration:
+    #     return f'{shift.duration}시간'
     elif shift.start_time and shift.end_time:
         return f'{shift.start_time} ~ {shift.end_time}'
     elif shift.type:
@@ -64,8 +66,11 @@ async def update_shift(
     db: Session = Depends(get_db)
 ):
     try:
+        print('여기11')
         result = update_shift_service(req, current_user, db)
+        print('여기', result)
         result["shift"]["time_display"] = _format_time_display(result["shift"])
+        
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"근무코드 수정 실패: {str(e)}")

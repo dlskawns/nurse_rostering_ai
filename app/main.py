@@ -1,10 +1,26 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import sys, os
+from fastapi.middleware.cors import CORSMiddleware
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from routers import roster, auth, nurses, dates, wanted, preferences, roster_create, shifts, health, dashboard
 
 app = FastAPI()
+
+
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,         # "*" 쓰지 말 것 (credentials 쓰면 불가)
+    allow_credentials=True,        # 쿠키/세션 쓰면 True
+    allow_methods=["*"],           # 또는 ["POST","GET","OPTIONS",...]
+    allow_headers=["*"],           # Authorization, Content-Type 등 허용
+)
+
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
@@ -19,6 +35,8 @@ app.include_router(roster_create.router)
 app.include_router(shifts.router)
 app.include_router(health.router)
 app.include_router(dashboard.router)
+
+
 
 import uvicorn
 

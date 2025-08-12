@@ -25,7 +25,7 @@ class ShiftAddRequest(BaseModel):
     color: str
     start_time: Optional[str] = None
     end_time: Optional[str] = None
-    shift_type: str = "work"  # Changed from 'type' to 'shift_type' to match frontend
+    type: str  # Changed from 'type' to 'shift_type' to match frontend
     # time_type: str = "range"
     duration: Optional[int] = None
     allday: Optional[int] = 0

@@ -214,87 +214,87 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
             "counts": counts
         })
     
-    # 대시보드 분석 데이터 저장
-    try:
-        from services.dashboard_service import save_roster_analytics
+    # # 대시보드 분석 데이터 저장
+    # try:
+    #     from services.dashboard_service import save_roster_analytics
         
-        if roster_system:
-            # CP-SAT 엔진에서 생성된 roster_system 객체가 있는 경우
-            print("CP-SAT 엔진 결과를 사용하여 대시보드 분석 데이터 저장 중...")
-            save_roster_analytics(schedule.schedule_id, roster_system, db)
-            print("대시보드 분석 데이터 저장 완료")
-        else:
-            # roster_system이 없는 경우 (기존 엔진 사용 시)
-            print("기존 엔진 결과를 사용하여 대시보드 분석 데이터 저장 중...")
-            # 간호사 객체 생성
-            from services.roster_system import RosterSystem
-            from db.roster_config import NurseRosterConfig
-            from db.nurse_config import Nurse as NurseConfig
+    #     if roster_system:
+    #         # CP-SAT 엔진에서 생성된 roster_system 객체가 있는 경우
+    #         print("CP-SAT 엔진 결과를 사용하여 대시보드 분석 데이터 저장 중...")
+    #         save_roster_analytics(schedule.schedule_id, roster_system, db)
+    #         print("대시보드 분석 데이터 저장 완료")
+    #     else:
+    #         # roster_system이 없는 경우 (기존 엔진 사용 시)
+    #         print("기존 엔진 결과를 사용하여 대시보드 분석 데이터 저장 중...")
+    #         # 간호사 객체 생성
+    #         from services.roster_system import RosterSystem
+    #         from db.roster_config import NurseRosterConfig
+    #         from db.nurse_config import Nurse as NurseConfig
             
-            nurses_for_analysis = []
-            for n in nurses_in_group:
-                nurse_config = NurseConfig(
-                    id=len(nurses_for_analysis),
-                    db_id=n.nurse_id,
-                    name=n.name,
-                    experience_years=n.experience,
-                    is_head_nurse=n.is_head_nurse,
-                    is_night_nurse=getattr(n, 'is_night_nurse', False),
-                    personal_off_adjustment=0,
-                    remaining_off_days=0
-                )
-                nurses_for_analysis.append(nurse_config)
+    #         nurses_for_analysis = []
+    #         for n in nurses_in_group:
+    #             nurse_config = NurseConfig(
+    #                 id=len(nurses_for_analysis),
+    #                 db_id=n.nurse_id,
+    #                 name=n.name,
+    #                 experience_years=n.experience,
+    #                 is_head_nurse=n.is_head_nurse,
+    #                 is_night_nurse=getattr(n, 'is_night_nurse', False),
+    #                 personal_off_adjustment=0,
+    #                 remaining_off_days=0
+    #             )
+    #             nurses_for_analysis.append(nurse_config)
             
-            # 설정 객체 생성
-            config_for_analysis = NurseRosterConfig(
-                daily_shift_requirements=daily_shift_requirements,
-                min_experience_per_shift=latest_config.min_exp_per_shift,
-                required_experienced_nurses=latest_config.req_exp_nurses,
-                max_night_shifts_per_month=latest_config.max_nig_per_month,
-                max_consecutive_nights=3 if latest_config.three_seq_nig else 2,
-                max_consecutive_work_days=latest_config.max_conseq_work,
-                banned_day_after_eve=latest_config.banned_day_after_eve,
-                two_offs_after_three_nig=latest_config.two_offs_after_three_nig,
-                two_offs_after_two_nig=latest_config.two_offs_after_two_nig,
-                sequential_offs=latest_config.sequential_offs,
-                even_nights=latest_config.even_nights
-            )
+    #         # 설정 객체 생성
+    #         config_for_analysis = NurseRosterConfig(
+    #             daily_shift_requirements=daily_shift_requirements,
+    #             min_experience_per_shift=latest_config.min_exp_per_shift,
+    #             required_experienced_nurses=latest_config.req_exp_nurses,
+    #             max_night_shifts_per_month=latest_config.max_nig_per_month,
+    #             max_consecutive_nights=3 if latest_config.three_seq_nig else 2,
+    #             max_consecutive_work_days=latest_config.max_conseq_work,
+    #             banned_day_after_eve=latest_config.banned_day_after_eve,
+    #             two_offs_after_three_nig=latest_config.two_offs_after_three_nig,
+    #             two_offs_after_two_nig=latest_config.two_offs_after_two_nig,
+    #             sequential_offs=latest_config.sequential_offs,
+    #             even_nights=latest_config.even_nights
+    #         )
             
-            # RosterSystem 객체 생성
-            roster_system = RosterSystem(
-                nurses=nurses_for_analysis,
-                target_month=date(req.year, req.month, 1),
-                config=config_for_analysis
-            )
+    #         # RosterSystem 객체 생성
+    #         roster_system = RosterSystem(
+    #             nurses=nurses_for_analysis,
+    #             target_month=date(req.year, req.month, 1),
+    #             config=config_for_analysis
+    #         )
             
-            # 생성된 근무표 데이터를 roster_system에 설정
-            import numpy as np
-            roster_system.roster = np.zeros((len(nurses_for_analysis), roster_system.num_days, len(roster_system.config.shift_types)))
+    #         # 생성된 근무표 데이터를 roster_system에 설정
+    #         import numpy as np
+    #         roster_system.roster = np.zeros((len(nurses_for_analysis), roster_system.num_days, len(roster_system.config.shift_types)))
             
-            # 생성된 결과를 roster_system.roster에 반영
-            shift_type_to_index = {shift: i for i, shift in enumerate(roster_system.config.shift_types)}
-            for nurse_idx, nurse in enumerate(nurses_for_analysis):
-                if nurse.db_id in generated:
-                    shifts = generated[nurse.db_id]
-                    for day_idx, shift in enumerate(shifts):
-                        if shift != '-' and day_idx < roster_system.num_days:
-                            shift_upper = shift.upper()
-                            if shift_upper == 'O':
-                                shift_upper = 'OFF'
-                            if shift_upper in shift_type_to_index:
-                                roster_system.roster[nurse_idx, day_idx, shift_type_to_index[shift_upper]] = 1
+    #         # 생성된 결과를 roster_system.roster에 반영
+    #         shift_type_to_index = {shift: i for i, shift in enumerate(roster_system.config.shift_types)}
+    #         for nurse_idx, nurse in enumerate(nurses_for_analysis):
+    #             if nurse.db_id in generated:
+    #                 shifts = generated[nurse.db_id]
+    #                 for day_idx, shift in enumerate(shifts):
+    #                     if shift != '-' and day_idx < roster_system.num_days:
+    #                         shift_upper = shift.upper()
+    #                         if shift_upper == 'O':
+    #                             shift_upper = 'OFF'
+    #                         if shift_upper in shift_type_to_index:
+    #                             roster_system.roster[nurse_idx, day_idx, shift_type_to_index[shift_upper]] = 1
             
-            # 선호도 매트릭스 설정 (기본값)
-            roster_system.preference_matrix = np.zeros((len(nurses_for_analysis), roster_system.num_days, len(roster_system.config.shift_types)))
+    #         # 선호도 매트릭스 설정 (기본값)
+    #         roster_system.preference_matrix = np.zeros((len(nurses_for_analysis), roster_system.num_days, len(roster_system.config.shift_types)))
             
-            # 분석 데이터 저장
-            save_roster_analytics(schedule.schedule_id, roster_system, db)
-            print("기존 엔진 대시보드 분석 데이터 저장 완료")
+    #         # 분석 데이터 저장
+    #         save_roster_analytics(schedule.schedule_id, roster_system, db)
+    #         print("기존 엔진 대시보드 분석 데이터 저장 완료")
             
-    except ImportError as e:
-        print(f"대시보드 서비스를 찾을 수 없습니다: {e}")
-    except Exception as e:
-        print(f"대시보드 분석 데이터 저장 실패: {e}")
+    # except ImportError as e:
+    #     print(f"대시보드 서비스를 찾을 수 없습니다: {e}")
+    # except Exception as e:
+    #     print(f"대시보드 분석 데이터 저장 실패: {e}")
     
     return roster_data
 

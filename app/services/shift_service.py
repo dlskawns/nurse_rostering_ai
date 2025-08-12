@@ -85,20 +85,23 @@ def update_shift_service(req, current_user, db):
     """
     if not current_user or not current_user.is_head_nurse:
         raise Exception("Permission denied")
+    
     existing_shift = db.query(Shift).filter(
         Shift.shift_id == req.shift_id,
         Shift.group_id == current_user.group_id
     ).first()
+    
     if not existing_shift:
         raise Exception("해당 근무코드를 찾을 수 없습니다.")
     existing_shift.name = req.name
     existing_shift.color = req.color
     existing_shift.start_time = req.start_time
     existing_shift.end_time = req.end_time
-    existing_shift.type = req.shift_type
+    existing_shift.type = req.type
     existing_shift.duration = req.duration
     existing_shift.allday = req.allday
     existing_shift.auto_schedule = req.auto_schedule
+    
     db.commit()
     db.refresh(existing_shift)
     return {
