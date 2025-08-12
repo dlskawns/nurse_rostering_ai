@@ -69,7 +69,7 @@ async def update_shift(
         print('여기11')
         result = update_shift_service(req, current_user, db)
         print('여기', result)
-        result["shift"]["time_display"] = _format_time_display(result["shift"])
+        # result["shift"]["time_display"] = _format_time_display(result["shift"])
         
         return result
     except Exception as e:

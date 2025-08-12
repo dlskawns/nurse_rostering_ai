@@ -60,7 +60,7 @@ def add_shift_service(req, current_user, db):
         color=req.color,
         start_time=req.start_time,
         end_time=req.end_time,
-        type=req.shift_type,
+        type=req.type,
         duration=req.duration,
         allday=req.allday,
         auto_schedule=req.auto_schedule,
