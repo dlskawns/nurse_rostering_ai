@@ -481,6 +481,32 @@ class CPSATBasicEngine:
             # 개인별 만족도 계산
             individual_satisfaction = roster_system.calculate_individual_satisfaction()
             satisfaction_data["individual_satisfaction"] = individual_satisfaction
+            # 개인별 페어링 만족도 출력
+            if hasattr(roster_system, 'pair_matrix'):
+                print("  - 개인별 페어링 만족도:")
+                for nurse_id, info in individual_satisfaction.items():
+                    pair_req_cnt = info.get('pair_request_count', 0)
+                    if pair_req_cnt == 0:
+                        print(f"    • {info['name']}({info['nurse_id']}): -")
+                    else:
+                        print(f"    • {info['name']}({info['nurse_id']}): {info['pair_satisfaction']:.2f}%")
+
+            # 개인별 선호 휴무일/근무 유형 만족도 출력
+            print("  - 개인별 선호 휴무일 만족도:")
+            for nurse_id, info in individual_satisfaction.items():
+                off_req_cnt = info.get('off_request_count', 0)
+                if off_req_cnt == 0:
+                    print(f"    • {info['name']}({info['nurse_id']}): -")
+                else:
+                    print(f"    • {info['name']}({info['nurse_id']}): {info['off_satisfaction']:.2f}%")
+            
+            print("  - 개인별 근무 유형 선호도 만족도:")
+            for nurse_id, info in individual_satisfaction.items():
+                shift_req_cnt = info.get('shift_request_count', 0)
+                if shift_req_cnt == 0:
+                    print(f"    • {info['name']}({info['nurse_id']}): -")
+                else:
+                    print(f"    • {info['name']}({info['nurse_id']}): {info['shift_satisfaction']:.2f}%")
             
             # 상세 요청 분석
             detailed_analysis = roster_system.calculate_detailed_request_analysis()

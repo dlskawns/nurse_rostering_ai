@@ -257,6 +257,12 @@ class RosterSystem:
             "apart": np.zeros((len(self.nurses), len(self.nurses)))
         }
         
+        # 요청자 기준(방향성) 저장 구조: (requester_idx, target_idx)
+        self.pair_requests = {
+            "together": set(),
+            "apart": set()
+        }
+        
         # together (함께 일하기 원하는 쌍) 처리
         if "work_together" in pair_preferences:
             # print('\n\n\n\n\npair_preferences["work_together"]', pair_preferences["work_together"], '\n\n\n\n\n')
@@ -272,6 +278,8 @@ class RosterSystem:
                 if nurse_1_idx is not None and nurse_2_idx is not None:
                     self.pair_matrix["together"][nurse_1_idx, nurse_2_idx] = weight
                     self.pair_matrix["together"][nurse_2_idx, nurse_1_idx] = weight  # 대칭적으로 설정
+                    # 요청자 기준 저장 (대칭 저장하지 않음)
+                    self.pair_requests["together"].add((nurse_1_idx, nurse_2_idx))
                 else:
                     if nurse_1_idx is None:
                         print(f"경고: ID {nurse_1_id}인 간호사를 찾을 수 없습니다.")
@@ -293,6 +301,8 @@ class RosterSystem:
                 if nurse_1_idx is not None and nurse_2_idx is not None:
                     self.pair_matrix["apart"][nurse_1_idx, nurse_2_idx] = weight
                     self.pair_matrix["apart"][nurse_2_idx, nurse_1_idx] = weight  # 대칭적으로 설정
+                    # 요청자 기준 저장 (대칭 저장하지 않음)
+                    self.pair_requests["apart"].add((nurse_1_idx, nurse_2_idx))
                 else:
                     if nurse_1_idx is None:
                         print(f"경고: ID {nurse_1_id}인 간호사를 찾을 수 없습니다.")
@@ -1302,7 +1312,45 @@ class RosterSystem:
         """간호사 페어링 선호도 만족도를 계산합니다."""
         if not hasattr(self, 'pair_matrix'):
             return {"together": 100.0, "apart": 100.0, "overall": 100.0}
+        
+        # 요청자 기준 계산이 가능하면 해당 방식 사용 (방향성, '-'는 모수 제외)
+        if hasattr(self, 'pair_requests') and isinstance(self.pair_requests, dict):
+            together_reqs = self.pair_requests.get("together", set())
+            apart_reqs = self.pair_requests.get("apart", set())
             
+            total_together_prefs = 0
+            satisfied_together_prefs = 0
+            total_apart_prefs = 0
+            satisfied_apart_prefs = 0
+            
+            # together 요청자 기준 집계
+            for n1, n2 in together_reqs:
+                for day in range(self.num_days):
+                    total_together_prefs += 1
+                    if self._are_nurses_working_together(n1, n2, day):
+                        satisfied_together_prefs += 1
+            
+            # apart 요청자 기준 집계
+            for n1, n2 in apart_reqs:
+                for day in range(self.num_days):
+                    total_apart_prefs += 1
+                    if not self._are_nurses_working_together(n1, n2, day):
+                        satisfied_apart_prefs += 1
+            
+            together_satisfaction = 100.0 if total_together_prefs == 0 else (satisfied_together_prefs / total_together_prefs) * 100.0
+            apart_satisfaction = 100.0 if total_apart_prefs == 0 else (satisfied_apart_prefs / total_apart_prefs) * 100.0
+            
+            total_prefs = total_together_prefs + total_apart_prefs
+            satisfied_prefs = satisfied_together_prefs + satisfied_apart_prefs
+            overall_satisfaction = 100.0 if total_prefs == 0 else (satisfied_prefs / total_prefs) * 100.0
+            
+            return {
+                "together": together_satisfaction,
+                "apart": apart_satisfaction,
+                "overall": overall_satisfaction
+            }
+        
+        # 후방 호환: 기존 대칭 행렬 방식
         # 함께 일하기 선호도 만족도
         total_together_prefs = 0
         satisfied_together_prefs = 0
@@ -1320,7 +1368,7 @@ class RosterSystem:
                 # 이 근무 유형에 배정된 간호사 찾기
                 assigned_nurses = [i for i in range(len(self.nurses)) 
                                  if self.roster[i, day, shift_idx] == 1]
-                print(assigned_nurses)
+                
                 # 함께 일하는 선호도 계산
                 for i in range(len(assigned_nurses)):
                     for j in range(i+1, len(assigned_nurses)):
@@ -1336,7 +1384,6 @@ class RosterSystem:
                 for other_shift in self.config.daily_shift_requirements.keys():
                     if shift == other_shift:
                         continue
-                        
                     other_shift_idx = self.config.shift_types.index(other_shift)
                     other_assigned = [i for i in range(len(self.nurses)) 
                                      if self.roster[i, day, other_shift_idx] == 1]
@@ -1357,17 +1404,14 @@ class RosterSystem:
                     # 각 날짜에 대해 함께 근무했는지 확인
                     for day in range(self.num_days):
                         together_today = False
-                        
                         # 각 근무 유형에 대해
                         for shift in self.config.daily_shift_requirements.keys():
                             shift_idx = self.config.shift_types.index(shift)
-                            
                             # 둘 다 같은 교대에 배정된 경우
                             if (self.roster[n1, day, shift_idx] == 1 and 
                                 self.roster[n2, day, shift_idx] == 1):
                                 together_today = True
                                 break
-                        
                         # 이날 함께 근무하지 않았으면 총 선호도 카운트만 추가
                         if not together_today:
                             total_together_prefs += 1
@@ -1378,7 +1422,6 @@ class RosterSystem:
                     for day in range(self.num_days):
                         for shift in self.config.daily_shift_requirements.keys():
                             shift_idx = self.config.shift_types.index(shift)
-                            
                             # 둘 다 같은 교대에 배정된 경우 (선호도 불만족)
                             if (self.roster[n1, day, shift_idx] == 1 and 
                                 self.roster[n2, day, shift_idx] == 1):
@@ -1428,6 +1471,7 @@ class RosterSystem:
                         satisfied_off_requests += 1
             
             satisfaction["off_satisfaction"] = (satisfied_off_requests / total_off_requests * 100) if total_off_requests > 0 else 100.0
+            satisfaction["off_request_count"] = total_off_requests
             
             # 근무 유형 선호도 만족도 계산
             total_shift_requests = 0
@@ -1441,30 +1485,63 @@ class RosterSystem:
                             satisfied_shift_requests += 1
             
             satisfaction["shift_satisfaction"] = (satisfied_shift_requests / total_shift_requests * 100) if total_shift_requests > 0 else 100.0
+            satisfaction["shift_request_count"] = total_shift_requests
             
             # 페어링 선호도 만족도 계산
             total_pair_requests = 0
             satisfied_pair_requests = 0
             
             if hasattr(self, 'pair_matrix') and self.pair_matrix is not None:
-                for other_n_idx in range(len(self.nurses)):
-                    if other_n_idx != n_idx:
+                # 요청자 기준 계산: self.pair_requests 사용 (없으면 대체 로직)
+                has_directional = hasattr(self, 'pair_requests') and isinstance(self.pair_requests, dict)
+                if has_directional:
+                    together_reqs = self.pair_requests.get("together", set())
+                    apart_reqs = self.pair_requests.get("apart", set())
+                    for other_n_idx in range(len(self.nurses)):
+                        if other_n_idx == n_idx:
+                            continue
+                        req_together = (n_idx, other_n_idx) in together_reqs
+                        req_apart = (n_idx, other_n_idx) in apart_reqs
+                        if not (req_together or req_apart):
+                            continue
                         for day in range(self.num_days):
-                            if hasattr(self.pair_matrix, 'get'):
-                                # pair_matrix가 dict 형태인 경우
-                                if (self.pair_matrix.get("together", {}).get((n_idx, other_n_idx), 0) > 0 or
-                                    self.pair_matrix.get("apart", {}).get((n_idx, other_n_idx), 0) > 0):
+                            total_pair_requests += 1
+                            if req_together:
+                                if self._are_nurses_working_together(n_idx, other_n_idx, day):
+                                    satisfied_pair_requests += 1
+                            elif req_apart:
+                                if not self._are_nurses_working_together(n_idx, other_n_idx, day):
+                                    satisfied_pair_requests += 1
+                else:
+                    # 후방 호환: 대칭 행렬 기반 (기존 방식)
+                    together_mat = self.pair_matrix.get("together") if isinstance(self.pair_matrix, dict) else None
+                    apart_mat = self.pair_matrix.get("apart") if isinstance(self.pair_matrix, dict) else None
+                    def _has_pref(mat, i, j):
+                        if mat is None:
+                            return False
+                        if isinstance(mat, np.ndarray):
+                            try:
+                                return mat[i, j] > 0
+                            except Exception:
+                                return False
+                        if isinstance(mat, dict):
+                            return mat.get((i, j), 0) > 0
+                        return False
+                    for other_n_idx in range(len(self.nurses)):
+                        if other_n_idx != n_idx:
+                            for day in range(self.num_days):
+                                has_together = _has_pref(together_mat, n_idx, other_n_idx)
+                                has_apart = _has_pref(apart_mat, n_idx, other_n_idx)
+                                if has_together or has_apart:
                                     total_pair_requests += 1
-                                    # 함께 근무하기를 원함
-                                    if self.pair_matrix.get("together", {}).get((n_idx, other_n_idx), 0) > 0:
+                                    if has_together:
                                         if self._are_nurses_working_together(n_idx, other_n_idx, day):
                                             satisfied_pair_requests += 1
-                                    # 떨어져서 근무하기를 원함
-                                    elif self.pair_matrix.get("apart", {}).get((n_idx, other_n_idx), 0) > 0:
+                                    elif has_apart:
                                         if not self._are_nurses_working_together(n_idx, other_n_idx, day):
                                             satisfied_pair_requests += 1
-            
             satisfaction["pair_satisfaction"] = (satisfied_pair_requests / total_pair_requests * 100) if total_pair_requests > 0 else 100.0
+            satisfaction["pair_request_count"] = total_pair_requests
             
             # 전체 요청 수와 만족한 요청 수 계산
             satisfaction["total_requests"] = total_off_requests + total_shift_requests + total_pair_requests
@@ -1558,11 +1635,26 @@ class RosterSystem:
         
         # 페어링 요청 분석
         if hasattr(self, 'pair_matrix') and self.pair_matrix is not None:
+            together_mat = self.pair_matrix.get("together") if isinstance(self.pair_matrix, dict) else None
+            apart_mat = self.pair_matrix.get("apart") if isinstance(self.pair_matrix, dict) else None
+            
+            def _get_weight(mat, i, j):
+                if mat is None:
+                    return 0
+                if isinstance(mat, np.ndarray):
+                    try:
+                        return mat[i, j]
+                    except Exception:
+                        return 0
+                if isinstance(mat, dict):
+                    return mat.get((i, j), 0)
+                return 0
+            
             for n1 in range(len(self.nurses)):
                 for n2 in range(n1 + 1, len(self.nurses)):
                     for day in range(self.num_days):
-                        together_pref = self.pair_matrix.get("together", {}).get((n1, n2), 0)
-                        apart_pref = self.pair_matrix.get("apart", {}).get((n1, n2), 0)
+                        together_pref = _get_weight(together_mat, n1, n2)
+                        apart_pref = _get_weight(apart_mat, n1, n2)
                         
                         if together_pref > 0 or apart_pref > 0:
                             analysis["total_requests"]["pair"] += 1
