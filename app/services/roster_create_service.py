@@ -211,7 +211,7 @@ def _apply_preceptor_gauge(config_dict: dict, gauge: int | None) -> None:
         config_dict: 엔진에 전달할 설정 딕셔너리 (in-place 수정)
         gauge: 프론트에서 전달한 게이지 값(0~10). None이면 미적용
     """
-    # gauge = 10
+    gauge = 10
     if gauge is None:
         return
     print(f"프리셉터 게이지: {gauge}")
