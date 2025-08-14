@@ -52,6 +52,12 @@ class NurseRosterConfig:
     
     # 페어링 가중치
     pair_preference_weight: float = 3.0  # 페어링 선호도 반영 가중치
+    # ── 프리셉터(페어) 보너스 항 제어 파라미터 ──
+    preceptor_enable: bool = True                   # 프리셉터 보너스 항 사용 여부
+    preceptor_strength_multiplier: float = 1.5      # 보너스 항 강도 배수
+    preceptor_top_days: int = 30                    # 쌍별 상위 일수 K
+    preceptor_min_pair_weight: float = 5.0          # 쌍 가중치 하한 필터
+    preceptor_focus_shifts: Optional[List[str]] = None  # 특정 교대만 고려(e.g., ['N','E'])
     
     # --- 신규 Hard Constraint 제어 파라미터 ---
     enforce_seniority_pairing: bool = True # 시니어-주니어 동반 근무 규칙 강제 여부

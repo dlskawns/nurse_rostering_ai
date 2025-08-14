@@ -115,13 +115,13 @@ def _build_shift_manage_and_requirements(db: Session, current_user, latest_confi
                 daily_shift_requirements[code] = sm.manpower
     return shift_manage_data, daily_shift_requirements
 
-
-def _run_cp_sat_basic(nurses_in_group, preferences, latest_config, req, shift_manage_data, fixed_cells=None, time_limit_seconds=60):
+def _run_cp_sat_basic(nurses_in_group, preferences, latest_config, req, shift_manage_data, fixed_cells=None, time_limit_seconds=60, config_override: dict | None = None):
     """cp_sat_basic 엔진 호출을 표준화한다."""
     nurses_dict = [n.__dict__ for n in nurses_in_group]
     prefs_dict = [p.__dict__ for p in preferences]
 
-    config_dict = latest_config.__dict__ if latest_config else {}
+    # 호출자가 구성한 config_dict(게이지 반영 등)이 있으면 이를 사용
+    config_dict = (config_override.copy() if config_override is not None else (latest_config.__dict__.copy() if latest_config else {}))
     # ShiftManage 요구인원은 호출부에서 주입한다
     # fixed_cells 는 옵션
     if fixed_cells:
@@ -204,7 +204,38 @@ def _build_roster_response(db: Session, schedule, req, nurses_in_group):
             }
         )
     return roster_data
+def _apply_preceptor_gauge(config_dict: dict, gauge: int | None) -> None:
+    """프리셉터 게이지(0~10)를 엔진 설정 파라미터로 매핑한다.
 
+    Args:
+        config_dict: 엔진에 전달할 설정 딕셔너리 (in-place 수정)
+        gauge: 프론트에서 전달한 게이지 값(0~10). None이면 미적용
+    """
+    # gauge = 10
+    if gauge is None:
+        return
+    print(f"프리셉터 게이지: {gauge}")
+    g = max(0, min(10, int(gauge)))
+    # 강도: 0→0.2x, 10→2.0x
+    strength = round(0.2 + 0.18 * g, 2)
+    # 상위 일수 K: 0→4, 10→30
+    top_k = int(4 + (30 - 4) * (g / 10.0))
+    # 최소 가중치 하한: 0→10.0, 10→5.0
+    min_w = round(10.0 - 0.5 * g, 2)
+
+    config_dict['preceptor_enable'] = g > 0
+    config_dict['preceptor_strength_multiplier'] = strength
+    config_dict['preceptor_top_days'] = top_k
+    config_dict['preceptor_min_pair_weight'] = min_w
+    # # 교대 포커스: 게이지 낮음→N, 중간→E/N, 높음→D/E/N
+    # if g <= 3:
+    #     config_dict['preceptor_focus_shifts'] = ['N']
+    # elif g <= 6:
+    #     config_dict['preceptor_focus_shifts'] = ['E','N']
+    # else:
+    #     config_dict['preceptor_focus_shifts'] = ['D','E','N']
+    # print(f"[프리셉터 게이지] g={g} → strength={strength}x, top_k={top_k}, min_w={min_w}, focus={config_dict['preceptor_focus_shifts']}")
+    print(f"[프리셉터 게이지] g={g} → strength={strength}x, top_k={top_k}, min_w={min_w}")
 
 # ───────────────────────────── 서비스 함수 ─────────────────────────────
 
@@ -238,7 +269,8 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
     # daily_shift_requirements를 config에 주입해서 엔진 호출
     config_dict = latest_config.__dict__ if latest_config else {}
     config_dict['daily_shift_requirements'] = daily_shift_requirements
-
+    # ── 프리셉터 게이지(0~10) → 파라미터 매핑 ──
+    _apply_preceptor_gauge(config_dict, getattr(req, 'preceptor_gauge', None))
     print("cp_sat_basic 엔진으로 근무표 생성 시작")
     generated, satisfaction_data, roster_system = _run_cp_sat_basic(
         nurses_in_group,
@@ -248,6 +280,7 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
         shift_manage_data,
         fixed_cells=None,
         time_limit_seconds=60,
+        config_override=config_dict,
     )
 
     _persist_entries(db, schedule, generated, req)
@@ -289,6 +322,8 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
     # fixed_cells 및 요구인원 설정 반영
     config_dict = latest_config.__dict__ if latest_config else {}
     config_dict['daily_shift_requirements'] = daily_shift_requirements
+    # ── 프리셉터 게이지(0~10) → 파라미터 매핑 (고정 생성에도 동일 적용) ──
+    _apply_preceptor_gauge(config_dict, getattr(req, 'preceptor_gauge', None))
 
     print("cp_sat_basic 엔진으로 고정 셀 반영 근무표 생성 시작")
     generated, satisfaction_data, roster_system = _run_cp_sat_basic(
@@ -299,6 +334,7 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
         shift_manage_data,
         fixed_cells=fixed_cells,
         time_limit_seconds=300,
+        config_override=config_dict,
     )
 
     _persist_entries(db, schedule, generated, req)

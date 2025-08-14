@@ -67,12 +67,12 @@ class CPSATBasicEngine:
         even_nights = config_data.get('even_nights', True)
         
         # 가중치 설정 - Night Keep은 E와 차별화
-        shift_weights = {
+        shift_weights = config_data.get('shift_preference_weights', {
             'D': 5.0, 
             'E': 5.0, 
             'N': 7.0,  # Night Keep은 더 높은 가중치
             'OFF': 10.0
-        }
+        })
         
         return NurseRosterConfig(
             daily_shift_requirements={
@@ -97,9 +97,15 @@ class CPSATBasicEngine:
             global_monthly_off_days=2,
             standard_personal_off_days=config_data.get('off_days', 8) - 2 if config_data.get('off_days', 8) > 2 else 0,
             # 수정
-            shift_requirement_priority = max(0.05, config_data.get('shift_priority', 0.7)),   # 0은 최소 0.05로 보정
+            shift_requirement_priority = max(0.05, config_data.get('shift_priority', 0.7)),
             shift_preference_weights=shift_weights,
-            pair_preference_weight=3.0
+            pair_preference_weight=config_data.get('pair_preference_weight', 3.0),
+            # 프리셉터 관련 오버라이드 반영
+            preceptor_enable=config_data.get('preceptor_enable', True),
+            preceptor_strength_multiplier=config_data.get('preceptor_strength_multiplier', 1.0),
+            preceptor_top_days=config_data.get('preceptor_top_days', 12),
+            preceptor_min_pair_weight=config_data.get('preceptor_min_pair_weight', 5.0),
+            preceptor_focus_shifts=config_data.get('preceptor_focus_shifts', None)
         )
     
     def create_shift_manage_from_db(self, shift_manage_data: List[dict]):
@@ -258,6 +264,39 @@ class CPSATBasicEngine:
         with Timer("선호도 데이터 파싱"):
             shift_preferences, off_requests, pair_preferences = self.parse_preferences_from_db(prefs_data)
         
+        # ────────────────────────────── 프리셉터 페어링 반영 ──────────────────────────────
+        # nurses_data 내 preceptor_id 를 사용해 자동으로 함께 근무 선호를 추가한다.
+        try:
+            valid_ids = {row.get('nurse_id') for row in nurses_data}
+            seen_pairs = set()  # 중복 방지 (무방향)
+            added_cnt = 0
+            # 프리셉터-멘티 함께 근무 가중치: 기본 페어링 대비 강화
+            preceptor_pair_weight = float(getattr(config, 'pair_preference_weight', 3.0)) * 2.5
+            for row in nurses_data:
+                mentee_id = row.get('nurse_id')
+                preceptor_id = row.get('preceptor_id')
+                if not mentee_id or not preceptor_id:
+                    continue
+                if preceptor_id not in valid_ids or preceptor_id == mentee_id:
+                    continue
+                key = frozenset((mentee_id, preceptor_id))
+                if key in seen_pairs:
+                    continue
+                pair_preferences.setdefault('work_together', [])
+                pair_preferences['work_together'].append({
+                    'nurse_1': mentee_id,
+                    'nurse_2': preceptor_id,
+                    'weight': preceptor_pair_weight,
+                    'source': 'preceptor'
+                })
+                seen_pairs.add(key)
+                added_cnt += 1
+            if added_cnt:
+                print(f"[CP-SAT-Basic] 프리셉터 페어링 {added_cnt}건 추가 적용")
+        except Exception as e:
+            print(f"[CP-SAT-Basic] 프리셉터 페어링 반영 중 오류: {e}")
+        # ────────────────────────────────────────────────────────────────────────
+        
         # 6. 휴무 요청 적용
         if off_requests:
             with Timer("휴무 요청 적용"):
@@ -302,7 +341,26 @@ class CPSATBasicEngine:
             result = self._convert_result_to_db_format(roster_system, nurses)
         
         # 11. 최적화 결과 출력 및 만족도 데이터 수집
-        satisfaction_data = self._print_optimization_results(roster_system)
+        # 프리셉터 쌍 수집 (DB id 기준)
+        preceptor_pairs = []
+        try:
+            valid_ids = {row.get('nurse_id') for row in nurses_data}
+            seen = set()
+            for row in nurses_data:
+                mentee_id = row.get('nurse_id')
+                preceptor_id = row.get('preceptor_id')
+                if not mentee_id or not preceptor_id:
+                    continue
+                if mentee_id not in valid_ids or preceptor_id not in valid_ids or mentee_id == preceptor_id:
+                    continue
+                k = frozenset((mentee_id, preceptor_id))
+                if k in seen:
+                    continue
+                preceptor_pairs.append((mentee_id, preceptor_id))
+                seen.add(k)
+        except Exception:
+            pass
+        satisfaction_data = self._print_optimization_results(roster_system, preceptor_pairs)
         
         # 12. 대시보드 분석 데이터 저장 (스케줄 생성 후)
         try:
@@ -439,7 +497,7 @@ class CPSATBasicEngine:
             result[nurse.db_id] = nurse_schedule
         return result
     
-    def _print_optimization_results(self, roster_system: RosterSystem):
+    def _print_optimization_results(self, roster_system: RosterSystem, preceptor_pairs=None):
         """최적화 결과 출력 및 만족도 데이터 반환"""
         print(f"\n{self.logger_prefix} 최적화 결과:")
         
@@ -514,6 +572,38 @@ class CPSATBasicEngine:
             
         except Exception as e:
             print(f"  - 만족도 계산 중 오류: {e}")
+        
+        # ───────────────── 프리셉터 겹침률 출력 ─────────────────
+        try:
+            if preceptor_pairs:
+                print("\n  - 프리셉터 페어링 반영률:")
+                off_idx = roster_system.config.shift_types.index('OFF')
+                # 근무 코드 중 실제 근무(D/E/N) 인덱스
+                work_shift_idxs = [roster_system.config.shift_types.index(code) for code in roster_system.config.daily_shift_requirements.keys()]
+                dbid_to_idx = {n.db_id: n.id for n in roster_system.nurses}
+                for mentee_dbid, preceptor_dbid in preceptor_pairs:
+                    n1 = dbid_to_idx.get(mentee_dbid)
+                    n2 = dbid_to_idx.get(preceptor_dbid)
+                    if n1 is None or n2 is None:
+                        continue
+                    same_shift_days = 0
+                    both_worked_days = 0
+                    for d in range(roster_system.num_days):
+                        s1 = int(np.argmax(roster_system.roster[n1, d]))
+                        s2 = int(np.argmax(roster_system.roster[n2, d]))
+                        if s1 != off_idx and s2 != off_idx:
+                            both_worked_days += 1
+                            if s1 == s2 and s1 in work_shift_idxs:
+                                same_shift_days += 1
+                    rate = (same_shift_days / both_worked_days * 100.0) if both_worked_days > 0 else 0.0
+                    mentee_name = next((n.name for n in roster_system.nurses if n.id == n1), str(mentee_dbid))
+                    preceptor_name = next((n.name for n in roster_system.nurses if n.id == n2), str(preceptor_dbid))
+                    print(f"    • {mentee_name}({mentee_dbid}) - {preceptor_name}({preceptor_dbid}): 같은 근무 {same_shift_days}일 / 동시근무 {both_worked_days}일 ({rate:.2f}%)")
+                # 만족도 데이터에 요약 저장
+                satisfaction_data.setdefault("preceptor_overlap", {})
+                satisfaction_data["preceptor_overlap"]["note"] = "같은 교대 배정일수 / 두 사람 모두 근무한 일수 기준"
+        except Exception as e:
+            print(f"  - 프리셉터 반영률 계산 중 오류: {e}")
         
         return satisfaction_data
 
@@ -659,7 +749,7 @@ def _add_soft_penalties_one_nurse(m, X, rs, nurse, T0, T1, obj, off, night):
             m.Add(slack >= 2 - offs)
             obj.append(-300 * slack)
     # Night 균등 : 개인편차는 전역 penalty로 쓰므로 생략 가능
-    # N-O-D/E 패턴, OFF 클러스터는 전역 penalty → 생략 또는 근사 추가
+    # N-O-D/E 패터, OFF 클러스터는 전역 penalty → 생략 또는 근사 추가
     return
 
 def _eval_full_objective(rs: RosterSystem)->float:
@@ -676,6 +766,9 @@ cp_sat_engine = CPSATBasicEngine()
 # ║                     공통 모델 빌더  (Full Constraints)               ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 def _build_full_model(rs: RosterSystem, grouped):
+    return _build_full_model(rs, grouped, include_pair_objective=True)
+
+def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = True):
     from ortools.sat.python import cp_model
     m = cp_model.CpModel()
     N,D,S = len(rs.nurses), rs.num_days, rs.config.num_shifts
@@ -818,7 +911,7 @@ def _build_full_model(rs: RosterSystem, grouped):
                 m.Add(devP-devN==totN-target)
                 obj.extend([-50*devP,-50*devN])
 
-    # (4-4) N-O-D/E 패턴
+    # (4-4) N-O-D/E 패터
     for n in range(N):
         for d in range(join[n], leave[n]-2):
             pat=m.NewIntVar(0,1,f'NOD_{n}_{d}')
@@ -837,6 +930,10 @@ def _build_full_model(rs: RosterSystem, grouped):
             m.Add(iso <= 1-X(n,d-1,off))
             m.Add(iso <= 1-X(n,d+1,off))
             obj.append(-100*iso)
+ 
+    # (4-6) 프리셉터 보너스 항 모듈화
+    if include_pair_objective:
+        obj.extend(_add_preceptor_objective_terms(m, rs, X, join, leave))
 
     m.Maximize(sum(obj))
     return m,X,join,leave,fixed
@@ -847,7 +944,7 @@ def _build_full_model(rs: RosterSystem, grouped):
 # ─────────────────────────────────────────────────────────────
 def _solve_neighbourhood(rs, n_set, d_set, tl, grouped, run_seed: int | None = None, it:int=0):
     from ortools.sat.python import cp_model
-    model,X,j,l,fixed=_build_full_model(rs,grouped)
+    model,X,j,l,fixed=_build_full_model(rs,grouped, include_pair_objective=False)
 
     # neighbourhood 외 셀은 현재 값 고정
     N,D,S=len(rs.nurses),rs.num_days,rs.config.num_shifts
@@ -860,6 +957,61 @@ def _solve_neighbourhood(rs, n_set, d_set, tl, grouped, run_seed: int | None = N
                 model.Add(X(n,d,s0)==1)
                 for s in range(S):
                     if s!=s0: model.Add(X(n,d,s)==0)
+
+    # 옵션: 프리셉터-포커스 이웃일 때만 해당 셀에 한정하여 보너스 항 주입
+    try:
+        focus_preceptor = bool(getattr(rs.config, 'preceptor_enable', True))
+        if focus_preceptor and hasattr(rs, 'pair_matrix') and isinstance(rs.pair_matrix, dict):
+            # 선택된 n_set,d_set의 셀만 대상으로 제한된 항 생성
+            def X_sub(n,d,s):
+                if (n in n_set) and (d in d_set):
+                    return X(n,d,s)
+                # neighbourhood 밖은 고정되어 있으므로 항의 영향 없음 처리(0 반환)
+                return 0
+            # join/leave를 그대로 써도 되지만 날짜 필터를 d_set로 제한
+            # 간단하게 전역 헬퍼 재사용은 어려우므로, 최소한의 제한형 항만 주입
+            together = rs.pair_matrix.get('together')
+            if together is not None:
+                cfg = rs.config
+                strength = float(getattr(cfg, 'preceptor_strength_multiplier', 1.0))
+                base_min = float(getattr(cfg, 'preceptor_min_pair_weight', 5.0))
+                if getattr(cfg, 'preceptor_focus_shifts', None):
+                    focus_codes = [c for c in cfg.preceptor_focus_shifts if c in cfg.daily_shift_requirements.keys()]
+                else:
+                    focus_codes = list(cfg.daily_shift_requirements.keys())
+                shift_indices = [cfg.shift_types.index(c) for c in focus_codes]
+                pref = rs.preference_matrix
+                pref_sum_threshold = 1.2
+                for n1 in n_set:
+                    for n2 in n_set:
+                        if n1>=n2: continue
+                        base = together[n1,n2]
+                        if base < base_min: continue
+                        w = int(base * 100 * strength)
+                        for d in d_set:
+                            # 해당 날짜에서 최선의 교대만 선택
+                            best=None; best_s=None
+                            for s in shift_indices:
+                                sc = pref[n1,d,s] + pref[n2,d,s]
+                                if sc < pref_sum_threshold: continue
+                                if best is None or sc>best:
+                                    best,best_s=sc,s
+                            if best is None: continue
+                            z = model.NewBoolVar(f'pc_lns_{n1}_{n2}_{d}_{best_s}')
+                            model.Add(z <= X_sub(n1,d,best_s))
+                            model.Add(z <= X_sub(n2,d,best_s))
+                            # 목적함수에 추가
+                            # CP-SAT Python API에서는 Maximize가 호출 이전이면 terms 누적 가능
+                            # 여기서는 model에 저장된 선형식이 없으므로 CpSolver쪽에서 자동 합산되도록 유지
+                            # 간단하게: 목적은 build 단계의 obj에만 존재. 여기서는 AddMaxEquality 대신
+                            # 리니어식으로 보정: solver Maximize 전에 선호 obj는 이미 존재하므로, 이 항을 모델의
+                            # 계수화가 필요. OR-Tools는 명시 obj 합산 인터페이스 없음 → trick: 저장 후 아래에서 사용 안함
+                            # 안전하게는 풀빌드에서만 목적에 넣고, LNS에서는 제약만으로 유도 불가 → 여기선 생략
+                            # 대신 neighbourhood 풀빌드 자체가 include_pair_objective=False 이므로 성능 우선.
+                            # 필요시 풀빌드 쪽 강도 상향으로 보정.
+                            pass
+    except Exception:
+        pass
 
     solver=cp_model.CpSolver()
     if run_seed is not None:
@@ -880,6 +1032,69 @@ def _solve_neighbourhood(rs, n_set, d_set, tl, grouped, run_seed: int | None = N
             for s in range(S):
                 rs.roster[n,d,s]=1 if solver.Value(X(n,d,s)) else 0
     return True
+
+
+def _add_preceptor_objective_terms(m, rs: RosterSystem, X, j, l):
+    """프리셉터(페어 together) 보너스 항을 생성하여 obj 리스트로 반환.
+    - 하드 제약은 건드리지 않음. 소프트 보너스만 추가.
+    - 설정 파라미터로 강도/탑-K/교대/하한값을 제어.
+    - LNS에서는 호출자가 생략하거나 별도 이웃 주입으로 사용 가능.
+    """
+    obj_terms = []
+    cfg = rs.config
+    if not getattr(cfg, 'preceptor_enable', True):
+        return obj_terms
+    if not hasattr(rs, 'pair_matrix') or not isinstance(rs.pair_matrix, dict):
+        return obj_terms
+    together = rs.pair_matrix.get('together')
+    if together is None:
+        return obj_terms
+
+    N, D = len(rs.nurses), rs.num_days
+    # 유효 쌍 필터
+    base_min = float(getattr(cfg, 'preceptor_min_pair_weight', 5.0))
+    pairs = [(i, j2, together[i, j2]) for i in range(N) for j2 in range(i+1, N) if together[i, j2] >= base_min]
+    if not pairs:
+        return obj_terms
+
+    # 교대 필터
+    if getattr(cfg, 'preceptor_focus_shifts', None):
+        focus_codes = [c for c in cfg.preceptor_focus_shifts if c in cfg.daily_shift_requirements.keys()]
+    else:
+        focus_codes = list(cfg.daily_shift_requirements.keys())
+    shift_indices = [cfg.shift_types.index(c) for c in focus_codes]
+
+    pref = rs.preference_matrix
+    pref_sum_threshold = 1.2
+    K_default = int(getattr(cfg, 'preceptor_top_days', 12))
+    strength = float(getattr(cfg, 'preceptor_strength_multiplier', 1.0))
+
+    import time as _t
+    _t0 = _t.time(); _added=0
+    for n1, n2, base in pairs:
+        w = int(base * 100 * strength)
+        d0, d1 = max(j[n1], j[n2]), min(l[n1], l[n2])
+        scored = []
+        for d in range(d0, d1+1):
+            best=None; best_s=None
+            for s in shift_indices:
+                sc = pref[n1,d,s] + pref[n2,d,s]
+                if sc < pref_sum_threshold:
+                    continue
+                if best is None or sc>best:
+                    best, best_s = sc, s
+            if best is not None:
+                scored.append((best,d,best_s))
+        K = min(K_default, len(scored))
+        for _, d, s in sorted(scored, reverse=True)[:K]:
+            z = m.NewBoolVar(f'pc_{n1}_{n2}_{d}_{s}')
+            m.Add(z <= X(n1,d,s))
+            m.Add(z <= X(n2,d,s))
+            obj_terms.append(w * z)
+            _added += 1
+    _dt = _t.time()-_t0
+    print(f"[CP-SAT-Basic] 프리셉터 항: 쌍 {len(pairs)}개, 변수 {_added}개, {_dt:.2f}s, 강도 {strength}x, K={K_default}, shifts={focus_codes}")
+    return obj_terms
 
 
 def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month,  shift_manage_data, time_limit_seconds=60, randomize=True, seed=None):

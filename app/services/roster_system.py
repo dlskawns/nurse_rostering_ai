@@ -270,6 +270,7 @@ class RosterSystem:
                 nurse_1_id = pair["nurse_1"]
                 nurse_2_id = pair["nurse_2"]
                 weight = pair.get("weight", self.config.pair_preference_weight)
+                source = pair.get("source")
                 nurse_1_idx = next((n.id for n in self.nurses if n.db_id == nurse_1_id), None)
                 nurse_2_idx = next((n.id for n in self.nurses if n.db_id == nurse_2_id), None)
                 # nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
@@ -278,8 +279,9 @@ class RosterSystem:
                 if nurse_1_idx is not None and nurse_2_idx is not None:
                     self.pair_matrix["together"][nurse_1_idx, nurse_2_idx] = weight
                     self.pair_matrix["together"][nurse_2_idx, nurse_1_idx] = weight  # 대칭적으로 설정
-                    # 요청자 기준 저장 (대칭 저장하지 않음)
-                    self.pair_requests["together"].add((nurse_1_idx, nurse_2_idx))
+                    # 요청자 기준 저장 (대칭 저장하지 않음) — 사용자 요청만 기록
+                    if source != 'preceptor':
+                        self.pair_requests["together"].add((nurse_1_idx, nurse_2_idx))
                 else:
                     if nurse_1_idx is None:
                         print(f"경고: ID {nurse_1_id}인 간호사를 찾을 수 없습니다.")
@@ -1492,7 +1494,7 @@ class RosterSystem:
             satisfied_pair_requests = 0
             
             if hasattr(self, 'pair_matrix') and self.pair_matrix is not None:
-                # 요청자 기준 계산: self.pair_requests 사용 (없으면 대체 로직)
+                # 요청자(방향성) 기준 계산만 사용: 사용자 입력 요청만 카운트
                 has_directional = hasattr(self, 'pair_requests') and isinstance(self.pair_requests, dict)
                 if has_directional:
                     together_reqs = self.pair_requests.get("together", set())
@@ -1513,7 +1515,7 @@ class RosterSystem:
                                 if not self._are_nurses_working_together(n_idx, other_n_idx, day):
                                     satisfied_pair_requests += 1
                 else:
-                    # 후방 호환: 대칭 행렬 기반 (기존 방식)
+                    # 방향성 정보가 전혀 없는 경우에만 후방 호환(행렬 기반) 사용
                     together_mat = self.pair_matrix.get("together") if isinstance(self.pair_matrix, dict) else None
                     apart_mat = self.pair_matrix.get("apart") if isinstance(self.pair_matrix, dict) else None
                     def _has_pref(mat, i, j):

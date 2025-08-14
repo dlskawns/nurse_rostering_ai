@@ -36,6 +36,7 @@ class RosterRequest(BaseModel):
     month: int
     algorithm: str = "cp_sat"  # "cp_sat" or "random_sampling"
     config_id: Optional[int] = None
+    preceptor_gauge: Optional[int] = Field(default=None, ge=0, le=10)
 
 class PreferenceSubmit(BaseModel):
     year: int
