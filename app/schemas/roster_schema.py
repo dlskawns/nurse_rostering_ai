@@ -15,6 +15,10 @@ class MoveShiftRequest(BaseModel):
     shift_id: str
     new_sequence: int
 
+class MoveNurseRequest(BaseModel):
+    nurse_id: str
+    new_sequence: int
+
 
 class RemoveShiftRequest(BaseModel):
     shift_id: str
@@ -107,6 +111,7 @@ class NurseProfile(BaseModel):
     preceptor_id: Optional[str] = None
     joining_date: Optional[datetime] = None
     resignation_date: Optional[datetime] = None
+    sequence: Optional[int] = 0
 
     class Config:
         from_attributes = True

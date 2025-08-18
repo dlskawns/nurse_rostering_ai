@@ -124,8 +124,10 @@ class CPSATBasicEngine:
 
     def create_nurses_from_db(self, nurses_data: List[dict]) -> List[Nurse]:
         """DB에서 가져온 간호사 데이터를 Nurse 객체 리스트로 변환"""
+        # sequence 기준 정렬(없으면 0) → 알고리즘 입력 순서 일관화
+        sorted_rows = sorted(nurses_data, key=lambda r: (r.get('sequence', 0), -int(r.get('experience', 0) or 0), str(r.get('nurse_id'))))
         nurses = []
-        for i, nurse_data in enumerate(nurses_data):
+        for i, nurse_data in enumerate(sorted_rows):
             # DB 모델을 Nurse 객체로 변환
             nurse_dict = {
                 'id': i,  # 엔진에서 사용할 인덱스 ID

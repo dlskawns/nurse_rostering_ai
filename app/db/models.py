@@ -34,6 +34,8 @@ class Nurse(Base):
     created_at = Column(DATETIME, default=func.now())
     updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
     resignation_date = Column(DATETIME, nullable=True)
+    # 화면 표시 및 알고리즘 입력 순서 제어용
+    sequence = Column(INTEGER, nullable=False, default=0)
 
     group = relationship("Group")
     @property
@@ -139,6 +141,7 @@ class RosterConfig(Base):
     sequential_offs = Column(BOOLEAN)
     even_nights = Column(BOOLEAN)
     created_at = Column(DATETIME, default=func.now())
+    preceptor_gauge = Column(INTEGER, nullable=False, default=5)
 
     office = relationship("Office")
     group = relationship("Group")

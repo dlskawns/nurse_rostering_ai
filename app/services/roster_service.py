@@ -33,7 +33,6 @@ def save_roster_config_service(config_data: RosterConfigCreate, user, db: Sessio
             ShiftManage.nurse_class == 'RN',
             ShiftManage.config_version == config_version
         ).all()
-        print('\n\n\n\n\nshift_manages', shift_manages[0].config_version, '\n\n\n\n\n')
         day_req = eve_req = nig_req = 0
         if shift_manages:
             for sm in shift_manages:
@@ -45,7 +44,6 @@ def save_roster_config_service(config_data: RosterConfigCreate, user, db: Sessio
                     nig_req = sm.manpower or 0
         else:
             day_req = eve_req = nig_req = 3
-        print(f'추출된 교대 인원: day_req={day_req}, eve_req={eve_req}, nig_req={nig_req}')
         config_dict = config_data.model_dump()
         config_dict.update({
             'day_req': day_req,
