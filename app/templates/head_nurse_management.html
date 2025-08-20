@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -158,6 +159,124 @@
             color: #666;
             margin-bottom: 2px;
         }
+        
+        /* 엑셀 업로드 관련 스타일 */
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin: 10px 0;
+            transition: border-color 0.3s ease;
+            background: #fafafa;
+        }
+        
+        .upload-area.dragover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+        
+        .upload-area i {
+            font-size: 2em;
+            color: #ccc;
+            margin-bottom: 10px;
+        }
+        
+        .upload-progress {
+            margin: 10px 0;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 20px;
+            background: #2196F3;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-text {
+            display: block;
+            text-align: center;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+        
+        .validation-summary {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .summary-stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .stat {
+            font-size: 14px;
+        }
+        
+        .stat.success { color: #28a745; }
+        .stat.warning { color: #ffc107; }
+        .stat.error { color: #dc3545; }
+        
+        .error-details {
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .error-item {
+            padding: 5px;
+            margin: 2px 0;
+            background: #fff;
+            border-left: 3px solid #dc3545;
+            border-radius: 2px;
+        }
+        
+        /* 업로드 데이터 상태별 색상 구분 */
+        .row-new { background-color: #e8f5e8; }
+        .row-update { background-color: #fff3cd; }
+        .row-error { background-color: #f8d7da; }
+        .row-excluded { opacity: 0.5; }
+        
+        .template-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        
+        .template-btn:hover {
+            background: #138496;
+        }
+        
+        .excel-mode {
+            background: #e7f3ff;
+            border: 2px solid #2196F3;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        
+        .excel-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin: 10px 0;
+        }
+        
+        .include-checkbox {
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -179,8 +298,19 @@
 
             <div class="controls">
                 <div class="file-upload-wrapper">
-                    <input type="file" id="excel-upload" accept=".xlsx, .xls">
-                    <button onclick="uploadExcel()">업로드</button>
+                    <button onclick="downloadTemplate()" class="template-btn">📥 템플릿 다운로드</button>
+                    <div class="upload-area" id="upload-area">
+                        <input type="file" id="excel-upload" accept=".xlsx, .xls" style="display:none;">
+                        <div class="upload-content">
+                            <i class="fa fa-cloud-upload"></i>
+                            <p>엑셀 파일을 여기에 드래그하거나 <button onclick="document.getElementById('excel-upload').click()" style="border:none; background:none; color:#2196F3; cursor:pointer; text-decoration:underline;">파일 선택</button></p>
+                            <small>지원 형식: .xlsx, .xls (최대 10MB)</small>
+                        </div>
+                    </div>
+                    <div class="upload-progress" id="upload-progress" style="display:none;">
+                        <div class="progress-bar" id="progress-bar"></div>
+                        <span class="progress-text" id="progress-text">업로드 중... 0%</span>
+                    </div>
                 </div>
                 <button id="add-nurse-button" onclick="addNurse()">부서원 추가</button>
                 <button id="edit-button" onclick="toggleEdit(true)">수정</button>
@@ -191,10 +321,29 @@
                 </div>
             </div>
 
+            <!-- 엑셀 검증 결과 표시 영역 -->
+            <div class="validation-summary" id="validation-summary" style="display:none;">
+                <div class="summary-stats">
+                    <span class="stat success">✅ 성공: <strong id="success-count">0</strong>건</span>
+                    <span class="stat warning">⚠️ 덮어쓰기: <strong id="overwrite-count">0</strong>건</span>
+                    <span class="stat error">❌ 오류: <strong id="error-count">0</strong>건</span>
+                    <span class="stat info" id="new-groups-stat" style="color: #17a2b8; display: none;">🏥 새 병동: <strong id="new-groups-count">0</strong>개</span>
+                </div>
+                <div class="error-details" id="error-details"></div>
+                <div class="excel-controls">
+                    <button onclick="confirmExcelUpload()" id="confirm-excel-btn" disabled>📥 선택된 데이터 저장</button>
+                    <button onclick="cancelExcelUpload()" id="cancel-excel-btn">❌ 취소</button>
+                    <label>
+                        <input type="checkbox" id="select-all-excel" onchange="toggleAllExcelRows()"> 모두 선택
+                    </label>
+                </div>
+            </div>
+
             <div class="scrollable-table">
                 <table>
                     <thead>
                         <tr>
+                            <th id="excel-include-header" style="display:none;">포함</th>
                             <th>병동</th>
                             <th>ID</th>
                             <th>계정 ID</th>
@@ -224,6 +373,12 @@
         let allNursesInGroup = []; // To populate preceptor dropdown
         let history = [];
         let redoStack = [];
+        
+        // 엑셀 업로드 관련 변수
+        let excelData = [];
+        let validationResults = [];
+        let isExcelMode = false;
+        let newGroupsNeeded = [];
 
         async function fetchNurses() {
             try {
@@ -274,12 +429,454 @@
             document.getElementById('redo-button').disabled = redoStack.length === 0;
         }
 
-        // This would be populated from the excel file in a real scenario
-        function uploadExcel() {
-            // For now, it just re-renders the mock data.
-            // In a real implementation, you would use a library like SheetJS to parse the Excel file.
-            alert("엑셀 업로드 기능은 현재 구현되지 않았습니다. 샘플 데이터가 사용됩니다.");
+        // 엑셀 업로드 관련 함수들
+        
+        // 템플릿 다운로드
+        async function downloadTemplate() {
+            try {
+                const response = await fetch('/nurses/template-download');
+                if (!response.ok) {
+                    throw new Error('템플릿 다운로드에 실패했습니다.');
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = '간호사_정보_템플릿.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                alert('✅ 템플릿이 다운로드되었습니다.');
+            } catch (error) {
+                console.error(error);
+                alert(`❌ 템플릿 다운로드 실패: ${error.message}`);
+            }
+        }
+        
+        // 드래그앤드롭 및 파일 업로드 설정
+        function setupDragDrop() {
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('excel-upload');
+            
+            // 드래그 이벤트 처리
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, () => uploadArea.classList.add('dragover'));
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('dragover'));
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileUpload(files[0]);
+                }
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileUpload(e.target.files[0]);
+                }
+            });
+        }
+        
+        // 파일 업로드 처리
+        async function handleFileUpload(file) {
+            // 파일 유효성 검사
+            if (file.size > 10 * 1024 * 1024) {
+                alert('❌ 파일 크기는 10MB를 초과할 수 없습니다.');
+                return;
+            }
+            
+            if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
+                alert('❌ 지원되지 않는 파일 형식입니다. (.xlsx, .xls만 지원)');
+                return;
+            }
+            
+            // 진행률 표시
+            showUploadProgress();
+            updateProgress(0, '파일 업로드 중...');
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                updateProgress(30, '파일 파싱 중...');
+                
+                const response = await fetch('/nurses/upload-excel', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                updateProgress(70, '데이터 검증 중...');
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '업로드에 실패했습니다.');
+                }
+                
+                const result = await response.json();
+                
+                updateProgress(100, '완료!');
+                
+                setTimeout(() => {
+                    hideUploadProgress();
+                    handleUploadResult(result);
+                }, 500);
+                
+            } catch (error) {
+                console.error(error);
+                hideUploadProgress();
+                alert(`❌ 업로드 실패: ${error.message}`);
+            }
+        }
+        
+        // 업로드 진행률 표시
+        function showUploadProgress() {
+            document.getElementById('upload-progress').style.display = 'block';
+        }
+        
+        function hideUploadProgress() {
+            document.getElementById('upload-progress').style.display = 'none';
+        }
+        
+        function updateProgress(percent, text) {
+            document.getElementById('progress-bar').style.width = percent + '%';
+            document.getElementById('progress-text').textContent = text + ' ' + percent + '%';
+        }
+        
+        // 업로드 결과 처리
+        function handleUploadResult(result) {
+            if (!result.success) {
+                alert(`❌ 업로드 실패: ${result.error}`);
+                return;
+            }
+            
+            excelData = result.data;
+            validationResults = result.validation_results;
+            newGroupsNeeded = result.new_groups_needed || [];
+            
+            // 검증 결과 표시
+            displayValidationSummary(result.summary);
+            
+            // 엑셀 모드로 전환
+            enterExcelMode();
+            
+            // 미리보기 테이블 렌더링
+            renderExcelPreviewTable();
+        }
+        
+        // 검증 결과 요약 표시
+        function displayValidationSummary(summary) {
+            document.getElementById('success-count').textContent = summary.valid;
+            document.getElementById('overwrite-count').textContent = summary.overwrite;
+            document.getElementById('error-count').textContent = summary.error;
+            
+            // 새 그룹 표시
+            if (newGroupsNeeded.length > 0) {
+                document.getElementById('new-groups-count').textContent = newGroupsNeeded.length;
+                document.getElementById('new-groups-stat').style.display = 'inline';
+            } else {
+                document.getElementById('new-groups-stat').style.display = 'none';
+            }
+            
+            // 오류 및 경고 상세 표시
+            const errorDetails = document.getElementById('error-details');
+            errorDetails.innerHTML = '';
+            
+            validationResults.forEach((result, index) => {
+                const messages = [];
+                
+                // 오류 메시지
+                if (!result.is_valid && result.errors) {
+                    messages.push(...result.errors.map(error => `<span style="color: #dc3545;">❌ ${error}</span>`));
+                }
+                
+                // 경고 메시지 (그룹 상태 등)
+                if (result.warnings && result.warnings.length > 0) {
+                    messages.push(...result.warnings.map(warning => `<span style="color: #28a745;">ℹ️ ${warning}</span>`));
+                }
+                
+                if (messages.length > 0) {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = result.is_valid ? 'info-item' : 'error-item';
+                    messageDiv.style.padding = '8px';
+                    messageDiv.style.margin = '4px 0';
+                    messageDiv.style.background = '#fff';
+                    messageDiv.style.borderRadius = '4px';
+                    messageDiv.style.borderLeft = result.is_valid ? '3px solid #28a745' : '3px solid #dc3545';
+                    messageDiv.innerHTML = `
+                        <strong>행 ${index + 2}:</strong><br/>
+                        ${messages.join('<br/>')}
+                    `;
+                    errorDetails.appendChild(messageDiv);
+                }
+            });
+            
+            document.getElementById('validation-summary').style.display = 'block';
+            
+            // 저장 버튼 활성화 (유효한 데이터가 있는 경우)
+            document.getElementById('confirm-excel-btn').disabled = summary.valid === 0;
+        }
+        
+        // 엑셀 모드 진입
+        function enterExcelMode() {
+            isExcelMode = true;
+            document.querySelector('.container').classList.add('excel-mode');
+            document.getElementById('excel-include-header').style.display = 'table-cell';
+            
+            // 기존 버튼들 비활성화
+            document.getElementById('add-nurse-button').disabled = true;
+            document.getElementById('edit-button').disabled = true;
+            document.getElementById('save-button').disabled = true;
+        }
+        
+        // 엑셀 모드 해제
+        function exitExcelMode() {
+            isExcelMode = false;
+            document.querySelector('.container').classList.remove('excel-mode');
+            document.getElementById('excel-include-header').style.display = 'none';
+            document.getElementById('validation-summary').style.display = 'none';
+            
+            // 기존 버튼들 활성화
+            document.getElementById('add-nurse-button').disabled = false;
+            document.getElementById('edit-button').disabled = false;
+            
+            // 데이터 초기화
+            excelData = [];
+            validationResults = [];
+            newGroupsNeeded = [];
+            
+            // 원래 테이블로 복원
             renderTable();
+        }
+        
+        // 엑셀 미리보기 테이블 렌더링
+        function renderExcelPreviewTable() {
+            const tbody = document.querySelector('tbody');
+            tbody.innerHTML = '';
+            
+            excelData.forEach((nurse, index) => {
+                if (!nurse) return;
+                
+                const validation = validationResults[index];
+                const row = document.createElement('tr');
+                
+                // 행 상태에 따른 클래스 적용
+                if (!validation.is_valid) {
+                    row.classList.add('row-error');
+                } else if (validation.is_overwrite) {
+                    row.classList.add('row-update');
+                } else if (validation.is_new_group) {
+                    row.classList.add('row-update'); // 새 그룹도 노란색으로 표시
+                } else {
+                    row.classList.add('row-new');
+                }
+                
+                const formatDate = (dateString) => {
+                    if (!dateString) return '';
+                    const date = new Date(dateString);
+                    return date.toISOString().split('T')[0];
+                };
+                
+                                row.innerHTML = `
+                    <td><input type="checkbox" class="include-checkbox" ${validation.is_valid ? 'checked' : ''} ${!validation.is_valid ? 'disabled' : ''} onchange="updateExcelConfirmButton()"></td>
+                    <td>${validation.group_name || 'ICU'}</td>
+                    <td style="font-size: 11px;">${nurse.nurse_id.substring(0, 8)}...</td>
+                    <td><input type="text" class="excel-field" data-field="account_id" value="${nurse.account_id || ''}" ${!validation.is_valid ? 'disabled' : ''}></td>
+                    <td><input type="text" class="excel-field" data-field="name" value="${nurse.name}" ${!validation.is_valid ? 'disabled' : ''}></td>
+                    <td class="action-cell">
+                        <button class="excel-field" data-action="decrease" data-field="experience" ${!validation.is_valid ? 'disabled' : ''}>-</button>
+                        <span class="experience-value">${nurse.experience}</span>
+                        <button class="excel-field" data-action="increase" data-field="experience" ${!validation.is_valid ? 'disabled' : ''}>+</button>
+                    </td>
+                    <td><input type="text" class="excel-field" data-field="role" value="${nurse.role || ''}" ${!validation.is_valid ? 'disabled' : ''}></td>
+                    <td><input type="text" class="excel-field" data-field="level_" value="${nurse.level_ || ''}" ${!validation.is_valid ? 'disabled' : ''}></td>
+                    <td>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="excel-field" data-field="is_head_nurse" ${nurse.is_head_nurse ? 'checked' : ''} ${!validation.is_valid ? 'disabled' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                    </td>
+                    <td>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="excel-field" data-field="is_night_nurse" ${nurse.is_night_nurse ? 'checked' : ''} ${!validation.is_valid ? 'disabled' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                    </td>
+                    <td class="action-cell">
+                        <button class="excel-field" data-action="decrease" data-field="personal_off_adjustment" ${!validation.is_valid ? 'disabled' : ''}>-</button>
+                        <span class="off-adj-value">${nurse.personal_off_adjustment}</span>
+                        <button class="excel-field" data-action="increase" data-field="personal_off_adjustment" ${!validation.is_valid ? 'disabled' : ''}>+</button>
+                    </td>
+                    <td>
+                        <select class="excel-field" data-field="preceptor_id" ${!validation.is_valid ? 'disabled' : ''}>
+                            <option value="">없음</option>
+                            ${nurses.filter(n => n.nurse_id !== nurse.nurse_id).map(n => 
+                                `<option value="${n.nurse_id}" ${nurse.preceptor_id === n.nurse_id ? 'selected' : ''}>${n.name}</option>`
+                            ).join('')}
+                        </select>
+                    </td>
+                    <td class="date-cell">
+                        <input type="date" class="excel-field date-display" data-field="joining_date" value="${formatDate(nurse.joining_date)}" ${!validation.is_valid ? 'disabled' : ''}>
+                    </td>
+                    <td class="date-cell">
+                        <input type="date" class="excel-field date-display" data-field="resignation_date" value="${formatDate(nurse.resignation_date)}" ${!validation.is_valid ? 'disabled' : ''}>
+                    </td>
+                    <td class="action-cell">
+                        ${validation.is_valid
+                            ? (validation.is_new_group 
+                                ? '<span style="color: orange;" title="새 병동 생성 예정">🏥</span>'
+                                : '<span style="color: green;">✓</span>')
+                            : '<span style="color: red;" title="' + (validation.errors ? validation.errors.join(', ') : '오류') + '">✗</span>'
+                        }
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            addExcelEventListeners();
+            updateExcelConfirmButton();
+        }
+        
+        // 엑셀 데이터 이벤트 리스너 추가
+        function addExcelEventListeners() {
+            // 텍스트 입력 필드
+            document.querySelectorAll('input.excel-field[type="text"], input.excel-field[type="date"], select.excel-field').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const row = e.target.closest('tr');
+                    const index = Array.from(row.parentNode.children).indexOf(row);
+                    const field = e.target.getAttribute('data-field');
+                    
+                    if (field === 'joining_date' || field === 'resignation_date') {
+                        excelData[index][field] = e.target.value ? new Date(e.target.value).toISOString() : null;
+                    } else {
+                        excelData[index][field] = e.target.value;
+                    }
+                });
+            });
+            
+            // 체크박스
+            document.querySelectorAll('input.excel-field[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const row = e.target.closest('tr');
+                    const index = Array.from(row.parentNode.children).indexOf(row);
+                    const field = e.target.getAttribute('data-field');
+                    excelData[index][field] = e.target.checked;
+                });
+            });
+            
+            // 숫자 버튼
+            document.querySelectorAll('.excel-field[data-action]').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const row = e.target.closest('tr');
+                    const index = Array.from(row.parentNode.children).indexOf(row);
+                    const field = e.target.getAttribute('data-field');
+                    const action = e.target.getAttribute('data-action');
+                    
+                    if (action === 'increase') {
+                        excelData[index][field]++;
+                    } else if (action === 'decrease') {
+                        if (field === 'experience' && excelData[index][field] <= 1) {
+                            return;
+                        }
+                        excelData[index][field]--;
+                    }
+                    
+                    if(field === 'experience') {
+                        row.querySelector('.experience-value').textContent = excelData[index][field];
+                    } else if(field === 'personal_off_adjustment') {
+                        row.querySelector('.off-adj-value').textContent = excelData[index][field];
+                    }
+                });
+            });
+        }
+        
+        // 모든 행 선택/해제
+        function toggleAllExcelRows() {
+            const selectAll = document.getElementById('select-all-excel');
+            const checkboxes = document.querySelectorAll('.include-checkbox:not(:disabled)');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll.checked;
+            });
+            
+            updateExcelConfirmButton();
+        }
+        
+        // 확인 버튼 상태 업데이트
+        function updateExcelConfirmButton() {
+            const checkedBoxes = document.querySelectorAll('.include-checkbox:checked');
+            document.getElementById('confirm-excel-btn').disabled = checkedBoxes.length === 0;
+        }
+        
+        // 엑셀 데이터 저장 확인
+        async function confirmExcelUpload() {
+            const includeRows = Array.from(document.querySelectorAll('.include-checkbox')).map(cb => cb.checked);
+            const selectedCount = includeRows.filter(Boolean).length;
+            
+            if (selectedCount === 0) {
+                alert('⚠️ 저장할 데이터를 선택해주세요.');
+                return;
+            }
+            
+            let confirmMessage = `선택된 ${selectedCount}건의 데이터를 저장하시겠습니까?`;
+            if (newGroupsNeeded.length > 0) {
+                confirmMessage += `\n\n새로 생성될 병동: ${newGroupsNeeded.join(', ')}`;
+            }
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/nurses/confirm-upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        data: excelData,
+                        include_rows: includeRows,
+                        new_groups_to_create: newGroupsNeeded
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '저장에 실패했습니다.');
+                }
+                
+                const result = await response.json();
+                alert(`✅ ${result.message}`);
+                
+                // 엑셀 모드 해제 및 데이터 새로고침
+                exitExcelMode();
+                fetchNurses();
+                
+            } catch (error) {
+                console.error(error);
+                alert(`❌ 저장 실패: ${error.message}`);
+            }
+        }
+        
+        // 엑셀 업로드 취소
+        function cancelExcelUpload() {
+            if (confirm('엑셀 업로드를 취소하시겠습니까? 업로드된 데이터는 삭제됩니다.')) {
+                exitExcelMode();
+            }
         }
 
         function renderTable() {
@@ -612,6 +1209,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             fetchNurses();
             updateHistoryButtons();
+            setupDragDrop(); // 드래그앤드롭 설정
         });
 
         function toggleNav() {

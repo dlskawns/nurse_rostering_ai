@@ -7,7 +7,7 @@ class Group(Base):
     __tablename__ = 'groups'
     group_id = Column(VARCHAR(50), primary_key=True)
     office_id = Column(VARCHAR(50), ForeignKey('offices.office_id'))
-    name = Column(VARCHAR(50), nullable=False)
+    group_name = Column(VARCHAR(50), nullable=False)
     office = relationship("Office", back_populates="groups")
 class Office(Base):
     __tablename__ = 'offices'

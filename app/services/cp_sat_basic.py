@@ -460,7 +460,7 @@ class CPSATBasicEngine:
 
         solver.parameters.max_time_in_seconds=tl
         solver.parameters.num_search_workers=2
-        solver.parameters.relative_gap_limit = 0.2
+        solver.parameters.relative_gap_limit = 0.1
         stat=solver.Solve(model)
         if stat not in (cp_model.OPTIMAL,cp_model.FEASIBLE): return False
         rs.roster.fill(0)
@@ -1034,7 +1034,7 @@ def _solve_neighbourhood(rs, n_set, d_set, tl, grouped, run_seed: int | None = N
         solver.parameters.solution_pool_size = 10
     solver.parameters.max_time_in_seconds=tl
     solver.parameters.num_search_workers=10
-    solver.parameters.relative_gap_limit = 0.8
+    solver.parameters.relative_gap_limit = 0.1
     st=solver.Solve(model)
     if st not in (cp_model.OPTIMAL,cp_model.FEASIBLE): return False
 
