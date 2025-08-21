@@ -112,6 +112,7 @@ class NurseProfile(BaseModel):
     joining_date: Optional[datetime] = None
     resignation_date: Optional[datetime] = None
     sequence: Optional[int] = 0
+    active: int = 1
 
     class Config:
         from_attributes = True

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi import UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import uuid
 import tempfile
 import os
@@ -12,7 +12,13 @@ from db.models import Nurse as NurseModel
 from schemas.roster_schema import NurseProfile, MoveNurseRequest
 from routers.auth import get_current_user_from_cookie
 from schemas.auth_schema import User as UserSchema
-from services.nurse_service import get_nurses_in_group_service, bulk_update_nurses_service, move_nurse_service
+from services.nurse_service import (
+    get_nurses_in_group_service,
+    bulk_update_nurses_service,
+    move_nurse_service,
+    move_nurse_with_active_service,
+    reorder_nurses_service,
+)
 from services.excel_service import (
     create_nurse_template, 
     process_excel_upload, 
@@ -40,47 +46,42 @@ async def get_nurses_in_group(
 
 class NurseSequenceUpdate(BaseModel):
     nurse_id: str
-    sequence: int = Field(ge=0)
+    new_sequence: int = Field(ge=1)
+    active: Optional[int] = Field(default=None, description="0: 비활성, 1: 활성, None: 변경 없음")
 
 
 @router.post("/sequence/save")
 async def save_nurse_sequence(
-    req: MoveNurseRequest,
+    req: NurseSequenceUpdate,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
+    """
+    단일 간호사 이동/상태변경 (드래그앤드롭 중간 저장 용도)
+    """
     try:
-        return move_nurse_service(req, current_user, db)
+        return move_nurse_with_active_service(req.nurse_id, req.new_sequence, req.active, current_user, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"간호사 순서 변경 실패: {str(e)}")
 
+class ReorderPayload(BaseModel):
+    active_order: List[str] = Field(default_factory=list)
+    inactive_order: List[str] = Field(default_factory=list)
 
-    # try:
-    #     if not current_user:
-    #         raise HTTPException(status_code=401, detail="인증되지 않았습니다.")
-    #     nurse_ids = [u.nurse_id for u in updates]
-    #     if not nurse_ids:
-    #         return {"message": "변경 사항 없음", "updated": 0}
-    #     # 같은 그룹 내 대상만 업데이트
-    #     rows = (
-    #         db.query(NurseModel)
-    #         .filter(NurseModel.group_id == current_user.group_id, NurseModel.nurse_id.in_(nurse_ids))
-    #         .all()
-    #     )
-    #     row_map = {r.nurse_id: r for r in rows}
-    #     updated = 0
-    #     for item in updates:
-    #         r = row_map.get(item.nurse_id)
-    #         if r is None:
-    #             continue
-    #         r.sequence = int(item.sequence)
-    #         updated += 1
-    #     db.commit()
-    #     return {"message": "간호사 순서 저장 완료", "updated": updated}
-    # except Exception as e:
-    #     db.rollback()
-    #     raise HTTPException(status_code=500, detail=f"간호사 순서 저장 실패: {str(e)}")
-
+@router.post("/sequence/reorder")
+async def reorder_nurses(
+    payload: ReorderPayload,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    """
+    드래그앤드롭 종료 시점에 한 번 호출하여 서버 기준으로 순서를 확정.
+    프론트에서는 active 리스트와 inactive 리스트의 nurse_id 배열을 넘겨주세요.
+    """
+    try:
+        return reorder_nurses_service(payload.active_order, payload.inactive_order, current_user, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"일괄 재정렬 실패: {str(e)}")
 
 
 @router.post("/bulk-update")
@@ -188,16 +189,13 @@ async def confirm_upload(
             data for i, data in enumerate(request.data) 
             if i < len(request.include_rows) and request.include_rows[i]
         ]
-        print('...filtered_data', filtered_data)
+        
         # 새 그룹 생성이 필요한 경우
         if request.new_groups_to_create:
-            print('여기1')
             result = create_groups_and_save_data(filtered_data, request.new_groups_to_create, current_user, db)
-            print('여기2', result)
         else:
-            print('저기1')
             result = save_excel_data(filtered_data, current_user, db)
-            print('저기2')
+            
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"데이터 저장 실패: {str(e)}") 

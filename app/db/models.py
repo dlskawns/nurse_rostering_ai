@@ -36,7 +36,7 @@ class Nurse(Base):
     resignation_date = Column(DATETIME, nullable=True)
     # 화면 표시 및 알고리즘 입력 순서 제어용
     sequence = Column(INTEGER, nullable=False, default=0)
-
+    active = Column(INTEGER, default=1)
     group = relationship("Group")
     @property
     def office_id(self) -> str | None:

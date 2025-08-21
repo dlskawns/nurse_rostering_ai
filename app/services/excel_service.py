@@ -121,11 +121,12 @@ def create_new_group(group_name: str, group_id: str, user: UserSchema, db: Sessi
     return group_id
 
 
-def get_next_sequence(group_id: str, db: Session) -> int:
-    """해당 그룹의 다음 sequence 번호 반환"""
+def get_next_sequence(group_id: str, active_status: int, db: Session) -> int:
+    """해당 그룹의 특정 active 상태에서 다음 sequence 번호 반환"""
     
     max_sequence = db.query(func.max(NurseModel.sequence)).filter(
-        NurseModel.group_id == group_id
+        NurseModel.group_id == group_id,
+        NurseModel.active == active_status
     ).scalar()
     
     return (max_sequence or 0) + 1
@@ -207,7 +208,7 @@ def process_excel_upload(file_path: str, user: UserSchema, db: Session) -> Dict[
             if is_new:
                 new_groups_needed.append(group_name)
         
-        # 그룹별 sequence 카운터 초기화
+        # 그룹별 sequence 카운터 초기화 (활성 상태 기준)
         group_sequence_counters = {}
         for group_name, info in group_info.items():
             group_id = info['group_id']
@@ -215,8 +216,8 @@ def process_excel_upload(file_path: str, user: UserSchema, db: Session) -> Dict[
                 # 새 그룹인 경우 1부터 시작
                 group_sequence_counters[group_id] = 1
             else:
-                # 기존 그룹인 경우 다음 sequence 가져오기
-                group_sequence_counters[group_id] = get_next_sequence(group_id, db)
+                # 기존 그룹인 경우 활성 상태(active=1)의 다음 sequence 가져오기
+                group_sequence_counters[group_id] = get_next_sequence(group_id, 1, db)
         
         # 데이터 변환
         processed_data = []
@@ -249,7 +250,8 @@ def process_excel_upload(file_path: str, user: UserSchema, db: Session) -> Dict[
                     'preceptor_id': None,  # 기본값
                     'joining_date': None,  # 기본값
                     'resignation_date': None,  # 기본값
-                    'sequence': sequence
+                    'sequence': sequence,
+                    'active': 1  # 엑셀 업로드는 기본적으로 활성 상태
                 }
                 
                 # 개별 행 검증
