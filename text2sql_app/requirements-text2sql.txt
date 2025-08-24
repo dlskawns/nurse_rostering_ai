@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pydantic
+langgraph
+langchain-core
+httpx
+sqlalchemy
+pymysql
+jinja2
+python-dotenv
+google-generativeai
+openai
+anthropic
+tenacity
+starlette 

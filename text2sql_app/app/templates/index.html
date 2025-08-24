@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Text2SQL Nurse Roster</title>
+  <link rel="stylesheet" href="/text2sql-static/css/style.css" />
+  <style>
+    body { margin: 0; background: #0b0f14; color: #e6e6e6; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .layout { display: grid; grid-template-columns: 280px 1fr 420px; grid-template-rows: auto 1fr; height: 100vh; }
+    header { grid-column: 1 / 4; padding: 10px 16px; background: #0f1620; border-bottom: 1px solid #1b2430; font-weight: 600; letter-spacing: .5px; }
+    .sidebar { border-right: 1px solid #1b2430; padding: 12px; overflow: auto; }
+    .main { display: grid; grid-template-rows: 1fr 280px; }
+    .chat { display: flex; flex-direction: column; height: 100%; }
+    .messages { flex: 1; overflow: auto; padding: 12px; }
+    .input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #1b2430; }
+    .input input { flex: 1; background: #0f1620; color: #e6e6e6; border: 1px solid #293344; border-radius: 6px; padding: 10px 12px; }
+    .input button { background: #1e88e5; border: 0; color: white; padding: 10px 14px; border-radius: 6px; cursor: pointer; }
+    .tabs { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid #1b2430; background: #0f1620; }
+    .tab { padding: 6px 10px; border: 1px solid #293344; border-radius: 6px; cursor: pointer; }
+    .tab.active { background: #1b2430; }
+    .panel { padding: 12px; overflow: auto; height: 100%; }
+    .terminal { background: #0f1620; border-left: 1px solid #1b2430; display: flex; flex-direction: column; }
+    .terminal h3 { margin: 0; padding: 10px 12px; border-bottom: 1px solid #1b2430; font-size: 13px; color: #9fb3c8; text-transform: uppercase; }
+    .log { flex: 1; padding: 12px; overflow: auto; font-size: 12px; line-height: 1.5; }
+    .log .ok { color: #9ccc65; }
+    .log .err { color: #ef5350; }
+    .log .step-header { color: #64b5f6; font-weight: bold; }
+    .log .step-content { color: #c8d3df; margin-left: 8px; }
+    .schema h4 { margin: 8px 0; color: #9fb3c8; }
+    .schema ul { list-style: none; padding-left: 12px; margin: 0; }
+    .schema li { margin: 2px 0; color: #c8d3df; }
+    .sql pre, .json pre { background: #0b0f14; border: 1px solid #293344; border-radius: 6px; padding: 10px; overflow: auto; }
+    .answer { padding: 10px; background: #0b0f14; border: 1px solid #293344; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <header>Text2SQL Nurse Roster</header>
+    <aside class="sidebar">
+      <div class="schema">
+        <h4>meditong_roster 스키마</h4>
+        <div id="schema"></div>
+      </div>
+    </aside>
+    <main class="main">
+      <section class="chat">
+        <div class="messages" id="messages"></div>
+        <div class="input">
+          <input id="input" placeholder="질문을 입력하세요. 예) 2024년 7월 N 근무가 가장 많은 간호사는?" />
+          <button id="send">보내기</button>
+        </div>
+        <div class="tabs">
+          <div class="tab active" data-tab="sql">SQL</div>
+          <div class="tab" data-tab="result">결과</div>
+          <div class="tab" data-tab="json">JSON</div>
+        </div>
+        <div class="panel">
+          <div class="sql" id="sql-panel"><pre id="sql"></pre></div>
+          <div class="result" id="result-panel" style="display:none">
+            <div class="answer" id="answer"></div>
+            <div id="table"></div>
+          </div>
+          <div class="json" id="json-panel" style="display:none"><pre id="json"></pre></div>
+        </div>
+      </section>
+    </main>
+    <aside class="terminal">
+      <h3>Process</h3>
+      <div id="logs" class="log"></div>
+    </aside>
+  </div>
+
+  <script>
+    // 요청 상태 관리
+    let isProcessing = false;
+    let lastQuery = '';
+    let lastQueryTime = 0;
+    let loadingInterval = null;
+    let currentStep = '';
+    let eventSource = null;
+    
+    async function fetchSchema() {
+      const res = await fetch('/api/schema');
+      const data = await res.json();
+      const el = document.getElementById('schema');
+      el.innerHTML = Object.entries(data).map(([t, cols]) => {
+        return `<div><strong>${t}</strong><ul>${cols.map(c => `<li>${c}</li>`).join('')}</ul></div>`
+      }).join('');
+    }
+
+    function appendMessage(role, content) {
+      const box = document.getElementById('messages');
+      const div = document.createElement('div');
+      div.innerHTML = `<div><strong>${role === 'user' ? '나' : '에이전트'}</strong></div><div>${content}</div><hr style='border-color:#1b2430'/>`;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function setLogs(logs) {
+      const el = document.getElementById('logs');
+      
+      // 로그를 단계별로 그룹화하고 포맷팅
+      let formattedLogs = [];
+      let currentStepGroup = '';
+      
+      logs.forEach((log, index) => {
+        // 단계 시작을 감지 (1단계:, 2단계:, 3단계:, 4단계:)
+        if (log.match(/^\d+단계:/)) {
+          if (currentStepGroup) {
+            formattedLogs.push(''); // 단계 사이에 빈 줄 추가
+          }
+          currentStepGroup = log;
+          formattedLogs.push(`<span class="step-header">${log}</span>`);
+        } else {
+          // 일반 로그는 들여쓰기로 표시
+          formattedLogs.push(`  └ ${log}`);
+        }
+      });
+      
+      el.innerHTML = formattedLogs.map(x => `> ${x}`).join('\n');
+      el.scrollTop = el.scrollHeight;
+    }
+    
+    function addStep(stepText, stepNumber) {
+      const el = document.getElementById('logs');
+      
+      // 기존 로딩 애니메이션 중지
+      if (loadingInterval) {
+        clearInterval(loadingInterval);
+        loadingInterval = null;
+      }
+      
+      // 현재 로그 가져오기
+      let currentLogs = el.innerHTML ? el.innerHTML.split('\n') : [];
+      
+      // 단계 사이에 빈 줄 추가 (첫 번째 단계가 아닌 경우)
+      if (stepNumber > 1 && currentLogs.length > 0) {
+        currentLogs.push('');
+      }
+      
+      // 새 단계 추가
+      currentLogs.push(`> <span class="step-header">${stepText}</span>`);
+      currentLogs.push(`> <span id="loading-indicator-${stepNumber}">  └ 진행중.</span>`);
+      
+      el.innerHTML = currentLogs.join('\n');
+      el.scrollTop = el.scrollHeight;
+      
+      // 로딩 애니메이션 시작
+      let dotCount = 1;
+      loadingInterval = setInterval(() => {
+        const loadingEl = document.getElementById(`loading-indicator-${stepNumber}`);
+        if (loadingEl) {
+          dotCount = (dotCount % 3) + 1;
+          const dots = '.'.repeat(dotCount);
+          loadingEl.innerHTML = `  └ 진행중${dots}`;
+        }
+      }, 500);
+    }
+    
+    function updateStep(message, stepNumber) {
+      if (loadingInterval) {
+        clearInterval(loadingInterval);
+        loadingInterval = null;
+      }
+      
+      const loadingEl = document.getElementById(`loading-indicator-${stepNumber}`);
+      if (loadingEl) {
+        loadingEl.innerHTML = `  └ ${message}`;
+        loadingEl.id = ''; // ID 제거
+      }
+      
+      const el = document.getElementById('logs');
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function setSQL(sql) {
+      document.getElementById('sql').innerText = sql || '';
+    }
+
+    function setJSON(obj) {
+      document.getElementById('json').innerText = JSON.stringify(obj, null, 2);
+    }
+
+    function setAnswer(a) {
+      document.getElementById('answer').innerText = a || '';
+    }
+
+    function setTable(columns, rows) {
+      const el = document.getElementById('table');
+      if (!columns || !rows) { el.innerHTML=''; return; }
+      const head = `<thead><tr>${columns.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
+      const body = `<tbody>${rows.slice(0,100).map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      el.innerHTML = `<table>${head}${body}</table>`;
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.tab[data-tab="${name}"]`).classList.add('active');
+      document.getElementById('sql-panel').style.display = name==='sql' ? 'block' : 'none';
+      document.getElementById('result-panel').style.display = name==='result' ? 'block' : 'none';
+      document.getElementById('json-panel').style.display = name==='json' ? 'block' : 'none';
+    }
+
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+    async function send() {
+      const input = document.getElementById('input');
+      const sendButton = document.getElementById('send');
+      const q = input.value.trim();
+      
+      // 중복 요청 방지 로직
+      if (!q) return;
+      
+      const currentTime = Date.now();
+      
+      // 1. 현재 처리 중인 요청이 있으면 무시
+      if (isProcessing) {
+        console.log('🚫 이미 처리 중인 요청이 있어서 무시합니다.');
+        return;
+      }
+      
+      // 2. 동일한 질의가 1초 이내에 중복 전송되면 무시
+      if (q === lastQuery && (currentTime - lastQueryTime) < 1000) {
+        console.log('🚫 중복 질의 무시:', q);
+        return;
+      }
+      
+      // 처리 상태 업데이트
+      isProcessing = true;
+      lastQuery = q;
+      lastQueryTime = currentTime;
+      
+      // UI 상태 업데이트
+      input.value = '';
+      input.disabled = true;
+      sendButton.disabled = true;
+      sendButton.textContent = '처리중...';
+      
+      // 프로세스 로그 초기화
+      document.getElementById('logs').innerHTML = '';
+      
+      try {
+        appendMessage('user', q);
+        console.log('📤 스트리밍 요청 전송:', q);
+        
+        // Server-Sent Events를 사용한 실시간 스트리밍
+        eventSource = new EventSource('/api/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: q })
+        });
+        
+        // POST 요청으로 스트리밍 (EventSource는 GET만 지원하므로 fetch 사용)
+        const response = await fetch('/api/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: q })
+        });
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                handleStreamData(data);
+              } catch (e) {
+                console.error('JSON 파싱 오류:', e, line);
+              }
+            }
+          }
+        }
+        
+      } catch (error) {
+        console.error('❌ 스트리밍 요청 처리 중 오류:', error);
+        
+        // 로딩 애니메이션 중지
+        if (loadingInterval) {
+          clearInterval(loadingInterval);
+          loadingInterval = null;
+        }
+        
+        // 오류 로그 표시
+        const el = document.getElementById('logs');
+        el.innerHTML = '> <span class="err">❌ 요청 처리 중 오류가 발생했습니다</span>';
+        
+        appendMessage('assistant', '요청 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+        
+      } finally {
+        // 처리 완료 후 상태 복원
+        isProcessing = false;
+        input.disabled = false;
+        sendButton.disabled = false;
+        sendButton.textContent = '보내기';
+        input.focus();
+        console.log('✅ 스트리밍 요청 처리 완료');
+      }
+    }
+    
+    function handleStreamData(data) {
+      console.log('📥 스트림 데이터 수신:', data);
+      
+      switch (data.type) {
+        case 'start':
+        case 'step':
+          addStep(data.step, data.step_number || 1);
+          break;
+          
+        case 'update':
+          updateStep(data.message, data.step_number || 1);
+          break;
+          
+        case 'complete':
+          // 로딩 애니메이션 중지
+          if (loadingInterval) {
+            clearInterval(loadingInterval);
+            loadingInterval = null;
+          }
+          
+          // 최종 결과 표시
+          setSQL(data.sql);
+          setJSON(data);
+          setAnswer(data.answer);
+          setTable(data.columns, data.rows);
+          appendMessage('assistant', data.answer || '(결과 없음)');
+          switchTab('result');
+          break;
+          
+        case 'error':
+          // 로딩 애니메이션 중지
+          if (loadingInterval) {
+            clearInterval(loadingInterval);
+            loadingInterval = null;
+          }
+          
+          const el = document.getElementById('logs');
+          el.innerHTML += `\n> <span class="err">❌ ${data.message}</span>`;
+          appendMessage('assistant', data.message);
+          break;
+      }
+    }
+
+    // 이벤트 리스너 등록 (중복 방지)
+    document.getElementById('send').addEventListener('click', send);
+    document.getElementById('input').addEventListener('keydown', (e) => { 
+      if (e.key === 'Enter') {
+        e.preventDefault(); // Enter 키 기본 동작 방지
+        send(); 
+      }
+    });
+
+    fetchSchema();
+  </script>
+</body>
+</html> 

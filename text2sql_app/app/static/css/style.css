@@ -1,0 +1,6 @@
+table { width: 100%; border-collapse: collapse; color: #e6e6e6; }
+th, td { border: 1px solid #293344; padding: 6px 8px; font-size: 12px; }
+th { background: #12202f; text-align: left; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #293344; border-radius: 6px; }
+::-webkit-scrollbar-track { background: #0b0f14; } 
