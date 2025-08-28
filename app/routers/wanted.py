@@ -169,10 +169,7 @@ async def invoke_graph(request: WantedInvokeRequest):
         result = {}
   
         response =  await graph_service.invoke(request.request, request.schema, request.case)
-        # print('우라질레이션',  response)
-        # print('1기여기여기111', response)
-        # print('\n\n\n\n\n\n응답1:', parse_shift_results(response), '\n\n\n\n\n\n')
-        # print('\n\n\n\n\n\n응답2:', parse_preferences(response, request.schema), '\n\n\n\n\n\n')
+
         if len(response[0]) > 0:
             result['shift'] = parse_shift_results(response)
             
