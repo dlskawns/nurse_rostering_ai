@@ -1,5 +1,3 @@
-# .github/workflows/deploy-ecr.yml
-
 name: Build - Push - Deploy (EC2 + ALB)
 
 on:
@@ -7,7 +5,7 @@ on:
     branches:
       - main
       - dev
-      - feat/** # feature/*  브랜치도 포함
+      - feat/**
 
 jobs:
   build-push-deploy:
@@ -17,24 +15,21 @@ jobs:
       id-token: write
 
     steps:
-      ##################################################################
       # 1) 저장소 체크아웃
-      ##################################################################
       - name: Checkout code
         uses: actions/checkout@v3
 
-      ##################################################################
       # 2) 브랜치에 따라 ENV / TAG / API KEY 세팅
-      ##################################################################
       - name: Set dynamic env vars
+        shell: bash
         run: |
-          if   [[ "${{ github.ref_name }}" ==  "main" ]]; then
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "ENVIRONMENT=production" >> $GITHUB_ENV
             echo "DOCKER_TAG=prod-${{ github.sha }}" >> $GITHUB_ENV
             echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}" >> $GITHUB_ENV
-          elif [[ "${{ github.ref_name }}" ==  "dev" ]]; then
+          elif [[ "${{ github.ref_name }}" == "dev" ]]; then
             echo "ENVIRONMENT=development" >> $GITHUB_ENV
             echo "DOCKER_TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
             echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}" >> $GITHUB_ENV
@@ -47,17 +42,13 @@ jobs:
             echo "GOOGLE_API_KEY=${{ secrets.LOCAL_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.LOCAL_ENV_OPENAI }}" >> $GITHUB_ENV
           fi
-        shell: bash
 
-      - name: Log Environment
+      - name: Log Environment (safe)
         run: |
-          echo "Running in ${{ env.ENVIRONMENT }} environment"
-          echo "Using Docker tag: ${{ env.DOCKER_TAG }}"
-          # 보안상 API 키는 출력하지 않음
+          echo "ENVIRONMENT=${{ env.ENVIRONMENT }}"
+          echo "DOCKER_TAG=${{ env.DOCKER_TAG }}"
 
-      ##################################################################
       # 3) AWS 자격 구성
-      ##################################################################
       - name: Configure AWS credentials (AccessKey)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -65,16 +56,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      ##################################################################
       # 4) ECR 로그인
-      ##################################################################
       - name: Login to Amazon ECR
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      ##################################################################
       # 5) Docker 이미지 빌드/푸시
-      ##################################################################
       - name: Build Docker image
         run: |
           docker build \
@@ -92,97 +79,42 @@ jobs:
         run: |
           echo "IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }}" >> $GITHUB_ENV
 
-      ##################################################################
-      # 5-0) ECR 이미지 정리 (untagged 삭제 + 최신 10개 보존)
-      ##################################################################
-      - name: Install jq (for ECR pruning)
-        run: sudo apt-get update -y && sudo apt-get install -y jq
-
-      - name: Prune ECR images (keep last 10, delete untagged)
-        env:
-          REPO: aide-backend-dev
-          REGION: ${{ secrets.AWS_REGION }}
-          KEEP: "10"
-          CURRENT_TAG: ${{ env.DOCKER_TAG }}
+      # 5-0) ECR Lifecycle Policy 적용 (untagged 즉시 삭제, 태그된 건 최근 10개 유지)
+      - name: Apply ECR lifecycle policy (idempotent)
         run: |
-          set -e
+          cat > policy.json <<'JSON'
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire untagged images quickly",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countNumber": 1,
+                  "countUnit": "days"
+                },
+                "action": { "type": "expire" }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep only the last 10 tagged images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+          JSON
+          aws ecr put-lifecycle-policy \
+            --repository-name aide-backend-dev \
+            --lifecycle-policy-text file://policy.json \
+            --region ${{ secrets.AWS_REGION }}
 
-          echo "🧹 Delete UNTAGGED images"
-          UNTAGGED_JSON=$(aws ecr list-images \
-            --repository-name "$REPO" \
-            --region "$REGION" \
-            --filter tagStatus=UNTAGGED \
-            --query 'imageIds' \
-            --output json)
-
-          if [ "$(echo "$UNTAGGED_JSON" | jq 'length')" -gt 0 ]; then
-            aws ecr batch-delete-image \
-              --repository-name "$REPO" \
-              --region "$REGION" \
-              --cli-input-json "{\"imageIds\": $UNTAGGED_JSON }" || true
-            echo "✅ Deleted UNTAGGED images"
-          else
-            echo "ℹ️ No UNTAGGED images"
-          fi
-
-          echo "🧹 Delete old TAGGED images (keep $KEEP, skip current: $CURRENT_TAG)"
-          DETAILS=$(aws ecr describe-images \
-            --repository-name "$REPO" \
-            --region "$REGION" \
-            --output json)
-
-          ALL_TAGS=$(echo "$DETAILS" | jq -r '
-            .imageDetails
-            | map(select(.imageTags != null))
-            | sort_by(.imagePushedAt) | reverse
-            | map(.imageTags) | flatten
-            | .[]')
-
-          COUNT=0
-          DELETE_TAGS=()
-
-          for t in $ALL_TAGS; do
-            if [ "$t" = "$CURRENT_TAG" ]; then
-              continue
-            fi
-            COUNT=$((COUNT+1))
-            if [ $COUNT -le $KEEP ]; then
-              continue
-            fi
-            DELETE_TAGS+=("$t")
-          done
-
-          if [ ${#DELETE_TAGS[@]} -gt 0 ]; then
-            IDS=$(printf '%s\n' "${DELETE_TAGS[@]}" | jq -R '{imageTag: .}' | jq -s .)
-            aws ecr batch-delete-image \
-              --repository-name "$REPO" \
-              --region "$REGION" \
-              --cli-input-json "{\"imageIds\": $IDS }" || true
-            echo "✅ Deleted old tagged images: ${DELETE_TAGS[*]}"
-          else
-            echo "ℹ️ Nothing to delete among tagged images"
-          fi
-
-      ##################################################################
-      # 5-1) 이전 latest 태그 이미지 삭제 (요금 절감)
-      ##################################################################
-      - name: Delete previous :latest image in ECR
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.DEV_EC2_HOST }}
-          username: "ubuntu"
-          key: ${{ secrets.DEV_EC2_SSH_KEY }}
-          script: |
-            set -e
-            echo "🗑️  deleting old :latest in ECR (if exists)"
-            aws ecr batch-delete-image \
-              --region ${{ secrets.AWS_REGION }} \
-              --repository-name aide-backend-dev \
-              --image-ids imageTag=latest || true
-
-      ##################################################################
-      # 5-2) EC2 → ECR 로그인
-      ##################################################################
+      # 5-1) EC2 → ECR 로그인
       - name: ECR login from EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -195,12 +127,10 @@ jobs:
               | sudo docker login \
                   --username AWS \
                   --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-            echo "✅  ECR login done"
+            echo "ECR login on EC2 done"
 
-      ##################################################################
-      # 5-3) EC2: 로컬 컨테이너/이미지 강력 정리 (볼륨은 유지)
-      ##################################################################
-      - name: Stop & prune old containers/images
+      # 5-2) EC2: 로컬 컨테이너/이미지 정리 (볼륨 유지)
+      - name: Stop & prune on EC2 (keep volumes)
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.DEV_EC2_HOST }}
@@ -208,18 +138,12 @@ jobs:
           key: ${{ secrets.DEV_EC2_SSH_KEY }}
           script: |
             set -e
-            echo "⛔  Stopping running containers (if any)"
             sudo docker ps -q | xargs -r sudo docker stop
-            echo "🗑️  Removing containers"
             sudo docker ps -a -q | xargs -r sudo docker rm
-            echo "🗑️  Removing images"
             sudo docker images -q | xargs -r sudo docker rmi
-            echo "🧹 docker system prune (no volumes)"
             sudo docker system prune -af
 
-      ##################################################################
-      # 5-4) 새 이미지 Pull
-      ##################################################################
+      # 5-3) EC2: 새 이미지 Pull
       - name: Pull new image on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -229,17 +153,12 @@ jobs:
           envs: IMAGE_URI
           script: |
             set -e
-            echo " docker pull $IMAGE_URI"
-            sudo docker pull "$IMAGE_URI"
+            echo "docker pull ${IMAGE_URI}"
+            sudo docker pull "${IMAGE_URI}"
 
-      ##################################################################
-      # 5-4.5) EC2: .env 작성 (로컬 MySQL 접속 정보 포함)
-      ##################################################################
+      # 5-4) EC2: .env 작성/갱신
       - name: Write .env on EC2
         uses: appleboy/ssh-action@v1.0.0
-        env:
-          ENVIRONMENT: ${{ env.ENVIRONMENT }}
-          IMAGE_URI: ${{ env.IMAGE_URI }}
         with:
           host: ${{ secrets.DEV_EC2_HOST }}
           username: ubuntu
@@ -247,19 +166,17 @@ jobs:
           script: |
             set -e
             mkdir -p /home/ubuntu/app
-            cat > /home/ubuntu/app/.env <<EOF
-ENVIRONMENT=${ENVIRONMENT}
+            cat > /home/ubuntu/app/.env <<'EOF'
+ENVIRONMENT=${{ env.ENVIRONMENT }}
 DB_HOST=host.docker.internal
 DB_PORT=3306
 DB_NAME=${{ secrets.DEV_DB_NAME }}
 DB_USER=${{ secrets.DEV_DB_USER }}
 DB_PASSWORD=${{ secrets.DEV_DB_PASSWORD }}
 EOF
-            echo "✅ Wrote /home/ubuntu/app/.env"
+            echo "Wrote /home/ubuntu/app/.env"
 
-      ##################################################################
-      # 5-5) 컨테이너 실행 (env-file 주입 + host-gateway 매핑)
-      ##################################################################
+      # 5-5) 컨테이너 실행 (env-file + host-gateway)
       - name: Run container
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -277,5 +194,5 @@ EOF
               --env-file /home/ubuntu/app/.env \
               --add-host=host.docker.internal:host-gateway \
               --restart unless-stopped \
-              "$IMAGE_URI"
-            echo "🚀  Container started → http://$HOSTNAME:8000/health"
+              "${IMAGE_URI}"
+            echo "Started: http://$HOSTNAME:8000/health"
