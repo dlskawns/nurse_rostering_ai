@@ -167,13 +167,13 @@ jobs:
             set -e
             mkdir -p /home/ubuntu/app
             cat > /home/ubuntu/app/.env <<'EOF'
-ENVIRONMENT=${{ env.ENVIRONMENT }}
-DB_HOST=host.docker.internal
-DB_PORT=3306
-DB_NAME=${{ secrets.DEV_DB_NAME }}
-DB_USER=${{ secrets.DEV_DB_USER }}
-DB_PASSWORD=${{ secrets.DEV_DB_PASSWORD }}
-EOF
+            ENVIRONMENT=${{ env.ENVIRONMENT }}
+            DB_HOST=host.docker.internal
+            DB_PORT=3306
+            DB_NAME=${{ secrets.DEV_DB_NAME }}
+            DB_USER=${{ secrets.DEV_DB_USER }}
+            DB_PASSWORD=${{ secrets.DEV_DB_PASSWORD }}
+            EOF
             echo "Wrote /home/ubuntu/app/.env"
 
       # 5-5) 컨테이너 실행 (env-file + host-gateway)
