@@ -12,6 +12,10 @@ from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 import os
+try:
+    import tiktoken
+except Exception:
+    tiktoken = None
 
 dotenv.load_dotenv()
 
@@ -21,6 +25,92 @@ class queryAnalyzer(BaseModel):
     Shift: List[str] 
     Preference: List[str]
     Others: List[str] 
+
+
+# ------------------------------
+# 비용/토큰 유틸리티
+# ------------------------------
+def _krw_per_usd() -> float:
+    try:
+        return float(os.getenv("KRW_PER_USD", "1350"))
+    except Exception:
+        return 1350.0
+
+
+def _pricing_per_1k(model_name: str) -> tuple[float, float]:
+    """
+    모델별 1K 토큰당 (입력, 출력) USD 비용을 반환.
+    값은 최신 요금과 다를 수 있으니 환경에 맞게 조정 필요.
+    """
+    name = (model_name or "").lower()
+    # 기본값 (보수적)
+    input_usd, output_usd = 0.003, 0.009
+    if "gpt-4o" in name:
+        # OpenAI GPT-4o (약 $5/$15 per 1M)
+        input_usd, output_usd = 0.005, 0.015
+    elif "claude" in name:
+        # Anthropic Claude Sonnet (약 $3/$15 per 1M)
+        input_usd, output_usd = 0.003, 0.015
+    elif "gemini" in name:
+        # Google Gemini Flash (약 $0.35/$1.05 per 1M)
+        input_usd, output_usd = 0.00035, 0.00105
+    return input_usd, output_usd
+
+
+def _encoding_for_model(model_name: str):
+    name = (model_name or "").lower()
+    try:
+        if "gpt" in name or "o" in name:
+            return tiktoken.get_encoding("o200k_base")
+        # 범용 기본 인코딩
+        return tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        return None
+
+
+def _count_tokens(text: str, model_name: str) -> int:
+    if not text:
+        return 0
+    enc = _encoding_for_model(model_name)
+    if enc is None:
+        # 대략적 근사치 (문자 수 / 4)
+        return max(1, int(len(text) / 4))
+    try:
+        return len(enc.encode(text))
+    except Exception:
+        return max(1, int(len(text) / 4))
+
+
+def _count_messages_tokens(messages: List[str], model_name: str) -> int:
+    return sum(_count_tokens(m or "", model_name) for m in messages)
+
+
+def _compute_cost(prompt_tokens: int, completion_tokens: int, model_name: str) -> dict:
+    in_per_1k, out_per_1k = _pricing_per_1k(model_name)
+    input_usd = (prompt_tokens / 1000.0) * in_per_1k
+    output_usd = (completion_tokens / 1000.0) * out_per_1k
+    total_usd = input_usd + output_usd
+    rate = _krw_per_usd()
+    return {
+        "model": model_name,
+        "pricing_per_1k_usd": {"input": in_per_1k, "output": out_per_1k},
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+        "cost_usd": {
+            "input": round(input_usd, 6),
+            "output": round(output_usd, 6),
+            "total": round(total_usd, 6),
+        },
+        "cost_krw": {
+            "input": int(round(input_usd * rate)),
+            "output": int(round(output_usd * rate)),
+            "total": int(round(total_usd * rate)),
+            "krw_per_usd": rate,
+        },
+    }
 
 
 class queryAnalyzerPrompt:
@@ -138,14 +228,35 @@ async def query_analyzer(state):
     shift = []
     preference = []
     others = []
-    
+    used_model_name = ""
+
+    # case 기반 수동 경로 (모델 미사용)
     if state['case'] != None:
         print(state['case'], state['request'])
         for content, rq in zip(state['case'], state['request']):
             date = content['date']
             shift_type = content['shift']
             shift.append(f"{date}에 {shift_type}을 원하고, 그 이유는 다음과 같습니다: {rq}")
-        return {"query_chat": chat, 'query_shift': shift, 'query_preference': preference, 'query_others': others, 'model': models_to_try[0], 'date': date, 'shift': shift}
+        # 토큰/비용(모델 미사용 → 0)
+        prompt_tokens = 0
+        completion_json = json.dumps({
+            "Chat": chat,
+            "Shift": shift,
+            "Preference": preference,
+            "Others": others
+        }, ensure_ascii=False)
+        completion_tokens = 0 if not completion_json else 0
+        cost_info = _compute_cost(prompt_tokens, completion_tokens, used_model_name)
+        print(f"토큰 사용량(수동): {cost_info['usage']}, 비용(원): {cost_info['cost_krw']['total']}")
+        return {
+            "query_chat": chat,
+            'query_shift': shift,
+            'query_preference': preference,
+            'query_others': others,
+            'model': models_to_try[0],
+            'date': date,
+            'shift': shift
+        }
 
     for i, client in enumerate(models_to_try):
         try:
@@ -153,6 +264,7 @@ async def query_analyzer(state):
             
             llm = client.with_structured_output(queryAnalyzer)
             response = await llm.ainvoke(messages)
+            used_model_name = getattr(client, "model", "") or used_model_name
             
             # 성공 시 데이터 추출
             chat = response.Chat
@@ -187,7 +299,27 @@ async def query_analyzer(state):
                     print("Query Analyzer: 모든 모델 실패, 기본값 사용")
                     break
 
+    # 토큰/비용 계산
+    model_name_for_calc = used_model_name or (getattr(models_to_try[0], "model", "") or "")
+    prompt_tokens = _count_messages_tokens([query_analyzer_prompt.system, query_analyzer_prompt.human], model_name_for_calc)
+    completion_json = json.dumps({
+        "Chat": chat,
+        "Shift": shift,
+        "Preference": preference,
+        "Others": others
+    }, ensure_ascii=False)
+    completion_tokens = _count_tokens(completion_json, model_name_for_calc)
+    cost_info = _compute_cost(prompt_tokens, completion_tokens, model_name_for_calc)
+
     print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_others: {others}")
-    return {"query_chat": chat, 'query_shift': shift, 'query_preference': preference, 'query_others': others, 'model': models_to_try[0]}
+    print(f"토큰 사용량: {cost_info['usage']}, 비용(USD/KRW): {cost_info['cost_usd']} / {cost_info['cost_krw']}")
+    return {
+        "query_chat": chat,
+        'query_shift': shift,
+        'query_preference': preference,
+        'query_others': others,
+        'model': models_to_try[0]
+    }
+
 
 

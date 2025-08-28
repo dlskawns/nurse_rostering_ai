@@ -18,7 +18,7 @@ class GraphService:
 
         response = await self._graph.ainvoke({"request": request, "schema": schema, "case": case})
         response = [response['shift_results'], response['preference_results']]
-        print('\n\n\n\n\n\n응답:', response, '\n\n\n\n\n\n')
+        # print('\n\n\n\n\n\n응답:', response, '\n\n\n\n\n\n')
         return response
 
 graph_service = GraphService() 

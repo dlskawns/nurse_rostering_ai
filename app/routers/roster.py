@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from db.roster_config import NurseRosterConfig, DEFAULT_CONFIG
 from schemas.roster_schema import RosterConfigCreate, RosterConfig, PublishRequest, WantedInvokeRequest, WantedInvokeResponse, RosterRequest
-from services.graph_service import graph_service
 from routers.auth import get_current_user_from_cookie
 from schemas.auth_schema import User
 from db.client import get_db
@@ -299,7 +298,6 @@ async def get_roster_by_schedule_id(
     # Get schedule entries
     entries = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule_id).all()
     # for e in entries:
-        # print(e.entry_id, e.nurse_id, e.work_date, e.shift_id)
     roster_data = {
         "year": schedule.year, 
         "month": schedule.month,

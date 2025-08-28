@@ -1,4 +1,6 @@
-name: Build ‑ Push ‑ Deploy (EC2 + ALB)
+# .github/workflows/deploy-ecr.yml
+
+name: Build - Push - Deploy (EC2 + ALB)
 
 on:
   push:
@@ -7,19 +9,12 @@ on:
       - dev
       - feat/** # feature/*  브랜치도 포함
 
-######################################################################
-# 📌  공통 상수 (필요하면 여기서만 바꾸면 됨)
-######################################################################
-# env:
-#   AWS_REGION: ap-northeast-2 # ← 리전을 바꾸면 한 곳만
-#   ECR_REPO: aide-backend-dev # ECR Repository 이름
-
 jobs:
   build-push-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # (OIDC 사용 시) 필요
+      id-token: write
 
     steps:
       ##################################################################
@@ -29,7 +24,7 @@ jobs:
         uses: actions/checkout@v3
 
       ##################################################################
-      # 2) 브랜치에 따라 ENV / TAG / API KEY 세팅
+      # 2) 브랜치에 따라 ENV / TAG / API KEY 세팅
       ##################################################################
       - name: Set dynamic env vars
         run: |
@@ -39,59 +34,47 @@ jobs:
             echo "ANTHROPIC_API_KEY=${{ secrets.PROD_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.PROD_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.PROD_ENV_OPENAI }}" >> $GITHUB_ENV
-            
-
           elif [[ "${{ github.ref_name }}" ==  "dev" ]]; then
             echo "ENVIRONMENT=development" >> $GITHUB_ENV
             echo "DOCKER_TAG=dev-${{ github.sha }}" >> $GITHUB_ENV
             echo "ANTHROPIC_API_KEY=${{ secrets.DEV_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.DEV_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.DEV_ENV_OPENAI }}" >> $GITHUB_ENV
-            
-
           else
-            echo ${{ github.ref_name }}
             echo "ENVIRONMENT=local" >> $GITHUB_ENV
             echo "DOCKER_TAG=${{ github.ref_name }}-${{ github.sha }}" >> $GITHUB_ENV
             echo "ANTHROPIC_API_KEY=${{ secrets.LOCAL_ENV_ANTHROPIC }}" >> $GITHUB_ENV
             echo "GOOGLE_API_KEY=${{ secrets.LOCAL_ENV_GOOGLE }}" >> $GITHUB_ENV
             echo "OPENAI_API_KEY=${{ secrets.LOCAL_ENV_OPENAI }}" >> $GITHUB_ENV
-            
           fi
         shell: bash
-      # 2-2. 환경설정 확인 로그 출력
+
       - name: Log Environment
         run: |
           echo "Running in ${{ env.ENVIRONMENT }} environment"
           echo "Using Docker tag: ${{ env.DOCKER_TAG }}"
-          echo "Anthropic API Key: ${{ env.ANTHROPIC_API_KEY }}"
-          echo "GOOGLE API Key: ${{ env.GOOGLE_API_KEY }}"
-          echo "OPENAI API Key: ${{ env.OPENAI_API_KEY }}"
+          # 보안상 API 키는 출력하지 않음
 
-        # echo "::group::🔖  Resolved build variables"
-        # env | grep -E 'APP_ENV|DOCKER_TAG' || true   # grep 결과 없어도 통과
-        # echo "::endgroup::"
       ##################################################################
-      # 3) AWS 자격 구성  ── (둘 중 하나만 선택)
+      # 3) AWS 자격 구성
       ##################################################################
-
-      # --- 3‑B  : Access Key (빠르게 테스트할 때) ----------------------
       - name: Configure AWS credentials (AccessKey)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-      # ---------------------------------------------------------------
 
       ##################################################################
-      # 4) ECR 로그인
+      # 4) ECR 로그인
       ##################################################################
       - name: Login to Amazon ECR
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 5. Docker 이미지 빌드 (빌드 인자에 환경변수 전달)
+      ##################################################################
+      # 5) Docker 이미지 빌드/푸시
+      ##################################################################
       - name: Build Docker image
         run: |
           docker build \
@@ -101,7 +84,6 @@ jobs:
             --build-arg OPENAI_API_KEY=${{ env.OPENAI_API_KEY }} \
             -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }} .
 
-      # 6. Docker 이미지 ECR에 푸시
       - name: Push Docker image to ECR
         run: |
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }}
@@ -110,7 +92,80 @@ jobs:
         run: |
           echo "IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/aide-backend-dev:${{ env.DOCKER_TAG }}" >> $GITHUB_ENV
 
-      # 5‑1) 이전 latest 태그 이미지 삭제 (ECR 요금 절감)
+      ##################################################################
+      # 5-0) ECR 이미지 정리 (untagged 삭제 + 최신 10개 보존)
+      ##################################################################
+      - name: Install jq (for ECR pruning)
+        run: sudo apt-get update -y && sudo apt-get install -y jq
+
+      - name: Prune ECR images (keep last 10, delete untagged)
+        env:
+          REPO: aide-backend-dev
+          REGION: ${{ secrets.AWS_REGION }}
+          KEEP: "10"
+          CURRENT_TAG: ${{ env.DOCKER_TAG }}
+        run: |
+          set -e
+
+          echo "🧹 Delete UNTAGGED images"
+          UNTAGGED_JSON=$(aws ecr list-images \
+            --repository-name "$REPO" \
+            --region "$REGION" \
+            --filter tagStatus=UNTAGGED \
+            --query 'imageIds' \
+            --output json)
+
+          if [ "$(echo "$UNTAGGED_JSON" | jq 'length')" -gt 0 ]; then
+            aws ecr batch-delete-image \
+              --repository-name "$REPO" \
+              --region "$REGION" \
+              --cli-input-json "{\"imageIds\": $UNTAGGED_JSON }" || true
+            echo "✅ Deleted UNTAGGED images"
+          else
+            echo "ℹ️ No UNTAGGED images"
+          fi
+
+          echo "🧹 Delete old TAGGED images (keep $KEEP, skip current: $CURRENT_TAG)"
+          DETAILS=$(aws ecr describe-images \
+            --repository-name "$REPO" \
+            --region "$REGION" \
+            --output json)
+
+          ALL_TAGS=$(echo "$DETAILS" | jq -r '
+            .imageDetails
+            | map(select(.imageTags != null))
+            | sort_by(.imagePushedAt) | reverse
+            | map(.imageTags) | flatten
+            | .[]')
+
+          COUNT=0
+          DELETE_TAGS=()
+
+          for t in $ALL_TAGS; do
+            if [ "$t" = "$CURRENT_TAG" ]; then
+              continue
+            fi
+            COUNT=$((COUNT+1))
+            if [ $COUNT -le $KEEP ]; then
+              continue
+            fi
+            DELETE_TAGS+=("$t")
+          done
+
+          if [ ${#DELETE_TAGS[@]} -gt 0 ]; then
+            IDS=$(printf '%s\n' "${DELETE_TAGS[@]}" | jq -R '{imageTag: .}' | jq -s .)
+            aws ecr batch-delete-image \
+              --repository-name "$REPO" \
+              --region "$REGION" \
+              --cli-input-json "{\"imageIds\": $IDS }" || true
+            echo "✅ Deleted old tagged images: ${DELETE_TAGS[*]}"
+          else
+            echo "ℹ️ Nothing to delete among tagged images"
+          fi
+
+      ##################################################################
+      # 5-1) 이전 latest 태그 이미지 삭제 (요금 절감)
+      ##################################################################
       - name: Delete previous :latest image in ECR
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -121,11 +176,13 @@ jobs:
             set -e
             echo "🗑️  deleting old :latest in ECR (if exists)"
             aws ecr batch-delete-image \
-              --region ${{ env.AWS_REGION }} \
+              --region ${{ secrets.AWS_REGION }} \
               --repository-name aide-backend-dev \
               --image-ids imageTag=latest || true
 
-      # 5‑2) EC2 → ECR 로그인 (토큰 12h 유지, 재실행 안전)
+      ##################################################################
+      # 5-2) EC2 → ECR 로그인
+      ##################################################################
       - name: ECR login from EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -134,14 +191,15 @@ jobs:
           key: ${{ secrets.DEV_EC2_SSH_KEY }}
           script: |
             set -e
-
-            aws ecr get-login-password --region ${{ env.AWS_REGION }} \
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
               | sudo docker login \
                   --username AWS \
-                  --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+                  --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
             echo "✅  ECR login done"
 
-      # 5‑3) 기존 컨테이너/이미지 정리
+      ##################################################################
+      # 5-3) EC2: 로컬 컨테이너/이미지 강력 정리 (볼륨은 유지)
+      ##################################################################
       - name: Stop & prune old containers/images
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -156,10 +214,12 @@ jobs:
             sudo docker ps -a -q | xargs -r sudo docker rm
             echo "🗑️  Removing images"
             sudo docker images -q | xargs -r sudo docker rmi
-            echo "🧹 docker system prune"
+            echo "🧹 docker system prune (no volumes)"
             sudo docker system prune -af
 
-      # 5‑4) 새 이미지 Pull
+      ##################################################################
+      # 5-4) 새 이미지 Pull
+      ##################################################################
       - name: Pull new image on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -172,7 +232,34 @@ jobs:
             echo " docker pull $IMAGE_URI"
             sudo docker pull "$IMAGE_URI"
 
-      # 5‑5) 컨테이너 실행 (예: 단일 FastAPI 서버)
+      ##################################################################
+      # 5-4.5) EC2: .env 작성 (로컬 MySQL 접속 정보 포함)
+      ##################################################################
+      - name: Write .env on EC2
+        uses: appleboy/ssh-action@v1.0.0
+        env:
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          IMAGE_URI: ${{ env.IMAGE_URI }}
+        with:
+          host: ${{ secrets.DEV_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.DEV_EC2_SSH_KEY }}
+          script: |
+            set -e
+            mkdir -p /home/ubuntu/app
+            cat > /home/ubuntu/app/.env <<EOF
+ENVIRONMENT=${ENVIRONMENT}
+DB_HOST=host.docker.internal
+DB_PORT=3306
+DB_NAME=${{ secrets.DEV_DB_NAME }}
+DB_USER=${{ secrets.DEV_DB_USER }}
+DB_PASSWORD=${{ secrets.DEV_DB_PASSWORD }}
+EOF
+            echo "✅ Wrote /home/ubuntu/app/.env"
+
+      ##################################################################
+      # 5-5) 컨테이너 실행 (env-file 주입 + host-gateway 매핑)
+      ##################################################################
       - name: Run container
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -187,32 +274,8 @@ jobs:
             sudo docker run -d \
               --name aide-server \
               -p 8000:8000 \
+              --env-file /home/ubuntu/app/.env \
+              --add-host=host.docker.internal:host-gateway \
               --restart unless-stopped \
               "$IMAGE_URI"
             echo "🚀  Container started → http://$HOSTNAME:8000/health"
-      # ##################################################################
-      # # 6) EC2 Rolling Deploy  (SSM RunShellScript)
-      # ##################################################################
-      # - name: Deploy to EC2 via SSM
-      #   env:
-      #     INSTANCE_ID: i-0aaa81477a68886a6 # EC2 ID
-      #     IMG_URI: ${{ steps.ecr-login.outputs.registry }}/aide-backend-dev:${{ env.DOCKER_TAG }}
-      #   run: |
-      #     echo "🔄  Pulling new image on EC2"
-      #     echo "INSTANCE_ID: $INSTANCE_ID"
-      #     echo "IMG_URI: $IMG_URI"
-      #     aws ssm send-command \
-      #       --instance-ids ""$INSTANCE_ID"" \
-      #       --document-name "AWS-RunShellScript" \
-      #       --comment "Pull new Docker image" \
-      #       --parameters '{"commands":["docker pull '"$IMG_URI"'"]}' \
-      #       --output text
-
-      #     echo "🚀  Restarting backend service via docker‑compose"
-      #     # backend 서비스가 정의된 디렉터리로 이동 후 재기동 (no‑deps)
-      #     aws ssm send-command \
-      #       --instance-ids "$INSTANCE_ID" \
-      #       --document-name "AWS-RunShellScript" \
-      #       --comment "Restart backend container" \
-      #       --parameters '{"commands":["cd /home/ubuntu/app","docker compose pull backend","docker compose up -d --no-deps backend"]}' \
-      #       --output text

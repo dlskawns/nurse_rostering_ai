@@ -12,6 +12,10 @@ from langchain_openai import ChatOpenAI
 import os
 from langchain_core.messages import SystemMessage, HumanMessage
 import dotenv
+try:
+    import tiktoken
+except Exception:
+    tiktoken = None
             # * 답변 시 알 수 없는 정보를 요구한다면, 아래 도구 목록을 참고해, 필요하다면 한 번에 하나의 tool 을 호출할 수 있습니다. 
             # 도구 호출이 적절치 않을 경우 직접 답변만 작성하세요.  
             # {tools[0]}
@@ -19,16 +23,95 @@ import dotenv
 
 dotenv.load_dotenv()
 
+
 def collector(state):
     """
     information collector
     """
+
 
 def init_data(state):
     """
     initialize data
     """
     return state
+
+
+# ------------------------------
+# 비용/토큰 유틸리티
+# ------------------------------
+def _krw_per_usd() -> float:
+    try:
+        return float(os.getenv("KRW_PER_USD", "1350"))
+    except Exception:
+        return 1350.0
+
+
+def _pricing_per_1k(model_name: str) -> tuple[float, float]:
+    name = (model_name or "").lower()
+    input_usd, output_usd = 0.003, 0.009
+    if "claude" in name:
+        input_usd, output_usd = 0.003, 0.015
+    elif "gpt-4o" in name:
+        input_usd, output_usd = 0.005, 0.015
+    elif "gemini" in name:
+        input_usd, output_usd = 0.00035, 0.00105
+    return input_usd, output_usd
+
+
+def _encoding_for_model(model_name: str):
+    name = (model_name or "").lower()
+    try:
+        if "gpt" in name or "o" in name:
+            return tiktoken.get_encoding("o200k_base")
+        return tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        return None
+
+
+def _count_tokens(text: str, model_name: str) -> int:
+    if not text:
+        return 0
+    enc = _encoding_for_model(model_name)
+    if enc is None:
+        return max(1, int(len(text) / 4))
+    try:
+        return len(enc.encode(text))
+    except Exception:
+        return max(1, int(len(text) / 4))
+
+
+def _count_messages_tokens(messages: List[str], model_name: str) -> int:
+    return sum(_count_tokens(m or "", model_name) for m in messages)
+
+
+def _compute_cost(prompt_tokens: int, completion_tokens: int, model_name: str) -> dict:
+    in_per_1k, out_per_1k = _pricing_per_1k(model_name)
+    input_usd = (prompt_tokens / 1000.0) * in_per_1k
+    output_usd = (completion_tokens / 1000.0) * out_per_1k
+    total_usd = input_usd + output_usd
+    rate = _krw_per_usd()
+    return {
+        "model": model_name,
+        "pricing_per_1k_usd": {"input": in_per_1k, "output": out_per_1k},
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+        "cost_usd": {
+            "input": round(input_usd, 6),
+            "output": round(output_usd, 6),
+            "total": round(total_usd, 6),
+        },
+        "cost_krw": {
+            "input": int(round(input_usd * rate)),
+            "output": int(round(output_usd * rate)),
+            "total": int(round(total_usd * rate)),
+            "krw_per_usd": rate,
+        },
+    }
+
 
 class ShiftSubgraph(TypedDict):
     requests: List[str]
@@ -196,6 +279,7 @@ async def shift_analyzer(state):
     ]
     
     sr = None
+    used_model_name = ""
     
     for i, client in enumerate(models_to_try):
         try:
@@ -210,6 +294,7 @@ async def shift_analyzer(state):
             })
             
             sr = result["structured_response"]
+            used_model_name = getattr(client, "model", "") or used_model_name
             print(f"Shift Analyzer: {i+1}차 모델 성공!")
             print('\n\n\n\n\n\nsr: ',sr.result,'\n\n\n\n\n\n')
             break
@@ -246,6 +331,14 @@ async def shift_analyzer(state):
                     sr.result = {"shift": "O", "date": [], "score": []}
                     break
     
+    # 토큰/비용 계산
+    model_name_for_calc = used_model_name or (getattr(models_to_try[0], "model", "") or "")
+    prompt_tokens = _count_messages_tokens([shift_analyzer_prompt.system, shift_analyzer_prompt.human], model_name_for_calc)
+    completion_json = json.dumps(sr.result if sr else {"shift": "O", "date": [], "score": []}, ensure_ascii=False)
+    completion_tokens = _count_tokens(completion_json, model_name_for_calc)
+    cost_info = _compute_cost(prompt_tokens, completion_tokens, model_name_for_calc)
+    print(f"토큰 사용량(Shift): {cost_info['usage']}, 비용(USD/KRW): {cost_info['cost_usd']} / {cost_info['cost_krw']}")
+    
     return {"shift_result": [sr.result]}
 
 
@@ -268,7 +361,7 @@ async def create_shift_analyzer(parent_state):
     client = parent_state['model']
 
     tools = await mcp_client.get_tools()
-    print('툴즈~~~', tools)
+    # print('툴즈~~~', tools)
     n_requests = len(requests)
     if n_requests == 0:
         print('shift_analyzer 답변 없음')

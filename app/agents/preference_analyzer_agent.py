@@ -10,6 +10,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 import os
 import dotenv
+try:
+    import tiktoken
+except Exception:
+    tiktoken = None
 
 dotenv.load_dotenv()
 
@@ -21,15 +25,97 @@ class PreferenceSubgraph(TypedDict):
     preference_result: Annotated[list, operator.add]
     model: object
 
+
 def collector(state):
     """
     information collector
     """
 
+
 def init_data(state):
     """
     initialize data
     """
+
+
+# ------------------------------
+# 비용/토큰 유틸리티
+# ------------------------------
+def _krw_per_usd() -> float:
+    try:
+        return float(os.getenv("KRW_PER_USD", "1350"))
+    except Exception:
+        return 1350.0
+
+
+def _pricing_per_1k(model_name: str) -> tuple[float, float]:
+    """
+    모델별 1K 토큰당 (입력, 출력) USD 비용을 반환.
+    """
+    name = (model_name or "").lower()
+    input_usd, output_usd = 0.003, 0.009
+    if "gpt-4o" in name:
+        input_usd, output_usd = 0.005, 0.015
+    elif "claude" in name:
+        input_usd, output_usd = 0.003, 0.015
+    elif "gemini" in name:
+        input_usd, output_usd = 0.00035, 0.00105
+    return input_usd, output_usd
+
+
+def _encoding_for_model(model_name: str):
+    name = (model_name or "").lower()
+    try:
+        if "gpt" in name or "o" in name:
+            return tiktoken.get_encoding("o200k_base")
+        return tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        return None
+
+
+def _count_tokens(text: str, model_name: str) -> int:
+    if not text:
+        return 0
+    enc = _encoding_for_model(model_name)
+    if enc is None:
+        return max(1, int(len(text) / 4))
+    try:
+        return len(enc.encode(text))
+    except Exception:
+        return max(1, int(len(text) / 4))
+
+
+def _count_messages_tokens(messages: List[str], model_name: str) -> int:
+    return sum(_count_tokens(m or "", model_name) for m in messages)
+
+
+def _compute_cost(prompt_tokens: int, completion_tokens: int, model_name: str) -> dict:
+    in_per_1k, out_per_1k = _pricing_per_1k(model_name)
+    input_usd = (prompt_tokens / 1000.0) * in_per_1k
+    output_usd = (completion_tokens / 1000.0) * out_per_1k
+    total_usd = input_usd + output_usd
+    rate = _krw_per_usd()
+    return {
+        "model": model_name,
+        "pricing_per_1k_usd": {"input": in_per_1k, "output": out_per_1k},
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+        "cost_usd": {
+            "input": round(input_usd, 6),
+            "output": round(output_usd, 6),
+            "total": round(total_usd, 6),
+        },
+        "cost_krw": {
+            "input": int(round(input_usd * rate)),
+            "output": int(round(output_usd * rate)),
+            "total": int(round(total_usd * rate)),
+            "krw_per_usd": rate,
+        },
+    }
+
 
 class preferenceAnalyzer(BaseModel):
     processor: str
@@ -153,6 +239,7 @@ async def preference_analyzer(state):
         "weight": 0.0,
         "reason": "처리 실패"
     }
+    used_model_name = ""
     
     for i, client in enumerate(models_to_try):
         try:
@@ -162,7 +249,9 @@ async def preference_analyzer(state):
             llm = client.with_structured_output(preferenceAnalyzer)
             # print('llm', llm)
             response = await llm.ainvoke(messages)
-            print('response', response)
+            used_model_name = getattr(client, "model", "") or used_model_name
+            print('used_model_name', used_model_name)
+            # print('response', response)
             # 성공 시 데이터 추출
             json_answer = {
                 "processor": response.processor,
@@ -219,7 +308,15 @@ async def preference_analyzer(state):
                     print("Preference Analyzer: 모든 모델 실패, 기본값 사용")
                     break
     
-    print('preference_analyzer 답변:', json_answer)
+    # 토큰/비용 계산
+    model_name_for_calc = used_model_name or (getattr(models_to_try[0], "model", "") or "")
+    prompt_tokens = _count_messages_tokens([preference_analyzer_prompt.system, preference_analyzer_prompt.human], model_name_for_calc)
+    completion_json = json.dumps(json_answer, ensure_ascii=False)
+    completion_tokens = _count_tokens(completion_json, model_name_for_calc)
+    cost_info = _compute_cost(prompt_tokens, completion_tokens, model_name_for_calc)
+    print(f"토큰 사용량(Preference): {cost_info['usage']}, 비용(USD/KRW): {cost_info['cost_usd']} / {cost_info['cost_krw']}")
+    
+    # print('preference_analyzer 답변:', json_answer)
     return {'preference_result': [json_answer]}
 
 
