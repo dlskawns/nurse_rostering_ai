@@ -42,3 +42,5 @@ scipy>=1.15.3
 sqlalchemy>=2.0.41
 timer>=0.3.0
 uvicorn>=0.34.2
+alembic
+psycopg2-binary 

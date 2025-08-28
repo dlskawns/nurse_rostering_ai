@@ -36,22 +36,40 @@ def get_user(db: Session, account_id: str):
     return db.query(Nurse).options(joinedload(Nurse.group)).filter(Nurse.account_id == account_id).first()
 
 @router.post("/login")
-async def login_for_access_token(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = get_user(db, form_data.username)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect account ID",
-            headers={"WWW-Authenticate": "Bearer"},
+async def login_for_access_token(
+    response: Response, 
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
+):
+    try:
+        user = get_user(db, form_data.username)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect account ID",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # (선택) 비밀번호 무시하는 경우는 그냥 통과,
+        # 비밀번호 검증하려면 user.password 해시 비교 넣어야 함
+
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.account_id}, expires_delta=access_token_expires
         )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.account_id}, expires_delta=access_token_expires
-    )
-    
-    response.set_cookie(key="access_token", value=f"Bearer {access_token}", httponly=True, samesite="lax")
-    return {"message": "Login successful"}
+
+        response.set_cookie(
+            key="access_token", 
+            value=f"Bearer {access_token}", 
+            httponly=True, 
+            samesite="lax"
+        )
+        return {"message": "Login successful"}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+
 
 @router.post("/logout")
 async def logout(response: Response):
