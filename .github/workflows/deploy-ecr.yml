@@ -125,8 +125,8 @@ jobs:
             set -e
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
               | sudo docker login \
-                  --username AWS \
-                  --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+                --username AWS \
+                --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
             echo "ECR login on EC2 done"
 
       # 5-2) EC2: 로컬 컨테이너/이미지 정리 (볼륨 유지)
