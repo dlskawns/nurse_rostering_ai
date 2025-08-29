@@ -2,6 +2,10 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+import dotenv
+
+dotenv.load_dotenv()
+
 
 # In a production environment, use environment variables, e.g., via a .env file and python-dotenv
 # from dotenv import load_dotenv
@@ -9,11 +13,11 @@ from sqlalchemy.ext.declarative import declarative_base
 # DB_USER = os.getenv("DB_USER")
 # ...
 
-DB_HOST = "localhost"
-DB_PORT = 3306
-DB_USER = "root"
-DB_PASSWORD = "1234"
-DB_NAME = "meditong_roster"
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_NAME = os.getenv("DB_NAME")
 
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
