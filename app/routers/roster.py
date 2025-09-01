@@ -351,7 +351,8 @@ async def get_schedule_versions(
         "version": schedule.version,
         "status": schedule.status,
         "created_at": schedule.created_at.isoformat() if schedule.created_at else None,
-        "created_by": schedule.created_by
+        "created_by": schedule.created_by,
+        "name": schedule.name
     } for schedule in schedules]
 
 # [Roster] - 특정 월의 근무표 조회
@@ -941,3 +942,42 @@ async def validate_roster(
             "detailed_violations": []
         }
 
+# [Roster] - 스케줄 이름 업데이트
+@router.patch("/roster/{schedule_id}/name")
+async def update_schedule_name(
+    schedule_id: str,
+    name_data: dict,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    try:
+        # 스케줄 조회
+        schedule = db.query(Schedule).filter(
+            Schedule.schedule_id == schedule_id,
+            Schedule.group_id == current_user.group_id,
+            Schedule.dropped == False
+        ).first()
+        
+        if not schedule:
+            raise HTTPException(status_code=404, detail="스케줄을 찾을 수 없습니다.")
+        
+        # 이름 업데이트
+        new_name = name_data.get('name')
+        if not new_name or not new_name.strip():
+            raise HTTPException(status_code=400, detail="이름을 입력해주세요.")
+        
+        schedule.name = new_name.strip()
+        schedule.updated_at = datetime.now()
+        
+        db.add(schedule)
+        db.commit()
+        
+        return {"message": "스케줄 이름이 성공적으로 업데이트되었습니다.", "name": new_name}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"이름 업데이트 실패: {str(e)}")
