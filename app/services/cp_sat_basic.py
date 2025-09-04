@@ -94,6 +94,7 @@ class CPSATBasicEngine:
             two_offs_after_two_nig=two_offs_after_two_nig,
             sequential_offs=sequential_offs,
             even_nights=even_nights,
+            nod_noe=config_data.get('nod_noe', True),
             global_monthly_off_days=2,
             standard_personal_off_days=config_data.get('off_days', 8) - 2 if config_data.get('off_days', 8) > 2 else 0,
             # 수정
@@ -924,14 +925,15 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
                 obj.extend([-50*devP,-50*devN])
 
     # (4-4) N-O-D/E 패터
-    for n in range(N):
-        for d in range(join[n], leave[n]-2):
-            pat=m.NewIntVar(0,1,f'NOD_{n}_{d}')
-            m.Add(pat >= X(n,d,night)+X(n,d+1,off)+X(n,d+2,day)-2)
-            obj.append(-100*pat)
-            pat2=m.NewIntVar(0,1,f'NOE_{n}_{d}')
-            m.Add(pat2 >= X(n,d,night)+X(n,d+1,off)+X(n,d+2,eve)-2)
-            obj.append(-100*pat2)
+    if getattr(cfg, 'nod_noe', True):
+        for n in range(N):
+            for d in range(join[n], leave[n]-2):
+                pat=m.NewIntVar(0,1,f'NOD_{n}_{d}')
+                m.Add(pat >= X(n,d,night)+X(n,d+1,off)+X(n,d+2,day)-2)
+                obj.append(-100*pat)
+                pat2=m.NewIntVar(0,1,f'NOE_{n}_{d}')
+                m.Add(pat2 >= X(n,d,night)+X(n,d+1,off)+X(n,d+2,eve)-2)
+                obj.append(-100*pat2)
 
     # (4-5) 고립 OFF
     for n in range(N):
