@@ -82,7 +82,7 @@ class CPSATAdaptiveEngine:
             'D': 5.0, 
             'E': 5.0, 
             'N': 7.0,  # Night Keep은 더 높은 가중치
-            'OFF': 10.0
+            'O': 10.0
         }
         
         return NurseRosterConfig(

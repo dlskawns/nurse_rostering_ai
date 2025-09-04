@@ -802,8 +802,8 @@ async def validate_roster(
                     alias_map[code.upper()] = base
 
         # OFF(휴무) 도 항상 포함시킴
-        alias_map.setdefault('OFF', 'OFF')
-        alias_map.setdefault('O',   'OFF')
+        alias_map.setdefault('OFF', 'O')
+        alias_map.setdefault('O',   'O')
 
         # ──────────────────────── 2. 근무표 설정(인원/제약) 불러오기 ────────────────────────
         if config_id:
@@ -850,7 +850,7 @@ async def validate_roster(
             config        = roster_config_for_engine
         )
 
-        # shift_types 는 ['D','E','N','OFF'] (엔진 기본).  
+        # shift_types 는 ['D','E','N','O'] (엔진 기본).  
         shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
         system.roster.fill(0)                                # 3-D 배열 0으로 초기화
 

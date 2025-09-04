@@ -79,7 +79,7 @@ class Nurse:
         d_idx = config.shift_types.index('D')
         evening_idx = config.shift_types.index('E')
         night_idx = config.shift_types.index('N')
-        off_idx = config.shift_types.index('OFF')
+        off_idx = config.shift_types.index('O')
         
         preferences[d_idx] *= config.day_shift_ratio
         preferences[evening_idx] *= config.evening_shift_ratio

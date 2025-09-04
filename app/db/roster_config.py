@@ -79,7 +79,7 @@ class NurseRosterConfig:
     @property
     def shift_types(self) -> List[str]:
         """휴무일을 포함한 교대 유형 목록을 반환합니다."""
-        return list(self.daily_shift_requirements.keys()) + ['OFF']
+        return list(self.daily_shift_requirements.keys()) + ['O']
         
     @property
     def num_shifts(self) -> int:
