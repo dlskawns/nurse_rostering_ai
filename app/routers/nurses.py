@@ -49,6 +49,17 @@ class NurseSequenceUpdate(BaseModel):
     new_sequence: int = Field(ge=1)
     active: Optional[int] = Field(default=None, description="0: 비활성, 1: 활성, None: 변경 없음")
 
+@router.get("/personnel-basic-info")
+async def get_personnel_basic_info(
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    try:
+        return get_personnel_basic_info_service(current_user, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"간호사 기본 정보 조회 실패: {str(e)}")
+
+
 
 @router.post("/sequence/save")
 async def save_nurse_sequence(
