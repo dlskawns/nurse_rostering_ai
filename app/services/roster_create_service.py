@@ -567,9 +567,11 @@ def request_schedule_service(req: RosterRequest, current_user, db: Session):
             RosterConfig.office_id == nurse.group.office_id,
             RosterConfig.group_id == nurse.group_id
         ).order_by(RosterConfig.created_at.desc()).first()
-    print('\n\n\n\n\nlatest_config여길봐', latest_config.config_id, latest_config.config_version, latest_config.day_req,'\n\n\n\n\n')
-    if not latest_config:
-        raise Exception("설정값을 입력해주세요")
+    print('latest_config', latest_config)
+    # if not latest_config :
+        # raise Exception("설정값을 입력해주세요")
+    if not latest_config or latest_config == None:
+        return "noConfigId"
     latest_version = db.query(func.max(Schedule.version)).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.year == req.year,

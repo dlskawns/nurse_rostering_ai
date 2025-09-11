@@ -83,6 +83,7 @@ class RosterConfigBase(BaseModel):
     patient_amount: int
     even_nights: bool
     sequential_offs: bool
+    nod_noe: bool
 
 class RosterConfigCreate(RosterConfigBase):
     config_version: Optional[str] = None
