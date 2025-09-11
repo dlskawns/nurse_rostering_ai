@@ -193,7 +193,8 @@ async def get_config_by_version(
                 "patient_amount": getattr(cfg, 'patient_amount', 0),
                 "sequential_offs": getattr(cfg, 'sequential_offs', True),
                 "even_nights": getattr(cfg, 'even_nights', True),
-                "created_at": None
+                "created_at": None,
+                "nod_noe": False
             }
         else:
             config = db.query(RosterConfigModel).filter(
@@ -226,7 +227,8 @@ async def get_config_by_version(
                 "patient_amount": config.patient_amount,
                 "sequential_offs": config.sequential_offs,
                 "even_nights": config.even_nights,
-                "created_at": config.created_at.isoformat() if config.created_at else None
+                "created_at": config.created_at.isoformat() if config.created_at else None,
+                "nod_noe": config.nod_noe
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")

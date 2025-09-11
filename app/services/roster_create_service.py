@@ -548,6 +548,7 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
     print(f"고정된 셀을 반영한 근무표 생성 완료: {len(fixed_cells)}개 셀 고정")
     return roster_data
 
+
 def request_schedule_service(req: RosterRequest, current_user, db: Session):
     """
     스케줄 생성 서비스 함수
@@ -587,7 +588,8 @@ def request_schedule_service(req: RosterRequest, current_user, db: Session):
         config_id=latest_config.config_id,
         created_by=current_user.account_id,
         status='draft',
-        dropped=False
+        dropped=False,
+        name=f"{req.month}월 근무표 VER{latest_version + 1}"
     )
     db.add(new_schedule)
     db.commit()
