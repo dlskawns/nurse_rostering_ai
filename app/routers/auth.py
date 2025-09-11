@@ -64,7 +64,7 @@ async def login_for_access_token(
             httponly=True, 
             samesite="lax"
         )
-        return {"message": "Login successful"}
+        return {"message": "Login successful", "account_id": user.account_id}
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -109,7 +109,8 @@ async def get_current_user_from_cookie(token: Optional[str] = Cookie(None, alias
         account_id=user.account_id,
         office_id=user.office_id,  # This should now work with eager loading
         group_id=user.group_id,
-        is_head_nurse=user.is_head_nurse
+        is_head_nurse=user.is_head_nurse,
+        name = user.name
     )
 
 @router.get("/me", response_model=UserSchema)
