@@ -13,26 +13,94 @@ from db.models import ScheduleEntry
 def get_shifts_service(current_user, db: Session):
     """
     그룹 내 모든 시프트 정보 조회 서비스 함수
+
+    - 만약 해당 그룹에 시프트가 하나도 없으면, 기본 4개 시프트(O/E/N/D)를
+      현재 사용자의 office_id, group_id 로 DB에 생성한 뒤 반환합니다.
     """
     if not current_user:
         raise Exception("Not authenticated")
+    
     shifts = db.query(Shift).filter(Shift.group_id == current_user.group_id).order_by(Shift.sequence.asc()).all()
-    return [
-        {
-            "shift_id": shift.shift_id,
-            "name": shift.name,
-            "color": shift.color,
-            "start_time": shift.start_time,
-            "end_time": shift.end_time,
-            "type": shift.type,
-            "allday": shift.allday,
-            "auto_schedule": shift.auto_schedule,
-            "duration": shift.duration,
-            "sequence": shift.sequence,
-            # time_display는 라우터에서 포맷팅 함수로 처리할 수 있음
-        }
-        for shift in shifts
-    ]
+    if shifts:
+        return [
+            {
+                "shift_id": shift.shift_id,
+                "name": shift.name,
+                "color": shift.color,
+                "start_time": shift.start_time,
+                "end_time": shift.end_time,
+                "type": shift.type,
+                "allday": shift.allday,
+                "auto_schedule": shift.auto_schedule,
+                "duration": shift.duration,
+                "sequence": shift.sequence,
+                # time_display는 라우터에서 포맷팅 함수로 처리할 수 있음
+            }
+            for shift in shifts
+        ]
+    else:
+        # 기본 시프트 자동 생성
+        nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
+        if not nurse or not nurse.group:
+            raise Exception("User group information not found")
+        office_id = nurse.group.office_id
+        group_id = current_user.group_id
+
+        def _hhmm(t: str | None) -> str | None:
+            """HH:MM:SS → HH:MM 포맷으로 보정."""
+            if not t:
+                return None
+            if len(t) >= 5 and ":" in t:
+                parts = t.split(":")
+                if len(parts) >= 2:
+                    return f"{parts[0]}:{parts[1]}"
+            return t
+
+        defaults = [
+            # shift_id, name, color, start, end, type, allday, auto_schedule, duration, sequence
+            ("O", "Off", "#ffa0d2", None, None, "휴무", 1, 1, None, 4),
+            ("E", "Evening", "#72bfff", "14:00:00", "22:00:00", "근무", 0, 1, None, 2),
+            ("N", "Night", "#bab0f0", "22:00:00", "06:00:00", "근무", 0, 1, None, 3),
+            ("D", "Day", "#59dbd7", "18:00:00", "15:00:00", "근무", 0, 1, None, 1),
+        ]
+
+        created = []
+        for sid, name, color, st, et, typ, allday, auto_s, dur, seq in defaults:
+            new_shift = Shift(
+                shift_id=sid,
+                office_id=office_id,
+                group_id=group_id,
+                name=name,
+                color=color,
+                start_time=_hhmm(st),
+                end_time=_hhmm(et),
+                type=typ,
+                allday=allday,
+                auto_schedule=auto_s,
+                duration=dur,
+                sequence=seq,
+            )
+            db.add(new_shift)
+            created.append(new_shift)
+        db.commit()
+        # 정렬된 결과 반환
+        created_sorted = db.query(Shift).filter(Shift.group_id == group_id).order_by(Shift.sequence.asc()).all()
+        return [
+            {
+                "shift_id": shift.shift_id,
+                "name": shift.name,
+                "color": shift.color,
+                "start_time": shift.start_time,
+                "end_time": shift.end_time,
+                "type": shift.type,
+                "allday": shift.allday,
+                "auto_schedule": shift.auto_schedule,
+                "duration": shift.duration,
+                "sequence": shift.sequence,
+            }
+            for shift in created_sorted
+        ]
+
 
 def add_shift_service(req, current_user, db):
     """
@@ -79,6 +147,7 @@ def add_shift_service(req, current_user, db):
         }
     }
 
+
 def update_shift_service(req, current_user, db):
     """
     시프트 수정 서비스 함수
@@ -114,6 +183,7 @@ def update_shift_service(req, current_user, db):
         }
     }
 
+
 def remove_shift_service(req, current_user, db):
     """
     시프트 삭제 서비스 함수
@@ -139,6 +209,7 @@ def remove_shift_service(req, current_user, db):
     ).update({"sequence": Shift.sequence - 1})
     db.commit()
     return {"message": "근무코드가 성공적으로 삭제되었습니다."}
+
 
 def move_shift_service(req, current_user, db):
     """

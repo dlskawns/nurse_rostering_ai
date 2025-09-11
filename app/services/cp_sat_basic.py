@@ -71,7 +71,7 @@ class CPSATBasicEngine:
             'D': 5.0, 
             'E': 5.0, 
             'N': 7.0,  # Night Keep은 더 높은 가중치
-            'OFF': 10.0
+            'O': 10.0
         })
         
         return NurseRosterConfig(
@@ -94,6 +94,7 @@ class CPSATBasicEngine:
             two_offs_after_two_nig=two_offs_after_two_nig,
             sequential_offs=sequential_offs,
             even_nights=even_nights,
+            nod_noe=config_data.get('nod_noe', True),
             global_monthly_off_days=2,
             standard_personal_off_days=config_data.get('off_days', 8) - 2 if config_data.get('off_days', 8) > 2 else 0,
             # 수정
@@ -183,17 +184,8 @@ class CPSATBasicEngine:
 
             # 휴무 요청 파싱
             if 'O' in data['shift']:
-                # off_dict = {}
-                # for date_str in data['O']:
-                #     try:
-                #         day = int(date_str)
-                #         # 기본 휴무 요청 가중치 설정
-                #         off_dict[str(day)] += 5.0  
-                #     except (ValueError, TypeError):
-                #         continue
-                # if off_dict:
                 off_requests[nurse_id] = data['shift']['O']
-                print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
+                # print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
             
             # preference 파싱
             if 'preference' in data and data['preference']:
@@ -250,17 +242,52 @@ class CPSATBasicEngine:
         # 4. 근무표 시스템 생성
         with Timer("근무표 시스템 초기화"):
             roster_system = RosterSystem(nurses, target_month, config)
-            # base = ['D', 'E', 'N', 'OFF']
-            # cfg  = roster_system.config
-            # if any(s not in cfg.shift_types for s in base):
-            #     cfg.shift_types = list(dict.fromkeys([*cfg.shift_types, *base]))
             # 고정된 셀 정보 처리
-            fixed_cells = config_data.get('fixed_cells', [])
+            fixed_cells = list(config_data.get('fixed_cells', []) or [])
+            # ── 경계 제약(강제 OFF/금지) 병합 ──
+            initial_constraints = config_data.get('initial_constraints') or {}
+            allow_override_by_law = bool(config_data.get('allow_override_by_law', False))
+            rs_dbid_to_idx = {n.db_id: n.id for n in nurses}
+            # forced_off: { nurse_db_id: [day_idx,...] }
+            forced_off = initial_constraints.get('forced_off') or {}
+            if forced_off:
+                for dbid, day_list in forced_off.items():
+                    n_idx = rs_dbid_to_idx.get(dbid)
+                    if n_idx is None:
+                        continue
+                    for d in day_list:
+                        # 기존 고정과 충돌 검출
+                        conflict = next((c for c in fixed_cells if c.get('nurse_index')==n_idx and c.get('day_index')==d and c.get('shift')!='O'), None)
+                        if conflict:
+                            msg = f"법규-유저 고정 충돌: nurse={dbid}, day={d+1}, user={conflict.get('shift')}, law=O"
+                            print(f"{self.logger_prefix} {msg}")
+                            if not allow_override_by_law:
+                                raise ValueError(msg)
+                            # override: 기존 고정 무시
+                            fixed_cells = [c for c in fixed_cells if not (c.get('nurse_index')==n_idx and c.get('day_index')==d)]
+                        fixed_cells.append({'nurse_index': n_idx, 'day_index': d, 'shift': 'O'})
             if fixed_cells:
                 print(f"{self.logger_prefix} 고정된 셀 {len(fixed_cells)}개 처리 중...")
                 roster_system.fixed_cells = fixed_cells
                 for fixed_cell in fixed_cells:
                     print(f"{self.logger_prefix} 고정 셀: 간호사 {fixed_cell['nurse_index']}, 날짜 {fixed_cell['day_index']+1}, 근무 {fixed_cell['shift']}")
+            # forbidden: { nurse_db_id: { day_idx: [codes...] } }
+            forbidden = initial_constraints.get('forbidden') or {}
+            if forbidden:
+                # 내부 인덱스 매핑 구조로 저장
+                init_forb = {}
+                for dbid, day_map in forbidden.items():
+                    n_idx = rs_dbid_to_idx.get(dbid)
+                    if n_idx is None:
+                        continue
+                    for d_str, codes in day_map.items():
+                        # 키는 정수 day_idx가 이미 주어졌다고 가정하지만, 혹시 str이면 변환
+                        try:
+                            d = int(d_str)
+                        except Exception:
+                            d = d_str
+                        init_forb.setdefault((n_idx, d), set()).update(codes)
+                roster_system.initial_forbidden = init_forb
         
         # 5. 선호도 데이터 파싱 및 적용
         with Timer("선호도 데이터 파싱"):
@@ -303,12 +330,13 @@ class CPSATBasicEngine:
         if off_requests:
             with Timer("휴무 요청 적용"):
                 print(f"{self.logger_prefix} 휴무 요청 적용 중...")
+                
                 # DB nurse_id를 키로 사용하여 매핑
                 mapped_off_requests = {}
                 for nurse_id, requests in off_requests.items():
                     # DB nurse_id를 그대로 키로 사용 (roster_system.py에서 n.db_id와 비교하므로)
                     mapped_off_requests[nurse_id] = {str(k): v for k, v in requests.items()}
-                
+                print(f"1")
                 roster_system.apply_off_requests(mapped_off_requests)
         
         # 7. 선호 근무 유형 적용  
@@ -491,8 +519,8 @@ class CPSATBasicEngine:
                 shift_idx = np.where(shift_vector == 1)[0]
                 if len(shift_idx) > 0:
                     shift_id = shift_map[shift_idx[0]]
-                    if shift_id == 'OFF':
-                        shift_id = 'O'
+                    # if shift_id == 'OFF':
+                    #     shift_id = 'O'
                     nurse_schedule.append(shift_id)
                 else:
                     nurse_schedule.append('-')
@@ -579,7 +607,7 @@ class CPSATBasicEngine:
         try:
             if preceptor_pairs:
                 print("\n  - 프리셉터 페어링 반영률:")
-                off_idx = roster_system.config.shift_types.index('OFF')
+                off_idx = roster_system.config.shift_types.index('O')
                 # 근무 코드 중 실제 근무(D/E/N) 인덱스
                 work_shift_idxs = [roster_system.config.shift_types.index(code) for code in roster_system.config.daily_shift_requirements.keys()]
                 dbid_to_idx = {n.db_id: n.id for n in roster_system.nurses}
@@ -651,7 +679,7 @@ def _solve_single_nurse(args):
     m = cp_model.CpModel()
     X = {(d,s): m.NewBoolVar(f"x_{d}_{s}") for d in range(T0,T1+1) for s in range(S)}
 
-    off = roster_system.config.shift_types.index('OFF')
+    off = roster_system.config.shift_types.index('O')
     day, eve, night = (roster_system.config.shift_types.index(c) for c in ('D','E','N'))
 
     # ── ① 고정 배정 ──────────────────
@@ -767,12 +795,14 @@ cp_sat_engine = CPSATBasicEngine()
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║                     공통 모델 빌더  (Full Constraints)               ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-def _build_full_model(rs: RosterSystem, grouped):
-    return _build_full_model(rs, grouped, include_pair_objective=True)
+# def _build_full_model(rs: RosterSystem, grouped):
+#     return _build_full_model(rs, grouped, include_pair_objective=True)
 
 def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = True):
     from ortools.sat.python import cp_model
+    print('1')
     m = cp_model.CpModel()
+    print('2')
     N,D,S = len(rs.nurses), rs.num_days, rs.config.num_shifts
 
     # join / leave index
@@ -782,7 +812,7 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
         j = (nu.joining_date-first_day).days if nu.joining_date else 0
         l = (nu.resignation_date-first_day).days if nu.resignation_date else D-1
         join.append(max(j,0)); leave.append(min(l,D-1))
-
+    print('3')
     # 고정 셀 (수간호사 등)
     code2main = {c:r['main_code']
                  for r in (grouped or []) for c in r['codes']}
@@ -790,9 +820,12 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
     for c in getattr(rs,'fixed_cells',[]) or []:
         n,d = c['nurse_index'], c['day_index']
         s_main = code2main.get(c['shift'], c['shift'])
+        print('s_main', s_main)
         s_idx  = rs.config.shift_types.index(s_main)
+        print('s_idx', s_idx)
         fixed[(n,d)] = s_idx; fixed_cnt[d][s_idx]+=1
-
+        print('fixed', fixed)
+    print('4')
     # 변수
     Xv={}
     for n in range(N):
@@ -800,12 +833,26 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
             for s in range(S):
                 Xv[n,d,s]=m.NewBoolVar(f'x_{n}_{d}_{s}')
     def X(n,d,s):  return Xv.get((n,d,s),0)
-
+    
     # ───────────── 2-A. 고정 셀  ─────────────
     for (n,d),s_idx in fixed.items():
         m.Add(X(n,d,s_idx)==1)
         for s in range(S):
             if s!=s_idx: m.Add(X(n,d,s)==0)
+    print('5')
+    # ───────────── 2-A2. 초기 금지 셀(경계 제약) ─────────────
+    try:
+        if hasattr(rs, 'initial_forbidden') and isinstance(rs.initial_forbidden, dict):
+            for (n, d), code_list in rs.initial_forbidden.items():
+                for code in (code_list or []):
+                    if code not in rs.config.shift_types:
+                        continue
+                    s_idx = rs.config.shift_types.index(code)
+                    if (n,d) in fixed and fixed[(n,d)] == s_idx:
+                        print(f"[CP-SAT-Basic] 경고: 초기 금지와 고정 충돌 (n={n}, d={d+1}, code={code})")
+                    m.Add(X(n,d,s_idx)==0)
+    except Exception as e:
+        print(f"[CP-SAT-Basic] 초기 금지 셀 적용 중 오류: {e}")
 
     # ───────────── 2-B. Exactly-one ──────────
     for n in range(N):
@@ -825,8 +872,8 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
                   >= need)
 
     # shorthand indices
-    idx = {c:rs.config.shift_types.index(c) for c in ('D','E','N','OFF')}
-    day,eve,night,off = idx['D'],idx['E'],idx['N'],idx['OFF']
+    idx = {c:rs.config.shift_types.index(c) for c in ('D','E','N','O')}
+    day,eve,night,off = idx['D'],idx['E'],idx['N'],idx['O']
 
     # ───────────── 3. Hard 법규 ───────────────
     cfg = rs.config
@@ -924,14 +971,15 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
                 obj.extend([-50*devP,-50*devN])
 
     # (4-4) N-O-D/E 패터
-    for n in range(N):
-        for d in range(join[n], leave[n]-2):
-            pat=m.NewIntVar(0,1,f'NOD_{n}_{d}')
-            m.Add(pat >= X(n,d,night)+X(n,d+1,off)+X(n,d+2,day)-2)
-            obj.append(-100*pat)
-            pat2=m.NewIntVar(0,1,f'NOE_{n}_{d}')
-            m.Add(pat2 >= X(n,d,night)+X(n,d+1,off)+X(n,d+2,eve)-2)
-            obj.append(-100*pat2)
+    if getattr(cfg, 'nod_noe', True):
+        for n in range(N):
+            for d in range(join[n], leave[n]-2):
+                pat=m.NewIntVar(0,1,f'NOD_{n}_{d}')
+                m.Add(pat >= X(n,d,night)+X(n,d+1,off)+X(n,d+2,day)-2)
+                obj.append(-100*pat)
+                pat2=m.NewIntVar(0,1,f'NOE_{n}_{d}')
+                m.Add(pat2 >= X(n,d,night)+X(n,d+1,off)+X(n,d+2,eve)-2)
+                obj.append(-100*pat2)
 
     # (4-5) 고립 OFF
     for n in range(N):
@@ -1046,7 +1094,7 @@ def _solve_neighbourhood(rs, n_set, d_set, tl, grouped, run_seed: int | None = N
     return True
 
 
-def _add_preceptor_objective_terms(m, rs: RosterSystem, X, j, l):
+def _add_preceptor_objective_terms(m, rs: RosterSystem, X, join, leave):
     """프리셉터(페어 together) 보너스 항을 생성하여 obj 리스트로 반환.
     - 하드 제약은 건드리지 않음. 소프트 보너스만 추가.
     - 설정 파라미터로 강도/탑-K/교대/하한값을 제어.
@@ -1085,7 +1133,7 @@ def _add_preceptor_objective_terms(m, rs: RosterSystem, X, j, l):
     _t0 = _t.time(); _added=0
     for n1, n2, base in pairs:
         w = int(base * 100 * strength)
-        d0, d1 = max(j[n1], j[n2]), min(l[n1], l[n2])
+        d0, d1 = max(join[n1], join[n2]), min(leave[n1], leave[n2])
         scored = []
         for d in range(d0, d1+1):
             best=None; best_s=None

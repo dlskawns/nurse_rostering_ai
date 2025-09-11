@@ -1081,6 +1081,7 @@
             cursor: not-allowed;
             opacity: 0.65;
         }
+        .pref-chip { display: inline-block; padding: 2px 4px; margin: 1px; border-radius: 3px; font-size: 9px; line-height: 1; }
     </style>
 </head>
 <body>
@@ -1137,6 +1138,7 @@
                     </div>
                     <button id="wanted-request-btn" class="request-button" onclick="requestWantedShifts()">Wanted 작성 요청하기</button>
                     <button id="generate-roster-btn" class="request-button" onclick="generateRoster()">근무표 생성하기</button>
+                    <button id="show-preferences-btn" class="request-button" onclick="showPreferencesOverlay()">희망 현황 보기</button>
                     <button id="hold-generate-btn" class="hold-generate-btn" onclick="holdGenerateRoster()" style="display: none;">고정 후 생성하기</button>
                 </div>
 
@@ -1251,6 +1253,17 @@
 
             <div id="roster-output-container" style="margin-top: 30px; display: none;">
                 <!-- This is now replaced by roster-output-section -->
+            </div>
+
+            <!-- 희망 현황 오버레이 섹션 -->
+            <div id="wish-overlay-section" style="display: none; margin-top: 30px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>간호사 희망 현황 (기초 설계 보기)</h3>
+                    <div>
+                        <button class="request-button" style="background:#6c757d; border-color:#6c757d;" onclick="hidePreferencesOverlay()">근무표 화면으로</button>
+                    </div>
+                </div>
+                <div id="wish-overlay-container" class="roster-container size-medium" style="margin-top:10px;"></div>
             </div>
         </div>
     </div>
@@ -3464,6 +3477,82 @@
             } catch (e) {
                 alert(e.message);
             }
+        }
+
+        // ───────── 희망 현황 오버레이 ─────────
+        async function showPreferencesOverlay() {
+            const section = document.getElementById('wish-overlay-section');
+            const container = document.getElementById('wish-overlay-container');
+            container.innerHTML = '희망 데이터 불러오는 중...';
+            try {
+                const res = await fetch(`/preferences/all?year=${currentYear}&month=${currentMonth + 1}`);
+                if (!res.ok) throw new Error('희망 데이터를 불러올 수 없습니다.');
+                const prefs = await res.json();
+                renderPreferenceBaseTable(prefs, currentYear, currentMonth + 1);
+                // 화면 전환: 근무표 섹션 숨기고 현황 섹션 표시
+                document.getElementById('roster-output-section').style.display = 'none';
+                section.style.display = 'block';
+            } catch (e) {
+                console.error(e);
+                container.innerHTML = '<p style="color:red;">희망 데이터를 불러올 수 없습니다.</p>';
+            }
+        }
+
+        function hidePreferencesOverlay() {
+            document.getElementById('wish-overlay-section').style.display = 'none';
+            // 필요 시 근무표 섹션 노출
+            document.getElementById('roster-output-section').style.display = 'block';
+        }
+
+        function renderPreferenceBaseTable(prefList, year, month) {
+            const container = document.getElementById('wish-overlay-container');
+            const daysInMonth = new Date(year, month, 0).getDate();
+            // nurse_id → shiftMap 저장 (공통 유틸 재사용)
+            const parsed = (window.PrefsUtils && window.PrefsUtils.parseShiftPreferences)
+                ? window.PrefsUtils.parseShiftPreferences(prefList)
+                : (function(){
+                    const m = new Map();
+                    (prefList || []).forEach(item => {
+                        const nurseId = String(item.nurse_id);
+                        const shifts = item?.data?.shift || {};
+                        m.set(nurseId, shifts);
+                    });
+                    return m;
+                })();
+            // 빠른 색상 매핑
+            const styleMap = { D: 'background:#4FC3F7;color:#fff;', E: 'background:#FFB74D;color:#fff;', N: 'background:#9575CD;color:#fff;', O: 'background:#E0E0E0;color:#333;' };
+            // 유틸: 해당 shift에서 특정 day 포함 여부 및 가중치 추출
+            function getWeight(shiftDays, dStr) {
+                if (!shiftDays) return null;
+                if (Array.isArray(shiftDays)) {
+                    return shiftDays.includes(dStr) ? '' : null;
+                }
+                return (dStr in shiftDays) ? shiftDays[dStr] : null;
+            }
+            let html = '<table class="roster-table"><thead><tr><th>간호사 (경력)</th>';
+            for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
+            html += '</tr></thead><tbody>';
+            // 간호사 순서는 allNurses 기준
+            (allNurses || []).forEach(nurse => {
+                const shiftPref = parsed.get(String(nurse.nurse_id)) || {};
+                html += `<tr><td>${nurse.name} (${nurse.experience}년)</td>`;
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dStr = String(day);
+                    const codes = ['O','D','E','N'];
+                    let chips = '';
+                    codes.forEach(code => {
+                        const w = getWeight(shiftPref[code], dStr);
+                        if (w !== null) {
+                            const label = (w === '' || w === undefined) ? `${code}` : `${code} ${w}`;
+                            chips += `<span class="pref-chip" style="${styleMap[code] || ''}">${label}</span>`;
+                        }
+                    });
+                    html += `<td style="vertical-align:top; text-align:left;">${chips}</td>`;
+                }
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
         }
     </script>
 </body>

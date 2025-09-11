@@ -170,38 +170,66 @@ async def get_config_by_version(
         raise HTTPException(status_code=403, detail="Permission denied")
     
     try:
-        config = db.query(RosterConfigModel).filter(
-            RosterConfigModel.office_id == current_user.office_id,
-            RosterConfigModel.group_id == current_user.group_id,
-            RosterConfigModel.config_version == config_version
-        ).order_by(RosterConfigModel.created_at.desc()).first()
+        if config_version == "noVersion":
+            cfg = DEFAULT_CONFIG
+            return {
+                "config_id": None,
+                "config_version": "default",
+                "day_req": cfg.daily_shift_requirements.get('D', 3),
+                "eve_req": cfg.daily_shift_requirements.get('E', 3),
+                "nig_req": cfg.daily_shift_requirements.get('N', 2),
+                "min_exp_per_shift": cfg.min_experience_per_shift,
+                "req_exp_nurses": cfg.required_experienced_nurses,
+                "two_offs_per_week": getattr(cfg, 'enforce_two_offs_per_week', False),
+                "max_nig_per_month": cfg.max_night_shifts_per_month,
+                "three_seq_nig": getattr(cfg, 'max_consecutive_nights', 3) >= 3,
+                "two_offs_after_three_nig": getattr(cfg, 'two_offs_after_three_nig', False),
+                "two_offs_after_two_nig": getattr(cfg, 'two_offs_after_two_nig', False),
+                "banned_day_after_eve": getattr(cfg, 'banned_day_after_eve', True),
+                "max_conseq_work": getattr(cfg, 'max_consecutive_work_days', 6),
+                "off_days": cfg.calculate_total_off_days(0),
+                "shift_priority": getattr(cfg, 'shift_requirement_priority', 0.8),
+                "weekend_shift_ratio": getattr(cfg, 'weekend_shift_ratio', 1.0),
+                "patient_amount": getattr(cfg, 'patient_amount', 0),
+                "sequential_offs": getattr(cfg, 'sequential_offs', True),
+                "even_nights": getattr(cfg, 'even_nights', True),
+                "created_at": None,
+                "nod_noe": False
+            }
+        else:
+            config = db.query(RosterConfigModel).filter(
+                RosterConfigModel.office_id == current_user.office_id,
+                RosterConfigModel.group_id == current_user.group_id,
+                RosterConfigModel.config_version == config_version
+            ).order_by(RosterConfigModel.created_at.desc()).first()
         
-        if not config:
-            raise HTTPException(status_code=404, detail="Config version not found")
-        
-        return {
-            "config_id": config.config_id,
-            "config_version": config.config_version,
-            "day_req": config.day_req,
-            "eve_req": config.eve_req,
-            "nig_req": config.nig_req,
-            "min_exp_per_shift": config.min_exp_per_shift,
-            "req_exp_nurses": config.req_exp_nurses,
-            "two_offs_per_week": config.two_offs_per_week,
-            "max_nig_per_month": config.max_nig_per_month,
-            "three_seq_nig": config.three_seq_nig,
-            "two_offs_after_three_nig": config.two_offs_after_three_nig,
-            "two_offs_after_two_nig": config.two_offs_after_two_nig,
-            "banned_day_after_eve": config.banned_day_after_eve,
-            "max_conseq_work": config.max_conseq_work,
-            "off_days": config.off_days,
-            "shift_priority": config.shift_priority,
-            "weekend_shift_ratio": config.weekend_shift_ratio,
-            "patient_amount": config.patient_amount,
-            "sequential_offs": config.sequential_offs,
-            "even_nights": config.even_nights,
-            "created_at": config.created_at.isoformat() if config.created_at else None
-        }
+            if not config:
+                raise HTTPException(status_code=404, detail="Config version not found")
+            pprint.pprint(config)
+            return {
+                "config_id": config.config_id,
+                "config_version": config.config_version,
+                "day_req": config.day_req,
+                "eve_req": config.eve_req,
+                "nig_req": config.nig_req,
+                "min_exp_per_shift": config.min_exp_per_shift,
+                "req_exp_nurses": config.req_exp_nurses,
+                "two_offs_per_week": config.two_offs_per_week,
+                "max_nig_per_month": config.max_nig_per_month,
+                "three_seq_nig": config.three_seq_nig,
+                "two_offs_after_three_nig": config.two_offs_after_three_nig,
+                "two_offs_after_two_nig": config.two_offs_after_two_nig,
+                "banned_day_after_eve": config.banned_day_after_eve,
+                "max_conseq_work": config.max_conseq_work,
+                "off_days": config.off_days,
+                "shift_priority": config.shift_priority,
+                "weekend_shift_ratio": config.weekend_shift_ratio,
+                "patient_amount": config.patient_amount,
+                "sequential_offs": config.sequential_offs,
+                "even_nights": config.even_nights,
+                "created_at": config.created_at.isoformat() if config.created_at else None,
+                "nod_noe": config.nod_noe
+            }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
     
@@ -225,6 +253,7 @@ async def get_issued_schedules(
     db: Session = Depends(get_db)
 ):
     try:
+        print('get_issued_schedules')
         return get_issued_schedules_service(current_user, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get issued schedules: {str(e)}")
@@ -802,8 +831,8 @@ async def validate_roster(
                     alias_map[code.upper()] = base
 
         # OFF(휴무) 도 항상 포함시킴
-        alias_map.setdefault('OFF', 'OFF')
-        alias_map.setdefault('O',   'OFF')
+        alias_map.setdefault('OFF', 'O')
+        alias_map.setdefault('O',   'O')
 
         # ──────────────────────── 2. 근무표 설정(인원/제약) 불러오기 ────────────────────────
         if config_id:
@@ -850,7 +879,7 @@ async def validate_roster(
             config        = roster_config_for_engine
         )
 
-        # shift_types 는 ['D','E','N','OFF'] (엔진 기본).  
+        # shift_types 는 ['D','E','N','O'] (엔진 기본).  
         shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
         system.roster.fill(0)                                # 3-D 배열 0으로 초기화
 

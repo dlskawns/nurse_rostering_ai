@@ -141,6 +141,7 @@ class RosterConfig(Base):
     patient_amount = Column(INTEGER)
     sequential_offs = Column(BOOLEAN)
     even_nights = Column(BOOLEAN)
+    nod_noe = Column(BOOLEAN)
     created_at = Column(DATETIME, default=func.now())
     preceptor_gauge = Column(INTEGER, nullable=False, default=5)
 

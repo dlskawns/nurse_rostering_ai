@@ -1005,6 +1005,7 @@
 
 </style>
 
+    <script src="/static/js/prefs_utils.js"></script>
 </head>
 <body>
     <div id="mySidebar" class="sidebar">
@@ -1917,26 +1918,23 @@ async function renderWishTable() {
   }
   const wishDataArr = await res.json();               // [{nurse_id, preference_data:{shift:{...}}}, …]
   
-  /* 1) nurse_id → OFF-날짜[] 맵 만들기 */
-  const offMap = new Map();
-  wishDataArr.forEach(w => {
-    const shifts = w.data?.shift ?? {};
-    const offRaw  = shifts.O;
-    if (!offRaw) return;                               // OFF 요청이 없으면 패스
-
-    let list = Array.isArray(offRaw) ? offRaw          // 배열(신규 형식)
-                                     : Object.keys(offRaw); // 객체(구 형식)
-
-    // ‘10’ 처럼 숫자만 있는 경우를 YYYY-MM-DD 로 보정
-    list = list.map(d => d.includes('-')
-                     ? d
-                     : `${activeYear}-${String(activeMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
-
-    offMap.set(w.nurse_id, list);                      // 예) ['2024-07-10', '2024-07-14']
-  });
+  /* 1) nurse_id → OFF-날짜[] 맵 만들기 (공통 유틸 재사용) */
+  const offMap = (window.PrefsUtils && window.PrefsUtils.buildOffDateMap)
+    ? window.PrefsUtils.buildOffDateMap(wishDataArr, activeYear, activeMonth)
+    : (function(){
+        const m = new Map();
+        wishDataArr.forEach(w => {
+          const shifts = w.data?.shift ?? {};
+          const offRaw  = shifts.O;
+          if (!offRaw) return;
+          let list = Array.isArray(offRaw) ? offRaw : Object.keys(offRaw);
+          list = list.map(d => d.includes('-') ? d : `${activeYear}-${String(activeMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+          m.set(w.nurse_id, list);
+        });
+        return m;
+      })();
 
   /* 2) 테이블 뼈대 */
-
   const daysInMonth = new Date(activeYear, activeMonth, 0).getDate();
   let html = '<table class="wish-table"><thead><tr><th>간호사</th>';
   for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;

@@ -130,7 +130,7 @@ class RosterSystem:
         if day < max_work:
             return True
 
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         consecutive = 0
         for d in range(day, day-max_work-1, -1):
             if d < 0:
@@ -171,8 +171,8 @@ class RosterSystem:
         - delta_weight 는 기본 OFF-가중치(config.shift_preference_weights["OFF"])
             에 더해질 추가점수.   (총점 = 기본 + delta)
         """
-        off_idx     = self.config.shift_types.index("OFF")
-        base_weight = self.config.shift_preference_weights.get("OFF", 10.0)
+        off_idx     = self.config.shift_types.index("O")
+        base_weight = self.config.shift_preference_weights.get("O", 10.0)
         print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
         for target_nurse_id, day_map in off_requests.items():
             # if target_nurse_id is None:
@@ -493,7 +493,7 @@ class RosterSystem:
                 'day': np.sum(self.roster[n_idx, :, self.config.shift_types.index('D')]),
                 'evening': np.sum(self.roster[n_idx, :, self.config.shift_types.index('E')]),
                 'night': np.sum(self.roster[n_idx, :, self.config.shift_types.index('N')]),
-                'off': np.sum(self.roster[n_idx, :, self.config.shift_types.index('OFF')])
+                'off': np.sum(self.roster[n_idx, :, self.config.shift_types.index('O')])
             }
             workloads[nurse.name] = shifts
             
@@ -552,7 +552,7 @@ class RosterSystem:
                 model.Add(sum(x[n_idx, day, s_idx] for n_idx in range(len(self.nurses))) == required)
 
         # 3. 수간호사 요구사항 (주말 휴무 등)은 반드시 지켜져야 합니다.
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         for n_idx, nurse in enumerate(self.nurses):
             if nurse.is_head_nurse and nurse.head_nurse_off_pattern == 'weekend':
                 for day in range(self.num_days):
@@ -710,7 +710,7 @@ class RosterSystem:
         
         # Create the model
         model = cp_model.CpModel()
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         # 1. Define variables
         # x[nurse, day, shift] = 1 if nurse is assigned to shift on day
         x = {}
@@ -786,7 +786,7 @@ class RosterSystem:
                 for d in range(day, day + self.config.max_consecutive_work_days + 1):
                     if d < self.num_days:  # 범위 확인
                         # Working = any shift except OFF
-                        off_idx = self.config.shift_types.index('OFF') 
+                        off_idx = self.config.shift_types.index('O') 
                         work_vars = [x[n_idx, d, s_idx] for s_idx in range(len(self.config.shift_types)) if s_idx != off_idx]
                         is_working = model.NewBoolVar(f'n{n_idx}_d{d}_working')
                         model.AddMaxEquality(is_working, work_vars)
@@ -832,7 +832,7 @@ class RosterSystem:
         # 8. Head nurse weekend pattern - HARD 제약 유지
         for n_idx, nurse in enumerate(self.nurses):
             if nurse.is_head_nurse:
-                off_idx = self.config.shift_types.index('OFF')
+                off_idx = self.config.shift_types.index('O')
                 
                 if nurse.head_nurse_off_pattern == 'weekend':
                     # Weekend days must be OFF
@@ -851,7 +851,7 @@ class RosterSystem:
             if nurse.resignation_date:
                 resignation_day = (nurse.resignation_date - self.target_month).days
                 if 0 <= resignation_day < self.num_days:
-                    off_idx = self.config.shift_types.index('OFF')
+                    off_idx = self.config.shift_types.index('O')
                     for day in range(resignation_day, self.num_days):
                         model.Add(x[n_idx, day, off_idx] == 1)
         
@@ -933,7 +933,7 @@ class RosterSystem:
         
         # 10.4 Workload balance - Simplified to avoid non-affine expressions
         # Calculate total work days for each nurse directly
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         
         # Create workday count variables for each nurse
         work_days = {}
@@ -949,7 +949,7 @@ class RosterSystem:
             model.Add(work_days[n_idx] == sum(work_shifts))
         
         # 11. 휴무일 제한 추가 - 상한 제약은 유지, 하한은 변경
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         for n_idx, nurse in enumerate(self.nurses):
             total_off = sum(x[n_idx, day, off_idx] for day in range(self.num_days))
             allowed_off = nurse.remaining_off_days
@@ -1072,7 +1072,7 @@ class RosterSystem:
                         print(f"날짜 {day+1}, {shift} 근무: {assigned}명 배정됨 (요구: {required}명)")
                 
             # 선호 휴무일 반영 분석
-            off_idx = self.config.shift_types.index('OFF')
+            off_idx = self.config.shift_types.index('O')
             total_preferences = 0
             satisfied_preferences = 0
             
@@ -1116,7 +1116,7 @@ class RosterSystem:
         print(f"초기 선호 휴무일 만족도: {best_off_satisfaction:.2f}%")
         
         # 선호 휴무일이 있는 날짜를 찾습니다
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         preferred_off_days = {}
         for n_idx in range(len(self.nurses)):
             nurse_preferred_days = []
@@ -1266,7 +1266,7 @@ class RosterSystem:
         
     def _calculate_off_preference_satisfaction(self):
         """선호 휴무일 만족도를 계산합니다."""
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         print('off_index:',off_idx)
         total_preferences = 0
         satisfied_preferences = 0
@@ -1462,7 +1462,7 @@ class RosterSystem:
             }
             
             # 휴무 선호도 만족도 계산
-            off_idx = self.config.shift_types.index('OFF')
+            off_idx = self.config.shift_types.index('O')
             total_off_requests = 0
             satisfied_off_requests = 0
             
@@ -1481,7 +1481,7 @@ class RosterSystem:
             
             for day in range(self.num_days):
                 for shift_idx, shift_type in enumerate(self.config.shift_types):
-                    if shift_type != 'OFF' and self.preference_matrix[n_idx, day, shift_idx] >= 4:
+                    if shift_type != 'O' and self.preference_matrix[n_idx, day, shift_idx] >= 4:
                         total_shift_requests += 1
                         if self.roster[n_idx, day, shift_idx] == 1:
                             satisfied_shift_requests += 1
@@ -1582,7 +1582,7 @@ class RosterSystem:
         }
         
         # 휴무 요청 분석
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         for n_idx in range(len(self.nurses)):
             for day in range(self.num_days):
                 if self.preference_matrix[n_idx, day, off_idx] >= 4:
@@ -1611,7 +1611,7 @@ class RosterSystem:
         for n_idx in range(len(self.nurses)):
             for day in range(self.num_days):
                 for shift_idx, shift_type in enumerate(self.config.shift_types):
-                    if shift_type != 'OFF' and self.preference_matrix[n_idx, day, shift_idx] >= 4:
+                    if shift_type != 'O' and self.preference_matrix[n_idx, day, shift_idx] >= 4:
                         analysis["total_requests"]["shift"] += 1
                         if self.roster[n_idx, day, shift_idx] == 1:
                             analysis["satisfied_requests"]["shift"] += 1
@@ -1797,7 +1797,7 @@ class RosterSystem:
                 model.Add(x[e_idx, day, day_idx] <= 1 - x[e_idx, day-1, evening_idx])
                 
         # 6. 휴무일 제한 추가 (HARD) - 상한만 유지
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         for n_idx, nurse in enumerate(self.nurses):
             total_off = sum(x[n_idx, day, off_idx] for day in range(self.num_days))
             allowed_off = nurse.remaining_off_days
@@ -1865,7 +1865,7 @@ class RosterSystem:
                 objective_terms.append(night_bonus)
         
         # Workload balance (simplified)
-        off_idx = self.config.shift_types.index('OFF')
+        off_idx = self.config.shift_types.index('O')
         for n_idx in range(len(self.nurses)):
             # Encourage working
             work_shifts = [
@@ -1939,7 +1939,7 @@ class RosterSystem:
             'D': 'day',
             'E': 'evening',
             'N': 'night',
-            'OFF': 'off'
+            'O': 'off'
         }
         
         for n_idx in range(len(self.nurses)):
@@ -2152,7 +2152,7 @@ class RosterSystem:
             consecutive_work = 0
             consecutive_work_violations = 0
             for shift in self.roster[nurse_idx]:
-                if shift != 'OFF':
+                if shift != 'O':
                     consecutive_work += 1
                     if consecutive_work > self.config.max_consecutive_work_days:
                         consecutive_work_violations += 1
@@ -2164,7 +2164,7 @@ class RosterSystem:
             weekly_off_violations = 0
             for week in range(len(self.roster[nurse_idx]) // 7):
                 week_shifts = self.roster[nurse_idx][week * 7:(week + 1) * 7]
-                off_days = np.sum(week_shifts == 'OFF')
+                off_days = np.sum(week_shifts == 'O')
                 if off_days < 2:  # 주 2일 휴무 기준
                     weekly_off_violations += 1
             metrics['주당 휴무일 부족 횟수'].append(weekly_off_violations)

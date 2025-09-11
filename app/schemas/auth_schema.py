@@ -10,6 +10,7 @@ class User(BaseModel):
     office_id: Optional[str] = None
     group_id: str
     is_head_nurse: bool
+    name: str
 
     class Config:
-        from_attributes = True 
+        from_attributes = True  

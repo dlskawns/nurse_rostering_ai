@@ -26,6 +26,7 @@ class NurseRosterConfig:
     # 병원 내규 (소프트 제약)
     sequential_offs: bool = True  # OFF 연속 배정
     even_nights: bool = True  # N 개수 균등 배정
+    nod_noe: bool = True  # N-O-D/E 패턴 최소화 적용 여부
     
     # 휴무일 관리
     global_monthly_off_days: int = 3  # 모든 간호사에게 적용되는 전체 휴무일(공휴일, 특별 휴무일)
@@ -78,7 +79,7 @@ class NurseRosterConfig:
     @property
     def shift_types(self) -> List[str]:
         """휴무일을 포함한 교대 유형 목록을 반환합니다."""
-        return list(self.daily_shift_requirements.keys()) + ['OFF']
+        return list(self.daily_shift_requirements.keys()) + ['O']
         
     @property
     def num_shifts(self) -> int:

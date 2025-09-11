@@ -10,6 +10,7 @@ from routers.utils import get_days_in_month, Timer
 from datetime import date
 import uuid
 from sqlalchemy import func
+from collections import defaultdict
 
 # CP-SAT 기반 엔진들 import
 try:
@@ -115,7 +116,178 @@ def _build_shift_manage_and_requirements(db: Session, current_user, latest_confi
                 daily_shift_requirements[code] = sm.manpower
     return shift_manage_data, daily_shift_requirements
 
-def _run_cp_sat_basic(nurses_in_group, preferences, latest_config, req, shift_manage_data, fixed_cells=None, time_limit_seconds=60, config_override: dict | None = None):
+def _normalize_to_main(code: str, code2main: dict) -> str:
+    """세부 근무코드를 메인코드로 정규화한다."""
+    if not code:
+        return '-'
+    c = str(code).upper()
+    if c in ('O', 'OFF'):
+        return 'O'
+    return code2main.get(c, c)
+
+def _get_prev_year_month(year: int, month: int) -> tuple[int, int]:
+    """이전 달의 (year, month)를 반환한다."""
+    if month > 1:
+        return year, month - 1
+    return year - 1, 12
+
+def _query_prev_month_schedule_id(db: Session, group_id: str, year: int, month: int) -> str | None:
+    """이전 달의 최종(issued 우선) schedule_id를 조회한다."""
+    py, pm = _get_prev_year_month(year, month)
+    # 1) IssuedRoster 우선
+    issued = (
+        db.query(IssuedRoster)
+        .join(Schedule, IssuedRoster.schedule_id == Schedule.schedule_id)
+        .filter(Schedule.group_id == group_id, Schedule.year == py, Schedule.month == pm)
+        .order_by(IssuedRoster.issued_at.desc())
+        .first()
+    )
+    if issued:
+        return issued.schedule_id
+    # 2) 없으면 해당 월의 최신 Schedule
+    latest = (
+        db.query(Schedule)
+        .filter(Schedule.group_id == group_id, Schedule.year == py, Schedule.month == pm)
+        .order_by(Schedule.version.desc())
+        .first()
+    )
+    return latest.schedule_id if latest else None
+
+def _get_last_days_map(db: Session, schedule_id: str, days: int, code2main: dict) -> dict:
+    """해당 schedule_id의 마지막 N일 근무코드를 메인코드로 정규화하여 반환한다.
+    반환: { nurse_id: ['E','N','O','D','N','O'] } (최대 길이 days, 과거→현재 순)
+    """
+    if not schedule_id:
+        return {}
+    # 해당 스케줄의 모든 엔트리 로딩
+    entries = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule_id).all()
+    by_nurse: dict[str, dict[int, str]] = defaultdict(dict)
+    max_day = 0
+    for e in entries:
+        d = int(e.work_date.day)
+        max_day = max(max_day, d)
+        by_nurse[e.nurse_id][d] = _normalize_to_main(e.shift_id, code2main)
+    # 꼬리 days일만 취득
+    result = {}
+    start = max(1, max_day - days + 1)
+    tail_days = list(range(start, max_day + 1))
+    for nurse_id, daymap in by_nurse.items():
+        seq = []
+        for d in tail_days:
+            seq.append(daymap.get(d, '-'))
+        result[nurse_id] = seq
+    return result
+
+def _calc_tail_metrics(seq: list[str]) -> dict:
+    """꼬리 시퀀스(길이<=6)로부터 연속성 메트릭을 계산한다."""
+    if not seq:
+        return {
+            'consecutive_work_tail': 0,
+            'consecutive_night_tail': 0,
+            'last_day_shift': None,
+            'offs_after_tail_nights': 0,
+        }
+    last = seq[-1]
+    # 연속 근무 꼬리(D/E/N)
+    cons_work = 0
+    for c in reversed(seq):
+        if c in ('D', 'E', 'N'):
+            cons_work += 1
+        elif c == 'O':
+            break
+    # tail 끝의 OFF 카운트
+    offs_after_n = 0
+    i = len(seq) - 1
+    while i >= 0 and seq[i] == 'O':
+        offs_after_n += 1
+        i -= 1
+    # 그 직전의 연속 N 카운트
+    cons_n = 0
+    while i >= 0 and seq[i] == 'N':
+        cons_n += 1
+        i -= 1
+    return {
+        'consecutive_work_tail': cons_work,
+        'consecutive_night_tail': cons_n,
+        'last_day_shift': last,
+        'offs_after_tail_nights': min(2, offs_after_n),
+    }
+
+def build_cross_month_constraints(db: Session, req: RosterRequest, current_user, shift_manage_data, config_dict: dict, nurse_ids: list[str]) -> dict:
+    """이전 달 꼬리 패턴을 기반으로 강제 OFF/금지 셀을 생성한다."""
+    print("이전 월 경계 제약 생성 시작…")
+    enable = bool(config_dict.get('cross_month_hard_rules_enable', True))
+    lookback = int(config_dict.get('cross_month_lookback_days', 6))
+    if not enable or lookback <= 0:
+        print("이전 월 경계 제약 비활성화 또는 조회일수 0")
+        return {'forced_off': {}, 'forbidden': {}}
+
+    # 코드 정규화 맵 구성
+    code2main = {}
+    for r in (shift_manage_data or []):
+        main = r.get('main_code')
+        for c in (r.get('codes') or []):
+            code2main[str(c).upper()] = main
+    code2main['O'] = 'O'; code2main['O'] = 'O'
+
+    # 이전 달 최신 스케줄 조회 → 마지막 N일 시퀀스
+    prev_sid = _query_prev_month_schedule_id(db, current_user.group_id, req.year, req.month)
+    last_map = _get_last_days_map(db, prev_sid, lookback, code2main) if prev_sid else {}
+
+    forced_off = defaultdict(list)
+    forbidden = defaultdict(lambda: defaultdict(list))
+
+    # 설정값 활용
+    K = int(config_dict.get('max_conseq_work') or 0)
+    two_after_three = bool(config_dict.get('two_offs_after_three_nig'))
+    two_after_two = bool(config_dict.get('two_offs_after_two_nig'))
+    banned_E_to_D = bool(config_dict.get('banned_day_after_eve'))
+    L = int(config_dict.get('max_consecutive_nights') or 0)
+
+    for nurse_id in nurse_ids:
+        tail = last_map.get(nurse_id, [])
+        metrics = _calc_tail_metrics(tail)
+        cons_work = metrics['consecutive_work_tail']
+        cons_n = metrics['consecutive_night_tail']
+        last_shift = metrics['last_day_shift']
+        offs_after = metrics['offs_after_tail_nights']
+
+        # (a) 연속 근무 K
+        if K and cons_work == K:
+            forced_off[nurse_id].append(0)
+            print(f"간호사 {nurse_id}: 연속근무={cons_work} → day1 OFF")
+
+        # (b) N2/3 → 2OFF
+        req_offs = 0
+        if two_after_three and cons_n >= 3:
+            req_offs = 2
+        elif two_after_two and cons_n >= 2:
+            req_offs = 2
+        rem = max(0, req_offs - offs_after)
+        for d in range(min(2, rem)):
+            forced_off[nurse_id].append(d)
+        if rem > 0:
+            print(f"간호사 {nurse_id}: N tail={cons_n}, offs_after={offs_after} → day1..{rem} OFF")
+
+        # (c) E→D, N→D 금지
+        if last_shift == 'E' and banned_E_to_D:
+            forbidden[nurse_id][0].append('D')
+        if last_shift == 'N':
+            forbidden[nurse_id][0].append('D')
+
+        # (d) 연속 N 상한
+        if L and cons_n == L:
+            forbidden[nurse_id][0].append('N')
+
+    # 중복 제거/정렬
+    forced_off = {k: sorted(set(v)) for k, v in forced_off.items()}
+    forbidden = {k: {d: sorted(set(ss)) for d, ss in v.items()} for k, v in forbidden.items()}
+    off_cnt = sum(len(v) for v in forced_off.values())
+    forb_cnt = sum(len(ss) for v in forbidden.values() for ss in v.values())
+    print(f"강제 OFF {off_cnt}건, 금지 셀 {forb_cnt}건 적용")
+    return {'forced_off': forced_off, 'forbidden': forbidden}
+
+def _run_cp_sat_basic(db: Session, current_user, nurses_in_group, preferences, latest_config, req, shift_manage_data, fixed_cells=None, time_limit_seconds=60, config_override: dict | None = None):
     """cp_sat_basic 엔진 호출을 표준화한다."""
     nurses_dict = [n.__dict__ for n in nurses_in_group]
     prefs_dict = [p.__dict__ for p in preferences]
@@ -126,6 +298,15 @@ def _run_cp_sat_basic(nurses_in_group, preferences, latest_config, req, shift_ma
     # fixed_cells 는 옵션
     if fixed_cells:
         config_dict['fixed_cells'] = fixed_cells
+
+    # cross-month 경계 제약 생성 및 주입
+    try:
+        initial_constraints = build_cross_month_constraints(
+            db, req, current_user, shift_manage_data, config_dict, [n.nurse_id for n in nurses_in_group]
+        )
+        config_dict['initial_constraints'] = initial_constraints
+    except Exception as e:
+        print(f"이전 월 경계 제약 생성 실패: {e}")
 
     print("cp_sat_basic 엔진 호출 준비 완료")
     cp_sat_result = generate_roster_cp_sat(
@@ -271,8 +452,14 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
     config_dict['daily_shift_requirements'] = daily_shift_requirements
     # ── 프리셉터 게이지(0~10) → 파라미터 매핑 ──
     _apply_preceptor_gauge(config_dict, getattr(req, 'preceptor_gauge', None))
+    # 경계 제약 기능 기본값
+    config_dict.setdefault('cross_month_hard_rules_enable', True)
+    config_dict.setdefault('cross_month_lookback_days', 6)
+    config_dict.setdefault('allow_override_by_law', False)
     print("cp_sat_basic 엔진으로 근무표 생성 시작")
     generated, satisfaction_data, roster_system = _run_cp_sat_basic(
+        db,
+        current_user,
         nurses_in_group,
         preferences,
         latest_config,
@@ -324,9 +511,15 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
     config_dict['daily_shift_requirements'] = daily_shift_requirements
     # ── 프리셉터 게이지(0~10) → 파라미터 매핑 (고정 생성에도 동일 적용) ──
     _apply_preceptor_gauge(config_dict, getattr(req, 'preceptor_gauge', None))
+    # 경계 제약 기능 기본값 및 충돌 정책(hold는 기본 차단)
+    config_dict.setdefault('cross_month_hard_rules_enable', True)
+    config_dict.setdefault('cross_month_lookback_days', 6)
+    config_dict.setdefault('allow_override_by_law', False)
 
     print("cp_sat_basic 엔진으로 고정 셀 반영 근무표 생성 시작")
     generated, satisfaction_data, roster_system = _run_cp_sat_basic(
+        db,
+        current_user,
         nurses_in_group,
         preferences,
         latest_config,
@@ -355,6 +548,7 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
     print(f"고정된 셀을 반영한 근무표 생성 완료: {len(fixed_cells)}개 셀 고정")
     return roster_data
 
+
 def request_schedule_service(req: RosterRequest, current_user, db: Session):
     """
     스케줄 생성 서비스 함수
@@ -374,9 +568,11 @@ def request_schedule_service(req: RosterRequest, current_user, db: Session):
             RosterConfig.office_id == nurse.group.office_id,
             RosterConfig.group_id == nurse.group_id
         ).order_by(RosterConfig.created_at.desc()).first()
-    print('\n\n\n\n\nlatest_config여길봐', latest_config.config_id, latest_config.config_version, latest_config.day_req,'\n\n\n\n\n')
-    if not latest_config:
-        raise Exception("설정값을 입력해주세요")
+    print('latest_config', latest_config)
+    # if not latest_config :
+        # raise Exception("설정값을 입력해주세요")
+    if not latest_config or latest_config == None:
+        return "noConfigId"
     latest_version = db.query(func.max(Schedule.version)).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.year == req.year,
@@ -392,7 +588,8 @@ def request_schedule_service(req: RosterRequest, current_user, db: Session):
         config_id=latest_config.config_id,
         created_by=current_user.account_id,
         status='draft',
-        dropped=False
+        dropped=False,
+        name=f"{req.month}월 근무표 VER{latest_version + 1}"
     )
     db.add(new_schedule)
     db.commit()

@@ -9,6 +9,23 @@ from schemas.roster_schema import NurseProfile
 from schemas.auth_schema import User as UserSchema
 from typing import List, Optional
 
+def get_personnel_basic_info_service(current_user, db: Session):
+    """
+    간호사 기본 정보 조회 서비스 함수
+    """
+
+    try:
+        if not current_user:
+            raise Exception("Not authenticated")
+
+        nurse = (
+            db.query(NurseModel)
+            .filter(NurseModel.group_id == current_user.group_id, NurseModel.nurse_id == current_user.nurse_id)
+            .first()
+        )
+        return nurse
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"간호사 기본 정보 조회 실패: {str(e)}")
 
 def get_nurses_in_group_service(current_user, db: Session):
     """
@@ -23,6 +40,8 @@ def get_nurses_in_group_service(current_user, db: Session):
         .all()
     )
     return nurses
+
+
 
 def get_next_sequence_for_active_status(group_id: str, active_status: int, db: Session) -> int:
     """

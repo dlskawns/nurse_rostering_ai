@@ -343,14 +343,7 @@ async def shift_analyzer(state):
 
 
 async def create_shift_analyzer(parent_state):
-    mcp_client = MultiServerMCPClient(
-        {
-            "weather": {
-                "url": "http://localhost:8005/sse",  # 서버 포트와 일치
-                "transport": "sse",
-            }
-        }
-    )
+from services.holiday_pack import tool_get_weekends, tool_get_holidays
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=0,
@@ -360,7 +353,7 @@ async def create_shift_analyzer(parent_state):
     requests = parent_state['query_shift']         # Shift List ex. ["9/9: D", "9/10: D", "9/16: OFF", "9/9, 9/10, 9/16 외에 웬만하면 E로 줘"]
     client = parent_state['model']
 
-    tools = await mcp_client.get_tools()
+    tools = [tool_get_weekends, tool_get_holidays]
     # print('툴즈~~~', tools)
     n_requests = len(requests)
     if n_requests == 0:
