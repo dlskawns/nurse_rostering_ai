@@ -341,9 +341,9 @@ async def shift_analyzer(state):
     
     return {"shift_result": [sr.result]}
 
-
-async def create_shift_analyzer(parent_state):
 from services.holiday_pack import tool_get_weekends, tool_get_holidays
+async def create_shift_analyzer(parent_state):
+
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=0,
