@@ -172,7 +172,7 @@ class CPSATBasicEngine:
             data = pref.get('data', {})
             if not data:
                 continue
-            # print('\n\n\n\n\ndata', data, '\n\n\n\n\n')
+        
             # 근무 유형 선호도 파싱
             if 'shift' in data:
                 shift_prefs = {}
@@ -185,7 +185,6 @@ class CPSATBasicEngine:
             # 휴무 요청 파싱
             if 'O' in data['shift']:
                 off_requests[nurse_id] = data['shift']['O']
-                # print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
             
             # preference 파싱
             if 'preference' in data and data['preference']:
@@ -336,7 +335,6 @@ class CPSATBasicEngine:
                 for nurse_id, requests in off_requests.items():
                     # DB nurse_id를 그대로 키로 사용 (roster_system.py에서 n.db_id와 비교하므로)
                     mapped_off_requests[nurse_id] = {str(k): v for k, v in requests.items()}
-                print(f"1")
                 roster_system.apply_off_requests(mapped_off_requests)
         
         # 7. 선호 근무 유형 적용  
@@ -639,170 +637,9 @@ class CPSATBasicEngine:
 
 # ================== Helper 함수 ==========================
 
-def _precompute_static_info(roster_system, grouped):
-    """
-    • join / leave index
-    • fixed cells per nurse
-    • day×shift 선배정 카운트
-    """
-    N, D = len(roster_system.nurses), roster_system.num_days
-    S = roster_system.config.num_shifts
-    join, leave = [], []
-    for nurse in roster_system.nurses:
-        t0 = max(0, (nurse.joining_date - roster_system.target_month).days) if nurse.joining_date else 0
-        t1 = min(D-1, (nurse.resignation_date - roster_system.target_month).days) if nurse.resignation_date else D-1
-        join.append(t0);  leave.append(t1)
-
-    fixed_assign = {n: {} for n in range(N)}   # {n_idx:{day:shift_idx}}
-    fixed_cnt = [[0]*S for _ in range(D)]
-    if roster_system.fixed_cells:
-        code2main = {c: r['main_code'] for r in grouped for c in r['codes']} if grouped else {}
-        for c in roster_system.fixed_cells:
-            s_main = code2main.get(c['shift'], c['shift'])
-            s_idx  = roster_system.config.shift_types.index(s_main)
-            fixed_assign[c['nurse_index']][c['day_index']] = s_idx
-            fixed_cnt[c['day_index']][s_idx] += 1
-    return join, leave, fixed_assign, fixed_cnt
-
-
-def _solve_single_nurse(args):
-    """
-    1 명의 간호사 서브문제 (Hard 제약 **전부** 포함).
-    반환 → (dual_obj_i, mat_i[D,S](0/1))
-    """
-    (n_idx, roster_system, λ, join, leave, fixed_cells_n, tl) = args
-    from ortools.sat.python import cp_model
-    nurse = roster_system.nurses[n_idx]
-    D, S = roster_system.num_days, roster_system.config.num_shifts
-    T0, T1 = join[n_idx], leave[n_idx]
-
-    m = cp_model.CpModel()
-    X = {(d,s): m.NewBoolVar(f"x_{d}_{s}") for d in range(T0,T1+1) for s in range(S)}
-
-    off = roster_system.config.shift_types.index('O')
-    day, eve, night = (roster_system.config.shift_types.index(c) for c in ('D','E','N'))
-
-    # ── ① 고정 배정 ──────────────────
-    for d,s in fixed_cells_n.items():
-        m.Add(X[d,s] == 1)
-        for s2 in range(S):
-            if s2!=s: m.Add(X[d,s2]==0)
-
-    # ── ② 하루 1 shift (고정 제외) ────
-    for d in range(T0,T1+1):
-        if d in fixed_cells_n: continue
-        m.AddExactlyOne(X[d,s] for s in range(S))
-
-    # ── ③ 법규 하드 제약 (Night→Day, E→D, max-work, max-night …) ─
-    _add_hard_constraints_one_nurse(m, X, roster_system, nurse, T0, T1, day, eve, night, off)
-
-    # ── ④ 목적 (선호도 + 내규패널티 + λ 항) ─────────────────────
-    obj = []
-    P = roster_system.preference_matrix
-    for d in range(T0,T1+1):
-        for s in range(S):
-            # 선호 점수
-            obj.append(int(P[n_idx,d,s]*100) * X[d,s])
-            # 라그랑지 λ 항 :  +λ[d][s] * X  (주의 λ는 day-shift coupling)
-            obj.append(int(λ[d][s]*100) * X[d,s])
-
-    # 내규 Soft 패널티 : 경력, 주2OFF … (전역-또는 간략 local 계수로 근사)
-    _add_soft_penalties_one_nurse(m, X, roster_system, nurse, T0, T1, obj, off, night)
-
-    m.Maximize(sum(obj))          # dual 최대화
-
-    solver = cp_model.CpSolver()
-    solver.parameters.randomize_search = True
-    # solver.parameters.random_seed = seed
-    solver.parameters.solution_pool_size = 10
-    solver.parameters.max_time_in_seconds = tl
-    if nurse.is_night_nurse:       # 보통 night-전담 모델은 작아서 싱글스레드가 낫다
-        solver.parameters.num_search_workers = 1
-    status = solver.Solve(m)
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return None
-
-    mat = np.zeros((D, roster_system.config.num_shifts), dtype=int)
-    for d in range(T0,T1+1):
-        for s in range(S):
-            if solver.Value(X[d,s]): mat[d,s]=1
-    return solver.ObjectiveValue(), mat
-
-
-# === Hard / Soft 제약을 하나의 간호사 스코프로 추가하는 Helper ===
-def _add_hard_constraints_one_nurse(m, X, rs, nurse, T0, T1, day, eve, night, off):
-    """
-    기존 엔진에서 간호사-레벨 Hard 제약을 **모두** 그대로 복사.
-    """
-    cfg = rs.config
-    # Night→Day / E→D
-    for d in range(T0+1, T1+1):
-        m.Add(X[d, day] + X[d-1, night] <= 1)
-        if cfg.banned_day_after_eve:
-            m.Add(X[d, day] + X[d-1, eve] <= 1)
-    # Night-전담
-    if nurse.is_night_nurse:
-        for d in range(T0,T1+1):
-            m.Add(X[d, day]==0); m.Add(X[d, eve]==0)
-
-    # 최대 연속 N, 최대 연속 근무
-    L = cfg.max_consecutive_nights
-    K = cfg.max_consecutive_work_days
-    for d0 in range(T0, T1-L):
-        m.Add(sum(X[d0+t, night] for t in range(L+1)) <= L)
-    for d0 in range(T0, T1-K+1):
-        m.Add(sum(1 - X[d0+t, off] for t in range(K+1)) <= K)  # OFF≥1 표현
-
-    # 월 N 제한
-    m.Add(sum(X[d, night] for d in range(T0,T1+1)) <= cfg.max_night_shifts_per_month)
-
-    # N 3→2OFF, N 2→2OFF
-    if cfg.two_offs_after_three_nig:
-        for d in range(T0+2, T1-1):
-            m.Add(sum(X[d-t,night] for t in (0,1,2)) - 2 <=
-                X[d+1,off] + X[d+2,off])
-    if cfg.two_offs_after_two_nig:
-        for d in range(T0+1, T1-1):
-            m.Add(sum(X[d-t,night] for t in (0,1)) - 1 <=
-                X[d+1,off] + X[d+2,off])
-
-def _add_soft_penalties_one_nurse(m, X, rs, nurse, T0, T1, obj, off, night):
-    """Soft 내규를 1인당 근사 패널티로 추가 (경량)."""
-    cfg = rs.config
-    # 주 2OFF 위반 패널티
-    if cfg.enforce_two_offs_per_week:
-        weeks = (T1-T0+1)//7
-        for w in range(weeks):
-            d0, d1 = w*7, w*7+7
-            offs = sum(X[d,off] for d in range(d0,d1) if T0<=d<=T1)
-            slack = m.NewIntVar(0,7,f'slack_off_{nurse.id}_{w}')
-            m.Add(slack >= 2 - offs)
-            obj.append(-300 * slack)
-    # Night 균등 : 개인편차는 전역 penalty로 쓰므로 생략 가능
-    # N-O-D/E 패터, OFF 클러스터는 전역 penalty → 생략 또는 근사 추가
-    return
-
-def _eval_full_objective(rs: RosterSystem)->float:
-    """roster_system.preference_matrix × 할당 – 패널티 계산 (간단)."""
-    P = rs.preference_matrix
-    val = (P * rs.roster).sum()
-    # 경력자 부족, 주2OFF, night dev 등은 1차 패널티 근사치(옵션)
-    return -val   # 더 작은 것이 좋은 UB
-# 전역 엔진 인스턴스
-cp_sat_engine = CPSATBasicEngine()
-
-
-# ╔══════════════════════════════════════════════════════════════════════╗
-# ║                     공통 모델 빌더  (Full Constraints)               ║
-# ╚══════════════════════════════════════════════════════════════════════╝
-# def _build_full_model(rs: RosterSystem, grouped):
-#     return _build_full_model(rs, grouped, include_pair_objective=True)
-
 def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = True):
     from ortools.sat.python import cp_model
-    print('1')
     m = cp_model.CpModel()
-    print('2')
     N,D,S = len(rs.nurses), rs.num_days, rs.config.num_shifts
 
     # join / leave index
@@ -812,7 +649,6 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
         j = (nu.joining_date-first_day).days if nu.joining_date else 0
         l = (nu.resignation_date-first_day).days if nu.resignation_date else D-1
         join.append(max(j,0)); leave.append(min(l,D-1))
-    print('3')
     # 고정 셀 (수간호사 등)
     code2main = {c:r['main_code']
                  for r in (grouped or []) for c in r['codes']}
@@ -820,12 +656,10 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
     for c in getattr(rs,'fixed_cells',[]) or []:
         n,d = c['nurse_index'], c['day_index']
         s_main = code2main.get(c['shift'], c['shift'])
-        print('s_main', s_main)
         s_idx  = rs.config.shift_types.index(s_main)
-        print('s_idx', s_idx)
         fixed[(n,d)] = s_idx; fixed_cnt[d][s_idx]+=1
-        print('fixed', fixed)
-    print('4')
+
+
     # 변수
     Xv={}
     for n in range(N):
@@ -839,7 +673,6 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
         m.Add(X(n,d,s_idx)==1)
         for s in range(S):
             if s!=s_idx: m.Add(X(n,d,s)==0)
-    print('5')
     # ───────────── 2-A2. 초기 금지 셀(경계 제약) ─────────────
     try:
         if hasattr(rs, 'initial_forbidden') and isinstance(rs.initial_forbidden, dict):
@@ -1156,6 +989,8 @@ def _add_preceptor_objective_terms(m, rs: RosterSystem, X, join, leave):
     print(f"[CP-SAT-Basic] 프리셉터 항: 쌍 {len(pairs)}개, 변수 {_added}개, {_dt:.2f}s, 강도 {strength}x, K={K_default}, shifts={focus_codes}")
     return obj_terms
 
+
+cp_sat_engine = CPSATBasicEngine()
 
 def generate_roster_cp_sat(nurses_data, prefs_data, config_data, year, month,  shift_manage_data, time_limit_seconds=60, randomize=True, seed=None):
     """

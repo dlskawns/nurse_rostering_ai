@@ -1,6 +1,5 @@
 import time
 from collections import defaultdict
-# from mcp.server.fastmcp import FastMCP
 from calendar import monthrange
 
 def get_days_in_month(year, month):
@@ -47,31 +46,18 @@ def parse_prefs_to_dict(
     for rec in records:
         nurse_id = rec["nurse_id"]
         data     = rec.get("data", {})
-        # shift 따오기 
-        # print(nurse_id, '>>', data)
         for key, day_map in data.get("shift", {}).items():
 
-            # print('nurse_id', nurse_id)
-            # print('key',key)
-            # print('day_map',day_map)
-            # print(f'--------{nurse_id}shift 시작-------')
+
             for day_str, wt in day_map.items():
-            # print('day_str', day_str)
-            # print('wt', wt)
                 if key.upper() == "OFF":
                     off_requests[nurse_id][day_str] = wt
                 else:
                     shift_prefs[nurse_id][key][day_str] = wt
-            # print('-------shift 끝--------')
         for prekey in data.get("preference", {}):  
             if prekey['weight'] >= 0:
                 pair_prefs["work_together"].append({"nurse_1": nurse_id, "nurse_2": prekey['id'], "weight": prekey['weight']})
             else:
                 pair_prefs["work_apart"].append({"nurse_1": nurse_id, "nurse_2": prekey['id'], "weight": abs(prekey['weight'])})
-
-    # # defaultdict → 일반 dict
-    # shift_prefs  = {n: dict({s: dict(days) for s, days in sh.items()})
-    #                 for n, sh in shift_prefs.items()}
-    # off_requests = {n: dict(days) for n, days in off_requests.items()}
 
     return shift_prefs, off_requests, pair_prefs

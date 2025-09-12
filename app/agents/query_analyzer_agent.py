@@ -19,7 +19,6 @@ except Exception:
 
 dotenv.load_dotenv()
 
-print(dotenv.load_dotenv())
 class queryAnalyzer(BaseModel):
     Chat: List[str] 
     Shift: List[str] 
@@ -175,28 +174,6 @@ class queryAnalyzerPrompt:
 
 
 async def query_analyzer(state):
-    # client = genai.Client()
-    # context = state['request']
-    # query_analyzer_prompt = queryAnalyzerPrompt(context)
-    # response = client.models.generate_content(
-    #     model="gemini-2.0-flash",
-    #     contents=[query_analyzer_prompt.human],                       # or [pil_img, information]
-    #     config=types.GenerateContentConfig(
-    #         response_mime_type="application/json",
-    #         response_schema=queryAnalyzer,      # ★ 핵심: Root 모델
-    #         system_instruction=query_analyzer_prompt.system
-    #     ),
-    # )
-    # parts = response.candidates[0].content.parts
-    # print(json.loads(parts[0].text))
-    # json_answer = json.loads(parts[0].text)
-    # print('json_answer: ',json_answer)
-    # chat = json_answer['Chat']
-    # shift= json_answer['Shift']
-    # preference = json_answer['Preference']
-    # others = json_answer['Others']
-    # print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_others: {others}")
-
     context = state['request']
     query_analyzer_prompt = queryAnalyzerPrompt(context)
     

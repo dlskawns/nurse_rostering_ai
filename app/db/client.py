@@ -6,13 +6,6 @@ import dotenv
 
 dotenv.load_dotenv()
 
-
-# In a production environment, use environment variables, e.g., via a .env file and python-dotenv
-# from dotenv import load_dotenv
-# load_dotenv()
-# DB_USER = os.getenv("DB_USER")
-# ...
-
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
 DB_USER = os.getenv("DB_USER")

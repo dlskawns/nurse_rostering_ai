@@ -20,107 +20,13 @@ from datetime import date
 from services.roster_service import save_roster_config_service, get_latest_schedule_service, get_issued_schedules_service, get_schedule_status_service
 import uuid
 import pprint
-router = APIRouter()
+router = APIRouter(
+    prefix="/roster",
+    tags=["roster"]
+)
 templates = Jinja2Templates(directory="app/templates")
 
-# ─────────────────────────  로그인  ───────────────────────── #
-@router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    return templates.TemplateResponse(
-        "login.html",
-        {"request": request},
-    )
-
-# ─────────────────────────  메인 페이지  ───────────────────────── #
-@router.get("/", response_class=HTMLResponse)
-async def read_item(
-    request: Request,
-    current_user: Optional[User] = Depends(get_current_user_from_cookie),
-):
-    if current_user is None:
-        return RedirectResponse(url="/login", status_code=302)
-    return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "user": current_user},
-    )
-
-# ─────────────────────────  수간호사 전용 메뉴  ───────────────────────── #
-@router.get("/head-nurse-management", response_class=HTMLResponse)
-async def head_nurse_management(
-    request: Request,
-    current_user: Optional[User] = Depends(get_current_user_from_cookie),
-):
-    if current_user is None:
-        return RedirectResponse(url="/login", status_code=302)
-    if not current_user.is_head_nurse:
-        raise HTTPException(status_code=403, detail="Permission denied")
-    return templates.TemplateResponse(
-        "head_nurse_management.html",
-        {"request": request, "user": current_user},
-    )
-
-@router.get("/roster-create", response_class=HTMLResponse)
-async def roster_create(
-    
-    request: Request,
-    current_user: Optional[User] = Depends(get_current_user_from_cookie),
-):
-    """
-    근무표 생성 페이지 호출
-    """
-    if current_user is None:
-        return RedirectResponse(url="/login", status_code=302)
-    if not current_user.is_head_nurse:
-        raise HTTPException(status_code=403, detail="Permission denied")
-    return templates.TemplateResponse(
-        "roster_create.html",
-        {"request": request, "user": current_user},
-    )
-
-@router.get("/roster-configure", response_class=HTMLResponse)
-async def roster_configure(
-    request: Request,
-    config_version: Optional[str] = None,
-    current_user: Optional[User] = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
-):
-    if current_user is None:
-        return RedirectResponse(url="/login", status_code=302)
-    if not current_user.is_head_nurse:
-        raise HTTPException(status_code=403, detail="Permission denied")
-
-    # Get config based on version parameter or latest
-    if config_version:
-        latest_config = db.query(RosterConfigModel).filter(
-            RosterConfigModel.office_id == current_user.office_id,
-            RosterConfigModel.group_id == current_user.group_id,
-            RosterConfigModel.config_version == config_version
-        ).order_by(RosterConfigModel.created_at.desc()).first()
-    else:
-        latest_config = db.query(RosterConfigModel).filter(
-            RosterConfigModel.office_id == current_user.office_id,
-            RosterConfigModel.group_id == current_user.group_id
-        ).order_by(RosterConfigModel.created_at.desc()).first()
-
-    return templates.TemplateResponse(
-        "roster_configure.html",
-        {"request": request, "user": current_user, "config": latest_config},
-    )
-
-@router.get("/roster-view", response_class=HTMLResponse)
-async def roster_view_page(request: Request, user: User = Depends(get_current_user_from_cookie)):
-    if not user:
-        # 일반 간호사도 접근 가능해야 하므로 head_nurse 체크는 제거
-        return templates.TemplateResponse("unauthorized.html", {"request": request}, status_code=403)
-    return templates.TemplateResponse("roster_view.html", {"request": request, "user": user})
-
-@router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request, user: User = Depends(get_current_user_from_cookie)):
-    if not user or not user.is_head_nurse:
-        return templates.TemplateResponse("unauthorized.html", {"request": request}, status_code=403)
-    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
-
-@router.post("/roster/config/save")
+@router.post("/config/save")
 async def save_roster_config(
     config_data: RosterConfigCreate,
     user: User = Depends(get_current_user_from_cookie),
@@ -133,7 +39,7 @@ async def save_roster_config(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Configuration save failed: {str(e)}")
 
-@router.get("/roster/config/versions")
+@router.get("/config/versions")
 async def get_config_versions(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
@@ -159,7 +65,7 @@ async def get_config_versions(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get config versions: {str(e)}")
 
-@router.get("/roster/config/version/{config_version}")
+@router.get("/config/version/{config_version}")
 async def get_config_by_version(
     config_version: str,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -235,7 +141,7 @@ async def get_config_by_version(
     
 
 # [Schedules] - 최신 월과 버전의 스케줄 정보 조회 (수간호사용)
-@router.get("/roster/latest")
+@router.get("/latest")
 async def get_latest_schedule(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
@@ -247,20 +153,19 @@ async def get_latest_schedule(
 
 
 # [Schedules] - 발행된(issued) 모든 스케줄 조회
-@router.get("/roster/issued")
+@router.get("/issued")
 async def get_issued_schedules(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
     try:
-        print('get_issued_schedules')
         return get_issued_schedules_service(current_user, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get issued schedules: {str(e)}")
 
 
 # [Schedules] - 현재 그룹의 특정 월에 대한 스케줄 상태 확인
-@router.get("/roster/status")
+@router.get("/status")
 async def get_schedule_status(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -272,7 +177,7 @@ async def get_schedule_status(
         raise HTTPException(status_code=500, detail=f"Failed to get schedule status: {str(e)}")
 
 # 삭제(드롭) 엔드포인트: schedule.dropped=1로 마킹
-@router.delete("/roster/{schedule_id}")
+@router.delete("/{schedule_id}")
 async def drop_schedule(
     schedule_id: str,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -295,7 +200,7 @@ async def drop_schedule(
 
 
  # [Roster] - 특정 schedule_id의 근무표 조회
-@router.get("/roster/schedule/{schedule_id}")
+@router.get("/schedule/{schedule_id}")
 async def get_roster_by_schedule_id(
     schedule_id: str,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -359,7 +264,7 @@ async def get_roster_by_schedule_id(
     roster_data["violations"] = violations
     return roster_data
 # [Schedules] - 특정 월의 모든 버전 목록 조회 (수간호사용)
-@router.get("/roster/{year:int}/{month:int}/versions")
+@router.get("/{year:int}/{month:int}/versions")
 async def get_schedule_versions(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -385,7 +290,7 @@ async def get_schedule_versions(
     } for schedule in schedules]
 
 # [Roster] - 특정 월의 근무표 조회
-@router.get("/roster/{year:int}/{month:int}")
+@router.get("/{year:int}/{month:int}")
 async def get_roster_for_month(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -433,7 +338,6 @@ async def get_roster_for_month(
         entries_by_nurse[entry.nurse_id][entry.work_date.day] = entry.shift_id
 
     # 저장된 위반사항 사용 (RosterSystem 생성하지 않음)
-    # violations = schedule_info.violations if schedule_info.violations else []
     violations = []  # 임시로 빈 리스트 반환 - DB 스키마 업데이트 후 위반사항 기능 복구 예정
 
     for nurse in nurses_in_group:
@@ -448,13 +352,12 @@ async def get_roster_for_month(
             "schedule": nurse_schedule,
             "counts": counts
         })
-    print(f'\n\n\n\n\n\n\n11위반사항 추가\n{violations}\n\n\n\n\n\n')
     roster_data["violations"] = violations
         
     return roster_data
 
 # [Roster] - 근무표 발행
-@router.post("/roster/publish")
+@router.post("/publish")
 async def publish_roster(
     req: PublishRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -525,7 +428,7 @@ async def publish_roster(
 
 
 # [Roster] - 특정 월의 근무표 조회
-@router.get("/roster/{year: int}/{month: int}")
+@router.get("/{year: int}/{month: int}")
 async def get_roster_for_month(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -572,7 +475,6 @@ async def get_roster_for_month(
         entries_by_nurse[entry.nurse_id][entry.work_date.day] = entry.shift_id
 
     # 저장된 위반사항 사용 (RosterSystem 생성하지 않음)
-    # violations = schedule_info.violations if schedule_info.violations else []
     violations = []  # 임시로 빈 리스트 반환 - DB 스키마 업데이트 후 위반사항 기능 복구 예정
 
     for nurse in nurses_in_group:
@@ -587,13 +489,12 @@ async def get_roster_for_month(
             "schedule": nurse_schedule,
             "counts": counts
         })
-    print(f'\n\n\n\n\n\n\n11위반사항 추가\n{violations}\n\n\n\n\n\n')
     roster_data["violations"] = violations
         
     return roster_data
 
 # [Roster] - 근무표 저장
-@router.post("/roster/save")
+@router.post("/save")
 async def save_roster(
     roster_data: dict,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -625,9 +526,8 @@ async def save_roster(
     db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule.schedule_id).delete()
     
     # Save new roster entries
-    # print('\n\n\n\n\n\n\n!!roster:', roster, '\n\n\n\n\n\n\n')
+    
     for nurse in roster:
-        # print('\n\n\n\n\n\n\n!!nurse:', nurse, '\n\n\n\n\n\n\n')
         nurse_id = nurse.get('nurse_id') or nurse.get('id')  # 둘 다 체크
         if not nurse_id:
             continue  # nurse_id가 없으면 건너뛰기
@@ -651,7 +551,7 @@ async def save_roster(
 
 
 # [Schedules] - 특정 스케줄의 모든 간호사 제출 현황 확인
-@router.get("/roster/{year:int}/{month:int}/submissions")
+@router.get("/{year:int}/{month:int}/submissions")
 async def get_submission_statuses(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -683,7 +583,7 @@ async def get_submission_statuses(
     }
 
 # [Schedules] - 현재 그룹의 특정 월에 대한 스케줄 상태 확인
-@router.get("/roster/status")
+@router.get("/status")
 async def get_schedule_status(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -762,7 +662,7 @@ async def get_schedule_status(
         "submitted_at": None
     }
 
-@router.post("/roster/validate")
+@router.post("/validate")
 async def validate_roster(
     roster_data: dict,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -778,7 +678,6 @@ async def validate_roster(
     schedule_id = roster_data.get('schedule_id')
     config_id = db.query(Schedule).filter(Schedule.schedule_id == schedule_id).first().config_id
     config_version = db.query(RosterConfigModel).filter(RosterConfigModel.config_id == config_id).first().config_version
-    # print('\n\n\n\n\n\n\nconfig_id', config_id, '\n\n\n\n\n\n\n')
     if not all([year, month, roster]):
         raise HTTPException(
             status_code=400,
@@ -790,7 +689,6 @@ async def validate_roster(
         #
         #  * 같은 nurse_class라도, 사전에 등록된 교대(slot) 기준으로만 조회
         #  * codes 열(JSON) 에 들어있는 파생 코드를 본교대(main_code) 로 매핑
-        #
         from db.models import ShiftManage, Nurse, RosterConfig  # local import
 
         # config_version을 가져오기 위해 config_id로 RosterConfig 조회
@@ -818,7 +716,6 @@ async def validate_roster(
 
         #    예) { 'D': 'D', 'D1': 'D', 'MD': 'D',  'E': 'E', … }
         alias_map: dict[str, str] = {}
-        # print('\n\n\n\n\n\n\nshift_rows', [i.main_code for i in shift_rows], '\n\n\n\n\n\n\n')
         for row in shift_rows:
             if not row.main_code:
                 continue
@@ -972,7 +869,7 @@ async def validate_roster(
         }
 
 # [Roster] - 스케줄 이름 업데이트
-@router.patch("/roster/{schedule_id}/name")
+@router.patch("/{schedule_id}/name")
 async def update_schedule_name(
     schedule_id: str,
     name_data: dict,

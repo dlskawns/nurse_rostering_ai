@@ -88,7 +88,6 @@ async def get_current_user_from_cookie(token: Optional[str] = Cookie(None, alias
     )
     try:
         token = token.replace("Bearer ", "")
-        print('token', token)
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         account_id: str = payload.get("sub")
         
@@ -101,7 +100,6 @@ async def get_current_user_from_cookie(token: Optional[str] = Cookie(None, alias
     user = get_user(db, token_data.account_id)
     if user is None:
         return None
-    print('user', user)
     
     # Manually construct UserSchema to avoid from_orm issues
     return UserSchema(

@@ -15,7 +15,9 @@ from services.shift_service import (
     move_shift_service
 )
 from typing import Optional
-router = APIRouter()
+router = APIRouter(
+    tags=["shifts"]
+)
 templates = Jinja2Templates(directory="app/templates")
 
 # [Shifts] - 모든 시프트 정보 조회
@@ -25,22 +27,16 @@ async def get_shifts(
     db: Session = Depends(get_db)
 ):
     try:
-        # time_display는 라우터에서 포맷팅
         shifts = get_shifts_service(current_user, db)
-        # for shift in shifts:
-        #     shift["time_display"] = _format_time_display(shift)
         return shifts
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"시프트 정보 조회 실패: {str(e)}")
 
 def _format_time_display(shift):
     """근무 시간 정보를 표시용으로 포맷팅"""
-    print(shift)
     if 'allday' in shift:
         if shift.allday == 1:
             return '종일'
-    # elif shift.duration:
-    #     return f'{shift.duration}시간'
     elif shift.start_time and shift.end_time:
         return f'{shift.start_time} ~ {shift.end_time}'
     elif shift.type:
@@ -54,8 +50,6 @@ async def add_shift(
 ):
     try:
         result = add_shift_service(req, current_user, db)
-        # result["shift"]["time_display"] = _format_time_display(result["shift"])
-        # return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"근무코드 추가 실패: {str(e)}")
 
@@ -68,9 +62,6 @@ async def update_shift(
     try:
 
         result = update_shift_service(req, current_user, db)
-
-        # result["shift"]["time_display"] = _format_time_display(result["shift"])
-        
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"근무코드 수정 실패: {str(e)}")

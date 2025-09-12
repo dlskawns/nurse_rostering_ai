@@ -12,6 +12,7 @@ from db.models import Nurse as NurseModel
 from schemas.roster_schema import NurseProfile, MoveNurseRequest
 from routers.auth import get_current_user_from_cookie
 from schemas.auth_schema import User as UserSchema
+from schemas.roster_schema import ExcelValidationRequest, NurseSequenceUpdate, ReorderPayload, ExcelConfirmRequest
 from services.nurse_service import (
     get_nurses_in_group_service,
     bulk_update_nurses_service,
@@ -44,11 +45,6 @@ async def get_nurses_in_group(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"간호사 목록 조회 실패: {str(e)}")
 
-class NurseSequenceUpdate(BaseModel):
-    nurse_id: str
-    new_sequence: int = Field(ge=1)
-    active: Optional[int] = Field(default=None, description="0: 비활성, 1: 활성, None: 변경 없음")
-
 @router.get("/personnel-basic-info")
 async def get_personnel_basic_info(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -74,10 +70,6 @@ async def save_nurse_sequence(
         return move_nurse_with_active_service(req.nurse_id, req.new_sequence, req.active, current_user, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"간호사 순서 변경 실패: {str(e)}")
-
-class ReorderPayload(BaseModel):
-    active_order: List[str] = Field(default_factory=list)
-    inactive_order: List[str] = Field(default_factory=list)
 
 @router.post("/sequence/reorder")
 async def reorder_nurses(
@@ -159,10 +151,6 @@ async def upload_excel(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"엑셀 업로드 실패: {str(e)}")
 
-class ExcelValidationRequest(BaseModel):
-    data: List[dict]
-    include_rows: List[bool] = []
-
 @router.post("/validate-excel")
 async def validate_excel_data_endpoint(
     request: ExcelValidationRequest,
@@ -178,11 +166,6 @@ async def validate_excel_data_endpoint(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"데이터 검증 실패: {str(e)}")
-
-class ExcelConfirmRequest(BaseModel):
-    data: List[dict]
-    include_rows: List[bool]
-    new_groups_to_create: List[str] = []
 
 @router.post("/confirm-upload")
 async def confirm_upload(

@@ -173,10 +173,7 @@ class RosterSystem:
         """
         off_idx     = self.config.shift_types.index("O")
         base_weight = self.config.shift_preference_weights.get("O", 10.0)
-        print('\n\n\n\n\noff_requests', off_requests, '\n\n\n\n\n')
         for target_nurse_id, day_map in off_requests.items():
-            # if target_nurse_id is None:
-            #     print(f"[OFF] 경고: ID {target_nurse_id} 간호사 없음");  continue
 
             valid_days = []
             for day_str, delta in day_map.items():
@@ -188,19 +185,12 @@ class RosterSystem:
                 continue
             nurse = next((n for n in self.nurses if n.db_id == target_nurse_id), None)
 
-            # if not nurse.can_take_off(len(valid_days)):
-            #     print(f"[OFF] 경고: {nurse.name} – 잔여 휴무 부족 "
-            #         f"(요청 {len(valid_days)}, 가능 {nurse.remaining_off_days})")
-            #     continue
 
             # ★ 가중치 반영
             for d in valid_days:
                 day_idx = d-1
                 delta   = day_map[str(d)]
                 self.preference_matrix[nurse.id, day_idx, off_idx] = base_weight + delta
-                # print('\n\n\n\n\nself.preference_matrix[nurse.id, day_idx, off_idx]', self.preference_matrix[nurse.id, day_idx, off_idx], '\n\n\n\n\n')
-        
-        # nurse.update_off_days(len(valid_days))
             
     def apply_shift_preferences(self, shift_preferences: Dict[str, Dict[str, Dict[str, float]]]):
         """
@@ -234,9 +224,6 @@ class RosterSystem:
                     if 1 <= day <= self.num_days:
                         day_idx = day - 1
                         self.preference_matrix[nurse.id, day_idx, shift_idx] = default_weight + delta
-            # print('\n\n\n\n\nself.preference_matrix[nurse.id, day_idx, shift_idx]', self.preference_matrix[nurse.id, day_idx, shift_idx], '\n\n\n\n\n')
-            # print('\n\n\n\n\nself.preference_matrix[nurse.id]', self.preference_matrix[nurse.id], '\n\n\n\n\n')
-            
         print("근무 유형 선호도 적용 완료")
         
     def apply_pair_preferences(self, pair_preferences: Dict[str, List[Dict[str, Union[int, float]]]]):
@@ -265,7 +252,6 @@ class RosterSystem:
         
         # together (함께 일하기 원하는 쌍) 처리
         if "work_together" in pair_preferences:
-            # print('\n\n\n\n\npair_preferences["work_together"]', pair_preferences["work_together"], '\n\n\n\n\n')
             for pair in pair_preferences["work_together"]:
                 nurse_1_id = pair["nurse_1"]
                 nurse_2_id = pair["nurse_2"]
@@ -273,8 +259,6 @@ class RosterSystem:
                 source = pair.get("source")
                 nurse_1_idx = next((n.id for n in self.nurses if n.db_id == nurse_1_id), None)
                 nurse_2_idx = next((n.id for n in self.nurses if n.db_id == nurse_2_id), None)
-                # nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
-                # nurse_2_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_2_id), None)
                 
                 if nurse_1_idx is not None and nurse_2_idx is not None:
                     self.pair_matrix["together"][nurse_1_idx, nurse_2_idx] = weight
@@ -290,15 +274,12 @@ class RosterSystem:
         
         # apart (따로 일하기 원하는 쌍) 처리
         if "work_apart" in pair_preferences:
-            # print('\n\n\n\n\npair_preferences["work_apart"]', pair_preferences["work_apart"], '\n\n\n\n\n')
             for pair in pair_preferences["work_apart"]:
                 nurse_1_id = pair["nurse_1"]
                 nurse_2_id = pair["nurse_2"]
                 weight = pair.get("weight", self.config.pair_preference_weight)
                 nurse_1_idx = next((n.id for n in self.nurses if n.db_id == nurse_1_id), None)
                 nurse_2_idx = next((n.id for n in self.nurses if n.db_id == nurse_2_id), None)
-                # nurse_1_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_1_id), None)
-                # nurse_2_idx = next((i for i, n in enumerate(self.nurses) if n.id == nurse_2_id), None)
                 
                 if nurse_1_idx is not None and nurse_2_idx is not None:
                     self.pair_matrix["apart"][nurse_1_idx, nurse_2_idx] = weight
@@ -310,7 +291,6 @@ class RosterSystem:
                         print(f"경고: ID {nurse_1_id}인 간호사를 찾을 수 없습니다.")
                     if nurse_2_idx is None:
                         print(f"경고: ID {nurse_2_id}인 간호사를 찾을 수 없습니다.")
-        # print('\n\n\n\n\nself.pair_matrix', self.pair_matrix, '\n\n\n\n\n')
         print("간호사 페어링 선호도 초기화 완료")
     
     # ───────── 1. find_violations 수정 ─────────
@@ -350,26 +330,6 @@ class RosterSystem:
 
         return violations
 
-    def print_roster(self):
-        """Print current roster in readable format."""
-        shift_map = {i: s for i, s in enumerate(self.config.shift_types)}
-        
-        print(f"\nRoster for {self.target_month.strftime('%B %Y')}:")
-        print("=" * 50)
-        print("Nurse".ljust(20), end="")
-        for day in range(self.num_days):
-            print(f"{day+1:2}", end=" ")
-        print("\n" + "-" * 50)
-        
-        for n_idx, nurse in enumerate(self.nurses):
-            print(f"{nurse.name[:19].ljust(20)}", end="")
-            for day in range(self.num_days):
-                shift_idx = np.where(self.roster[n_idx, day] == 1)[0]
-                if len(shift_idx) == 0:
-                    print(" - ", end="")
-                else:
-                    print(f" {shift_map[shift_idx[0]]} ", end="")
-            print()
 
     def calculate_metrics(self) -> Dict:
         """Calculate roster metrics and statistics.
@@ -481,7 +441,6 @@ class RosterSystem:
         for v in violations:
             v_type = v['type']
             counts[v_type] = counts.get(v_type, 0) + 1
-        print('\n\n\n\ncounts', counts, '\n\n\n\n')
         return counts
         
     def _analyze_workload_distribution(self) -> Dict:
@@ -517,161 +476,160 @@ class RosterSystem:
         return patterns
 
 
-    def optimize_roster_with_cp_sat(self, time_limit_seconds=30):
-        """CP-SAT를 사용하여 근무표를 최적화합니다. 모든 제약 조건을 Hard Constraint로 적용합니다."""
-        try:
-            from ortools.sat.python import cp_model
-        except ImportError:
-            print("Error: OR-Tools is not installed. Please install it with: pip install ortools")
-            return False
+    # def optimize_roster_with_cp_sat(self, time_limit_seconds=30):
+    #     """CP-SAT를 사용하여 근무표를 최적화합니다. 모든 제약 조건을 Hard Constraint로 적용합니다."""
+    #     try:
+    #         from ortools.sat.python import cp_model
+    #     except ImportError:
+    #         print("Error: OR-Tools is not installed. Please install it with: pip install ortools")
+    #         return False
             
-        print("\nCP-SAT solver로 전역 최적화 시작 (Hard Constraints Mode)...")
-        start_time = time.time()
+    #     print("\nCP-SAT solver로 전역 최적화 시작 (Hard Constraints Mode)...")
+    #     start_time = time.time()
         
-        model = cp_model.CpModel()
+    #     model = cp_model.CpModel()
         
-        # --- 변수 정의 ---
-        # x[nurse, day, shift] = 1 if nurse is assigned to shift on day
-        x = {}
-        for n_idx in range(len(self.nurses)):
-            for day in range(self.num_days):
-                for s_idx in range(self.config.num_shifts):
-                    x[n_idx, day, s_idx] = model.NewBoolVar(f'n{n_idx}_d{day}_s{s_idx}')
+    #     # --- 변수 정의 ---
+    #     x = {}
+    #     for n_idx in range(len(self.nurses)):
+    #         for day in range(self.num_days):
+    #             for s_idx in range(self.config.num_shifts):
+    #                 x[n_idx, day, s_idx] = model.NewBoolVar(f'n{n_idx}_d{day}_s{s_idx}')
 
-        # --- Hard Constraints ---
+    #     # --- Hard Constraints ---
 
-        # 1. 한 간호사는 하루에 정확히 하나의 근무만 배정받습니다.
-        for n_idx in range(len(self.nurses)):
-            for day in range(self.num_days):
-                model.AddExactlyOne(x[n_idx, day, s_idx] for s_idx in range(self.config.num_shifts))
+    #     # 1. 한 간호사는 하루에 정확히 하나의 근무만 배정받습니다.
+    #     for n_idx in range(len(self.nurses)):
+    #         for day in range(self.num_days):
+    #             model.AddExactlyOne(x[n_idx, day, s_idx] for s_idx in range(self.config.num_shifts))
 
-        # 2. 일일 교대별 필수 인원을 충족해야 합니다.
-        for day in range(self.num_days):
-            for shift, required in self.config.daily_shift_requirements.items():
-                s_idx = self.config.shift_types.index(shift)
-                model.Add(sum(x[n_idx, day, s_idx] for n_idx in range(len(self.nurses))) == required)
+    #     # 2. 일일 교대별 필수 인원을 충족해야 합니다.
+    #     for day in range(self.num_days):
+    #         for shift, required in self.config.daily_shift_requirements.items():
+    #             s_idx = self.config.shift_types.index(shift)
+    #             model.Add(sum(x[n_idx, day, s_idx] for n_idx in range(len(self.nurses))) == required)
 
-        # 3. 수간호사 요구사항 (주말 휴무 등)은 반드시 지켜져야 합니다.
-        off_idx = self.config.shift_types.index('O')
-        for n_idx, nurse in enumerate(self.nurses):
-            if nurse.is_head_nurse and nurse.head_nurse_off_pattern == 'weekend':
-                for day in range(self.num_days):
-                    if self._is_weekend(day):
-                        model.Add(x[n_idx, day, off_idx] == 1)
+    #     # 3. 수간호사 요구사항 (주말 휴무 등)은 반드시 지켜져야 합니다.
+    #     off_idx = self.config.shift_types.index('O')
+    #     for n_idx, nurse in enumerate(self.nurses):
+    #         if nurse.is_head_nurse and nurse.head_nurse_off_pattern == 'weekend':
+    #             for day in range(self.num_days):
+    #                 if self._is_weekend(day):
+    #                     model.Add(x[n_idx, day, off_idx] == 1)
 
-        # 4. 최대 연속 근무일은 6일을 넘을 수 없습니다. (7일 연속 근무 금지)
-        for n_idx in range(len(self.nurses)):
-            for day in range(self.num_days - self.config.max_consecutive_work_days):
-                # 7일 동안의 근무 수를 계산합니다 (OFF가 아닌 근무).
-                work_days_in_window = []
-                for d in range(day, day + self.config.max_consecutive_work_days + 1):
-                    work_day = model.NewBoolVar(f'work_n{n_idx}_d{d}')
-                    model.Add(work_day == 1 - x[n_idx, d, off_idx])
-                    work_days_in_window.append(work_day)
-                # 7일 동안의 근무일 수가 6일을 초과할 수 없습니다.
-                model.Add(sum(work_days_in_window) <= self.config.max_consecutive_work_days)
+    #     # 4. 최대 연속 근무일은 6일을 넘을 수 없습니다. (7일 연속 근무 금지)
+    #     for n_idx in range(len(self.nurses)):
+    #         for day in range(self.num_days - self.config.max_consecutive_work_days):
+    #             # 7일 동안의 근무 수를 계산합니다 (OFF가 아닌 근무).
+    #             work_days_in_window = []
+    #             for d in range(day, day + self.config.max_consecutive_work_days + 1):
+    #                 work_day = model.NewBoolVar(f'work_n{n_idx}_d{d}')
+    #                 model.Add(work_day == 1 - x[n_idx, d, off_idx])
+    #                 work_days_in_window.append(work_day)
+    #             # 7일 동안의 근무일 수가 6일을 초과할 수 없습니다.
+    #             model.Add(sum(work_days_in_window) <= self.config.max_consecutive_work_days)
 
-        # 5. 7일 중 2회 휴무가 보장되어야 합니다.
-        if self.config.enforce_two_offs_per_week:
-            for n_idx in range(len(self.nurses)):
-                for day in range(self.num_days - 6):
-                    model.Add(sum(x[n_idx, d, off_idx] for d in range(day, day + 7)) >= 2)
+    #     # 5. 7일 중 2회 휴무가 보장되어야 합니다.
+    #     if self.config.enforce_two_offs_per_week:
+    #         for n_idx in range(len(self.nurses)):
+    #             for day in range(self.num_days - 6):
+    #                 model.Add(sum(x[n_idx, d, off_idx] for d in range(day, day + 7)) >= 2)
 
-        # 6. 야간 근무(N) 관련 제약 조건
-        night_idx = self.config.shift_types.index('N')
-        day_idx = self.config.shift_types.index('D')
-        evening_idx = self.config.shift_types.index('E')
+    #     # 6. 야간 근무(N) 관련 제약 조건
+    #     night_idx = self.config.shift_types.index('N')
+    #     day_idx = self.config.shift_types.index('D')
+    #     evening_idx = self.config.shift_types.index('E')
 
-        for n_idx in range(len(self.nurses)):
-            # 6.1. 월간 야간 근무는 15회를 넘을 수 없습니다.
-            model.Add(sum(x[n_idx, day, night_idx] for day in range(self.num_days)) <= self.config.max_night_shifts_per_month)
+    #     for n_idx in range(len(self.nurses)):
+    #         # 6.1. 월간 야간 근무는 15회를 넘을 수 없습니다.
+    #         model.Add(sum(x[n_idx, day, night_idx] for day in range(self.num_days)) <= self.config.max_night_shifts_per_month)
 
-            # 6.2. N 근무는 3개 연달아 나올 수 없습니다 (최대 2연속).
-            for day in range(self.num_days - self.config.max_consecutive_nights):
-                model.Add(sum(x[n_idx, d, night_idx] for d in range(day, day + self.config.max_consecutive_nights + 1)) <= self.config.max_consecutive_nights)
+    #         # 6.2. N 근무는 3개 연달아 나올 수 없습니다 (최대 2연속).
+    #         for day in range(self.num_days - self.config.max_consecutive_nights):
+    #             model.Add(sum(x[n_idx, d, night_idx] for d in range(day, day + self.config.max_consecutive_nights + 1)) <= self.config.max_consecutive_nights)
 
-            # 6.3. N 근무 다음 날 D 근무는 불가합니다.
-            for day in range(1, self.num_days):
-                model.AddBoolOr([x[n_idx, day-1, night_idx].Not(), x[n_idx, day, day_idx].Not()])
+    #         # 6.3. N 근무 다음 날 D 근무는 불가합니다.
+    #         for day in range(1, self.num_days):
+    #             model.AddBoolOr([x[n_idx, day-1, night_idx].Not(), x[n_idx, day, day_idx].Not()])
 
-            # 6.4. E 근무 다음 날 D 근무는 불가합니다 (설정에 따라).
-            if self.config.enforce_E_after_D_constraint:
-                 for day in range(1, self.num_days):
-                    model.AddBoolOr([x[n_idx, day-1, evening_idx].Not(), x[n_idx, day, day_idx].Not()])
+    #         # 6.4. E 근무 다음 날 D 근무는 불가합니다 (설정에 따라).
+    #         if self.config.enforce_E_after_D_constraint:
+    #              for day in range(1, self.num_days):
+    #                 model.AddBoolOr([x[n_idx, day-1, evening_idx].Not(), x[n_idx, day, day_idx].Not()])
 
-        # 7. 시니어-주니어 페어링 제약 조건
-        if self.config.enforce_seniority_pairing:
-            juniors = [i for i, n in enumerate(self.nurses) if n.experience_years <= self.config.junior_pairing_max_experience]
-            seniors = [i for i, n in enumerate(self.nurses) if n.experience_years >= self.config.senior_pairing_min_experience]
+    #     # 7. 시니어-주니어 페어링 제약 조건
+    #     if self.config.enforce_seniority_pairing:
+    #         juniors = [i for i, n in enumerate(self.nurses) if n.experience_years <= self.config.junior_pairing_max_experience]
+    #         seniors = [i for i, n in enumerate(self.nurses) if n.experience_years >= self.config.senior_pairing_min_experience]
             
-            for day in range(self.num_days):
-                for s_idx in range(self.config.num_shifts):
-                    # 해당 교대에 근무하는 주니어 수
-                    num_juniors = sum(x[j, day, s_idx] for j in juniors)
-                    # 해당 교대에 근무하는 시니어 수
-                    num_seniors = sum(x[s, day, s_idx] for s in seniors)
+    #         for day in range(self.num_days):
+    #             for s_idx in range(self.config.num_shifts):
+    #                 # 해당 교대에 근무하는 주니어 수
+    #                 num_juniors = sum(x[j, day, s_idx] for j in juniors)
+    #                 # 해당 교대에 근무하는 시니어 수
+    #                 num_seniors = sum(x[s, day, s_idx] for s in seniors)
 
-                    # 주니어가 한 명이라도 있으면, 시니어도 반드시 한 명 이상 있어야 합니다.
-                    # (num_juniors > 0) => (num_seniors > 0)
-                    # 이를 위해 (num_juniors == 0) or (num_seniors > 0) 형태로 변환
+    #                 # 주니어가 한 명이라도 있으면, 시니어도 반드시 한 명 이상 있어야 합니다.
+    #                 # (num_juniors > 0) => (num_seniors > 0)
+    #                 # 이를 위해 (num_juniors == 0) or (num_seniors > 0) 형태로 변환
                     
-                    has_juniors = model.NewBoolVar(f'has_juniors_d{day}_s{s_idx}')
-                    model.Add(num_juniors > 0).OnlyEnforceIf(has_juniors)
-                    model.Add(num_juniors == 0).OnlyEnforceIf(has_juniors.Not())
+    #                 has_juniors = model.NewBoolVar(f'has_juniors_d{day}_s{s_idx}')
+    #                 model.Add(num_juniors > 0).OnlyEnforceIf(has_juniors)
+    #                 model.Add(num_juniors == 0).OnlyEnforceIf(has_juniors.Not())
 
-                    has_seniors = model.NewBoolVar(f'has_seniors_d{day}_s{s_idx}')
-                    model.Add(num_seniors > 0).OnlyEnforceIf(has_seniors)
-                    model.Add(num_seniors == 0).OnlyEnforceIf(has_seniors.Not())
+    #                 has_seniors = model.NewBoolVar(f'has_seniors_d{day}_s{s_idx}')
+    #                 model.Add(num_seniors > 0).OnlyEnforceIf(has_seniors)
+    #                 model.Add(num_seniors == 0).OnlyEnforceIf(has_seniors.Not())
                     
-                    model.AddImplication(has_juniors, has_seniors)
+    #                 model.AddImplication(has_juniors, has_seniors)
 
-        # --- 목적 함수: 선호도 점수 최대화 ---
-        objective_terms = []
-        for n_idx in range(len(self.nurses)):
-            for day in range(self.num_days):
-                for s_idx in range(self.config.num_shifts):
-                    # 선호도 행렬에서 가중치를 가져와 목적 함수에 추가
-                    pref_score = int(self.preference_matrix[n_idx, day, s_idx])
-                    objective_terms.append(pref_score * x[n_idx, day, s_idx])
+    #     # --- 목적 함수: 선호도 점수 최대화 ---
+    #     objective_terms = []
+    #     for n_idx in range(len(self.nurses)):
+    #         for day in range(self.num_days):
+    #             for s_idx in range(self.config.num_shifts):
+    #                 # 선호도 행렬에서 가중치를 가져와 목적 함수에 추가
+    #                 pref_score = int(self.preference_matrix[n_idx, day, s_idx])
+    #                 objective_terms.append(pref_score * x[n_idx, day, s_idx])
         
-        # 목적 함수 설정
-        model.Maximize(sum(objective_terms))
+    #     # 목적 함수 설정
+    #     model.Maximize(sum(objective_terms))
 
-        # --- 솔버 실행 ---
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = time_limit_seconds
-        solver.parameters.log_search_progress = True
-        solver.parameters.num_search_workers = 8  # 병렬 처리
+    #     # --- 솔버 실행 ---
+    #     solver = cp_model.CpSolver()
+    #     solver.parameters.max_time_in_seconds = time_limit_seconds
+    #     solver.parameters.log_search_progress = True
+    #     solver.parameters.num_search_workers = 8  # 병렬 처리
         
-        status = solver.Solve(model)
-        # --- 결과 처리 ---
-        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-            print(f"최적화 완료: {time.time() - start_time:.2f}초 소요")
-            print(f"최적 목표 값: {solver.ObjectiveValue()}")
+    #     status = solver.Solve(model)
+    #     # --- 결과 처리 ---
+    #     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+    #         print(f"최적화 완료: {time.time() - start_time:.2f}초 소요")
+    #         print(f"최적 목표 값: {solver.ObjectiveValue()}")
             
-            for n_idx in range(len(self.nurses)):
-                for day in range(self.num_days):
-                    for s_idx in range(self.config.num_shifts):
-                        if solver.Value(x[n_idx, day, s_idx]):
-                            self.roster[n_idx, day, s_idx] = 1
-                        else:
-                            self.roster[n_idx, day, s_idx] = 0
+    #         for n_idx in range(len(self.nurses)):
+    #             for day in range(self.num_days):
+    #                 for s_idx in range(self.config.num_shifts):
+    #                     if solver.Value(x[n_idx, day, s_idx]):
+    #                         self.roster[n_idx, day, s_idx] = 1
+    #                     else:
+    #                         self.roster[n_idx, day, s_idx] = 0
             
-            if status == cp_model.OPTIMAL:
-                print("최적해를 찾았습니다!")
-            else:
-                print("가능한 해를 찾았습니다 (최적해가 아닐 수 있음).")
-            return True
-        else:
-            print("해를 찾지 못했습니다. 제약 조건이 너무 엄격하거나 충돌할 수 있습니다.")
-            if status == cp_model.INFEASIBLE:
-                print("상태: INFEASIBLE")
-            elif status == cp_model.MODEL_INVALID:
-                print("상태: MODEL_INVALID")
-            else:
-                print(f"상태: {status}")
+    #         if status == cp_model.OPTIMAL:
+    #             print("최적해를 찾았습니다!")
+    #         else:
+    #             print("가능한 해를 찾았습니다 (최적해가 아닐 수 있음).")
+    #         return True
+    #     else:
+    #         print("해를 찾지 못했습니다. 제약 조건이 너무 엄격하거나 충돌할 수 있습니다.")
+    #         if status == cp_model.INFEASIBLE:
+    #             print("상태: INFEASIBLE")
+    #         elif status == cp_model.MODEL_INVALID:
+    #             print("상태: MODEL_INVALID")
+    #         else:
+    #             print(f"상태: {status}")
 
-            return False
+    #         return False
     def optimize_roster_with_cp_sat_v2(self, time_limit_seconds=30):
         """Optimize the roster using CP-SAT global constraint solver.
         
@@ -2123,80 +2081,7 @@ class RosterSystem:
         n = array.shape[0]
         return ((np.sum((2 * index - n - 1) * array)) / (n * np.sum(array)))
 
-    def _calculate_satisfaction_metrics(self):
-        """근무표에 대한 만족도 지표를 계산합니다."""
-        metrics = {
-            '총 야간 근무 수': [],
-            '연속 야간 근무 발생 횟수': [],
-            '연속 근무일 수 초과 횟수': [],
-            '주당 휴무일 부족 횟수': []
-        }
-        
-        for nurse_idx, nurse in enumerate(self.nurses):
-            night_shifts = np.sum(self.roster[nurse_idx] == 'N')
-            metrics['총 야간 근무 수'].append(night_shifts)
-            
-            # 연속 야간 근무 체크
-            consecutive_nights = 0
-            consecutive_nights_violations = 0
-            for shift in self.roster[nurse_idx]:
-                if shift == 'N':
-                    consecutive_nights += 1
-                    if consecutive_nights > self.config.max_consecutive_nights:
-                        consecutive_nights_violations += 1
-                else:
-                    consecutive_nights = 0
-            metrics['연속 야간 근무 발생 횟수'].append(consecutive_nights_violations)
-            
-            # 연속 근무일 체크
-            consecutive_work = 0
-            consecutive_work_violations = 0
-            for shift in self.roster[nurse_idx]:
-                if shift != 'O':
-                    consecutive_work += 1
-                    if consecutive_work > self.config.max_consecutive_work_days:
-                        consecutive_work_violations += 1
-                else:
-                    consecutive_work = 0
-            metrics['연속 근무일 수 초과 횟수'].append(consecutive_work_violations)
-            
-            # 주당 휴무일 체크
-            weekly_off_violations = 0
-            for week in range(len(self.roster[nurse_idx]) // 7):
-                week_shifts = self.roster[nurse_idx][week * 7:(week + 1) * 7]
-                off_days = np.sum(week_shifts == 'O')
-                if off_days < 2:  # 주 2일 휴무 기준
-                    weekly_off_violations += 1
-            metrics['주당 휴무일 부족 횟수'].append(weekly_off_violations)
-            
-        self.satisfaction_metrics = metrics
-        
-    def export_to_excel(self, filename: str):
-        """근무표를 Excel 파일로 내보냅니다.
-        
-        Args:
-            filename: 저장할 Excel 파일 이름
-        """
-        if self.roster is None:
-            raise ValueError("근무표가 아직 생성되지 않았습니다.")
-            
-        # 근무표 데이터프레임 생성
-        df = pd.DataFrame(
-            self.roster,
-            index=[f"{nurse.name} ({nurse.experience_years}년차)" for nurse in self.nurses],
-            columns=[f"Day {i+1}" for i in range(self.roster.shape[1])]
-        )
-        
-        # 만족도 지표 데이터프레임 생성
-        metrics_df = pd.DataFrame(self.satisfaction_metrics)
-        metrics_df.index = [nurse.name for nurse in self.nurses]
-        
-        # Excel 파일로 저장
-        with pd.ExcelWriter(filename) as writer:
-            df.to_excel(writer, sheet_name='근무표')
-            metrics_df.to_excel(writer, sheet_name='만족도 지표')
-            
-        self.logger.info(f"근무표가 {filename}에 저장되었습니다.") 
+
 
     def apply_fixed_cells(self, fixed_cells: List[Dict]):
         """
