@@ -247,11 +247,11 @@ async def preference_analyzer(state):
             print(f"Preference Analyzer: {i+1}차 모델 시도 중...")
             
             llm = client.with_structured_output(preferenceAnalyzer)
-            # print('llm', llm)
+
             response = await llm.ainvoke(messages)
             used_model_name = getattr(client, "model", "") or used_model_name
             print('used_model_name', used_model_name)
-            # print('response', response)
+
             # 성공 시 데이터 추출
             json_answer = {
                 "processor": response.processor,
@@ -284,7 +284,6 @@ async def preference_analyzer(state):
             break
             
         except Exception as e:
-            print('문제다e', e)
             error_msg = str(e).lower()
             print(f"Preference Analyzer: {i+1}차 모델 오류 - {e}")
             
@@ -316,7 +315,6 @@ async def preference_analyzer(state):
     cost_info = _compute_cost(prompt_tokens, completion_tokens, model_name_for_calc)
     print(f"토큰 사용량(Preference): {cost_info['usage']}, 비용(USD/KRW): {cost_info['cost_usd']} / {cost_info['cost_krw']}")
     
-    # print('preference_analyzer 답변:', json_answer)
     return {'preference_result': [json_answer]}
 
 
@@ -346,6 +344,5 @@ async def create_preference_analyzer(parent_state):
     graph_app = graph.compile()
 
     result = await graph_app.ainvoke({"requests": requests, "schema": schema, "model": client})
-    print('preference_analyzer 답변: ', result)
     return {"preference_results": [result]}
 

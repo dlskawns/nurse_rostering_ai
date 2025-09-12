@@ -13,11 +13,14 @@ from db.models import Wanted
 from schemas.auth_schema import User as UserSchema
 from db.models import Nurse, ShiftPreference
 from services.wanted_service import request_wanted_shifts_service
-router = APIRouter()
+router = APIRouter(
+    prefix="/wanted",
+    tags=["wanted"]
+)
 templates = Jinja2Templates(directory="app/templates")
 
 # [Wanted] - Wanted 작성 요청 생성 (수간호사용)
-@router.post("/wanted/request")
+@router.post("/request")
 async def request_wanted_shifts(
     payload: WantedDeadlineRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -29,7 +32,7 @@ async def request_wanted_shifts(
         raise HTTPException(status_code=500, detail=f"Wanted 작성 요청 실패: {str(e)}")
 
 # [Wanted] - 특정 그룹의 Wanted 상태 조회
-@router.get("/wanted/status")
+@router.get("/status")
 async def get_wanted_status(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -55,7 +58,7 @@ async def get_wanted_status(
 
 
 # [Wanted] - 특정 스케줄의 모든 간호사 제출 현황 확인
-@router.get("/wanted/{year}/{month}/submissions")
+@router.get("/{year}/{month}/submissions")
 async def get_submission_statuses(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -88,7 +91,7 @@ async def get_submission_statuses(
 
 
 # [Wanted] - 현재 그룹의 모든 wanted 데이터 조회
-@router.get("/wanted/all")
+@router.get("/all")
 async def get_all_wanted(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
@@ -109,7 +112,7 @@ async def get_all_wanted(
     } for wanted in wanted_list]
 
 # [Wanted] - Wanted 상태를 closed로 변경
-@router.patch("/wanted/close")
+@router.patch("/close")
 async def close_wanted_request(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -133,7 +136,7 @@ async def close_wanted_request(
     return {"message": "Wanted 요청이 마감되었습니다."}
 
 # [Wanted] - Wanted 마감일 변경
-@router.patch("/wanted/deadline")
+@router.patch("/deadline")
 async def update_wanted_deadline(
     req: WantedDeadlineRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -160,7 +163,7 @@ async def update_wanted_deadline(
     return {"message": "마감일이 성공적으로 변경되었습니다."}
 
 
-@router.post("/wanted/invoke", response_model=WantedInvokeResponse)
+@router.post("/invoke", response_model=WantedInvokeResponse)
 async def invoke_graph(request: WantedInvokeRequest):
     """
     그래프를 실행하여 로스터 관련 요청을 처리합니다.
@@ -173,15 +176,12 @@ async def invoke_graph(request: WantedInvokeRequest):
         if len(response[0]) > 0:
             result['shift'] = parse_shift_results(response)
             
-            # for i in range(len(response[0])):
-            #     result.append(response[0][i]['shift_result'][j]['result'] for j in range(len(response[0][i]['shift_result'])))
         if len(response[1]) > 0:
             result['preference'] = parse_preferences(response, request.schema)
-            # for i in range(len(response[1])):
-        print('결과', result)    #     result.append(response[1][i]['preference_result'][j] for j in range(len(response[1][i]['preference_result'])))
+
         if result == {}:
             result = ["근무 희망사항이 없습니다."]
-        print('\n\n\n\n\n\n응답:', result, '\n\n\n\n\n\n')
+
         return WantedInvokeResponse(response=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

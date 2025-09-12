@@ -247,12 +247,6 @@ class shiftAnalyzerPrompt:
             """
 
 async def shift_analyzer(state):
-    print('여기_shift')
-    # client = state['model']
-    # client = ChatAnthropic(
-    #     model="claude-3-7-sonnet-20250219",
-    #     anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-    # )
     phase = state['phase']
     context = state['requests'][phase]
     tools = state['mcp_tools']
@@ -296,7 +290,6 @@ async def shift_analyzer(state):
             sr = result["structured_response"]
             used_model_name = getattr(client, "model", "") or used_model_name
             print(f"Shift Analyzer: {i+1}차 모델 성공!")
-            print('\n\n\n\n\n\nsr: ',sr.result,'\n\n\n\n\n\n')
             break
             
         except Exception as e:
@@ -349,12 +342,10 @@ async def create_shift_analyzer(parent_state):
         temperature=0,
         google_api_key=os.getenv("GOOGLE_API_KEY"),
     )
-    # print('여기', mcp_client.get_tools())
     requests = parent_state['query_shift']         # Shift List ex. ["9/9: D", "9/10: D", "9/16: OFF", "9/9, 9/10, 9/16 외에 웬만하면 E로 줘"]
     client = parent_state['model']
 
     tools = [tool_get_weekends, tool_get_holidays]
-    # print('툴즈~~~', tools)
     n_requests = len(requests)
     if n_requests == 0:
         print('shift_analyzer 답변 없음')

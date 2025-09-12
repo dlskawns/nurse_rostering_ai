@@ -39,7 +39,8 @@ except ImportError as e:
 
 
 
-router = APIRouter()
+router = APIRouter(
+    tags=["roster_create"])
 templates = Jinja2Templates(directory="app/templates")
 
 

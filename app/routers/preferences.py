@@ -15,10 +15,13 @@ from services.preferences_service import (
     get_all_preferences_service
 )
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/preferences",
+    tags=["preferences"]
+)
 
 # [Preferences] - 간호사 개인의 선호도 초안 저장
-@router.post("/preferences")
+@router.post("")
 async def save_preference_draft(
     pref_data: PreferenceData,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -31,7 +34,7 @@ async def save_preference_draft(
         
 
 # [Preferences] - 선호도 최종 제출
-@router.post("/preferences/submit")
+@router.post("/submit")
 async def submit_preferences(
     req: PreferenceSubmit,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -43,7 +46,7 @@ async def submit_preferences(
         raise HTTPException(status_code=500, detail=f"선호도 최종 제출 실패: {str(e)}")
 
 # [Preferences] - 빈 선호도 최종 제출
-@router.post("/preferences/submit/empty")
+@router.post("/submit/empty")
 async def submit_empty_preferences(
     req: PreferenceSubmit,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -55,7 +58,7 @@ async def submit_empty_preferences(
         raise HTTPException(status_code=500, detail=f"빈 선호도 제출 실패: {str(e)}")
 
 # [Preferences] - 최종 제출 철회 (수정)
-@router.post("/preferences/retract")
+@router.post("/retract")
 async def retract_submission(
     req: PreferenceSubmit,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
@@ -67,7 +70,7 @@ async def retract_submission(
         raise HTTPException(status_code=500, detail=f"제출 철회 실패: {str(e)}")
 
 # [Preferences] - 최신 선호도 데이터 조회
-@router.get("/preferences/latest")
+@router.get("/latest")
 async def get_latest_preference(
     year: int, 
     month: int,
@@ -80,7 +83,7 @@ async def get_latest_preference(
         raise HTTPException(status_code=500, detail=f"최신 선호도 조회 실패: {str(e)}")
 
 # [Preferences] - 모든 간호사의 희망사항 현황 조회
-@router.get("/preferences/all")
+@router.get("/all")
 async def get_all_preferences(
     year: int, 
     month: int,

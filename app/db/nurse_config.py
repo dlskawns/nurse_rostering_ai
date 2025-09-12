@@ -72,7 +72,6 @@ class Nurse:
             np.ndarray: 각 교대 유형에 대한 선호도 점수 [D, E, N, OFF]
         """
         preferences = np.ones(len(config.shift_types))
-        # print('config.shift_types', config.shift_types)
         
         # 설정에서 교대 배정 비율 적용
 
@@ -94,40 +93,9 @@ class Nurse:
             
         # ── ★ 수간호사 weekend 선호 보정 (개선된 주말 판별) ──────
         if self.is_head_nurse:
-            # # ① 해당 Nurse 객체에 anchor date(달 첫날)가 세팅돼 있으면 사용
-            # anchor: Optional[date] = getattr(self, "_anchor_date", None)
-            # # ② 없으면 config 쪽에 target_month 필드(date) 가 있다면 사용
-            # if anchor is None:
-            #     anchor = getattr(config, "target_month", None)
-
-            # if anchor:
-            #     wk_set = _weekend_set(anchor.year, anchor.month)
-            #     is_weekend = day_idx in wk_set
-            # else:
-            #     # ⬇️ fallback – 예전 방식
-            #     is_weekend = day_idx % 7 >= 5
-
-            # # weekend / mixed 패턴 처리
-            # if self.head_nurse_off_pattern == 'weekend' and is_weekend:
-            #     preferences[:]     = 0.1
-            #     preferences[off_idx] = 2.0
-            # elif self.head_nurse_off_pattern == 'mixed':
-            #     # 격주 주말: 홀수번째 주말 OFF
-            #     if is_weekend and ((anchor.day + day_idx) // 7) % 2 == 1:
-            #         preferences[:]   = 0.1
-            #         preferences[off_idx] = 2.0
            if self.head_nurse_off_pattern == 'weekend' and day_idx in weekend_days:
-                # print(f'오늘 날짜 {day_idx} 는 주말입니다.')
                 preferences[:]     = 0.1
                 preferences[off_idx] = 2.0
-            # print('\n\n\n\n\npreferences[off_idx]', preferences[off_idx], '\n\n\n\n\n')
-        # # ── 사직일 이후 OFF 선호 ────────────────────────────────
-        # if self.resignation_date:
-        #     if anchor:
-        #         current_date = anchor + timedelta(days=day_idx)
-        #         if current_date >= self.resignation_date:
-        #             preferences[:]     = 0.0
-        #             preferences[off_idx] = 1.0
                 
         return preferences
         
