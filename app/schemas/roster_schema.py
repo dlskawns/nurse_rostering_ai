@@ -117,3 +117,19 @@ class NurseProfile(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ExcelValidationRequest(BaseModel):
+    data: List[dict]
+    include_rows: List[bool] = []
+
+class NurseSequenceUpdate(BaseModel):
+    nurse_id: str
+    new_sequence: int = Field(ge=1)
+    active: Optional[int] = Field(default=None, description="0: 비활성, 1: 활성, None: 변경 없음")
+class ReorderPayload(BaseModel):
+    active_order: List[str] = Field(default_factory=list)
+    inactive_order: List[str] = Field(default_factory=list)
+class ExcelConfirmRequest(BaseModel):
+    data: List[dict]
+    include_rows: List[bool]
+    new_groups_to_create: List[str] = []
