@@ -362,7 +362,7 @@ class CPSATBasicEngine:
             
             if not success:
                 print(f"{self.logger_prefix} 개선된 제약사항으로 실패, 기본 알고리즘으로 폴백...")
-                roster_system.optimize_roster_with_cp_sat_v2(time_limit_seconds=time_limit_seconds)
+                self._optimize_fallback_lex_hard_first(roster_system, time_limit_seconds=time_limit_seconds, grouped=grouped)
         
         # 10. 결과 변환
         with Timer("결과 변환"):
@@ -469,6 +469,392 @@ class CPSATBasicEngine:
     # ────────────────────────────────────────────────────────────────────
     #                    ※ 아래는 helper 들 – 모두 완전판               │
     # ────────────────────────────────────────────────────────────────────
+    def _optimize_fallback_lex_hard_first(self, roster_system: RosterSystem, time_limit_seconds: int, grouped=None) -> bool:
+        """하드 제약을 최우선으로 하는 서열(lexicographic) 폴백 최적화 수행.
+
+        단계 개요:
+        1단계(커버리지 우선): 일/교대 커버리지 부족(short) 최소화. 식: assigned + short - over == need.
+        2단계(안전/법규): 1단계 최솟값(short 합)과 over 상한을 고정, 전이/연속/월간/주2OFF/회복/NOD/NOE/야간전담 위반을 정량 슬랙으로 최소화.
+        3단계(품질/선호): 1,2단계 결과를 고정(특히 2단계에서 0이었던 위반 위치는 0으로 잠금)한 채 선호/공정성 최대화. 새 위반 생성 금지.
+
+        Args:
+            roster_system: 근무표 시스템 객체
+            time_limit_seconds: 총 시간 제한(초)
+            grouped: 교대 코드 매핑 정보(고정셀 main_code 정규화에 사용)
+
+        Returns:
+            bool: 최종적으로 하드 위반 합이 0인 해를 달성했는지 여부
+        """
+        from ortools.sat.python import cp_model
+
+        print(f"{self.logger_prefix} 폴백(서열) 최적화 시작…")
+
+        # 동적 시간 배분(대략): 45% / 35% / 20%
+        tl1 = max(5, int(time_limit_seconds * 0.45))
+        tl2 = max(5, int(time_limit_seconds * 0.35))
+        tl3 = max(3, time_limit_seconds - tl1 - tl2)
+
+        N, D, S = len(roster_system.nurses), roster_system.num_days, roster_system.config.num_shifts
+        cfg = roster_system.config
+
+        # 공통 인덱스/구간
+        idx = {c: roster_system.config.shift_types.index(c) for c in ('D', 'E', 'N', 'O')}
+        day_idx, eve_idx, night_idx, off_idx = idx['D'], idx['E'], idx['N'], idx['O']
+
+        first_day = roster_system.target_month
+        join, leave = [], []
+        for nu in roster_system.nurses:
+            j = (nu.joining_date - first_day).days if nu.joining_date else 0
+            l = (nu.resignation_date - first_day).days if nu.resignation_date else D - 1
+            join.append(max(j, 0))
+            leave.append(min(l, D - 1))
+
+        # 고정셀(메인코드 정규화)
+        code2main = {c: r['main_code'] for r in (grouped or []) for c in r['codes']}
+        fixed, fixed_cnt = {}, [[0] * S for _ in range(D)]
+        for c in getattr(roster_system, 'fixed_cells', []) or []:
+            n, d = c['nurse_index'], c['day_index']
+            s_main = code2main.get(c['shift'], c['shift'])
+            s_idx = roster_system.config.shift_types.index(s_main)
+            fixed[(n, d)] = s_idx
+            fixed_cnt[d][s_idx] += 1
+
+        # 초기 금지(경계) 맵
+        initial_forbidden = getattr(roster_system, 'initial_forbidden', {}) if isinstance(getattr(roster_system, 'initial_forbidden', {}), dict) else {}
+
+        # 모델 빌더: stage에 따라 목적 및 고정 제약 선택, 안전 위반 변수 구조도 반환
+        def build_model(stage: int,
+                        coverage_eq: Optional[int] = None,
+                        over_le: Optional[int] = None,
+                        stage2_zero_locks: Optional[Dict[str, list]] = None):
+            m = cp_model.CpModel()
+            Xv = {}
+            def X(n, d, s):
+                return Xv.get((n, d, s), 0)
+
+            for n in range(N):
+                for d in range(join[n], leave[n] + 1):
+                    for s in range(S):
+                        Xv[n, d, s] = m.NewBoolVar(f'x_{n}_{d}_{s}')
+
+            # 고정 셀
+            for (n, d), s_idx in fixed.items():
+                m.Add(X(n, d, s_idx) == 1)
+                for s in range(S):
+                    if s != s_idx:
+                        m.Add(X(n, d, s) == 0)
+
+            # 초기 금지: 고정과 충돌하면 금지 무시(로그만)
+            try:
+                if initial_forbidden:
+                    for (n, d), code_list in initial_forbidden.items():
+                        for code in (code_list or []):
+                            if code not in roster_system.config.shift_types:
+                                continue
+                            s_idx = roster_system.config.shift_types.index(code)
+                            if (n, d) in fixed and fixed[(n, d)] == s_idx:
+                                print(f"{self.logger_prefix} 경계 금지-고정 충돌 무시: n={n}, d={d+1}, code={code}")
+                                continue
+                            m.Add(X(n, d, s_idx) == 0)
+            except Exception as e:
+                print(f"{self.logger_prefix} 초기 금지 셀 적용 중 오류: {e}")
+
+            # exactly-one
+            for n in range(N):
+                for d in range(join[n], leave[n] + 1):
+                    if (n, d) in fixed:
+                        continue
+                    m.AddExactlyOne(X(n, d, s) for s in range(S))
+
+            # 1) 커버리지 등식: assigned + short - over == need
+            short_terms, over_terms = [], []
+            for d in range(D):
+                for code, req in roster_system.config.daily_shift_requirements.items():
+                    s = roster_system.config.shift_types.index(code)
+                    need = req - fixed_cnt[d][s]
+                    if need <= 0:
+                        # 고정으로 이미 충분한 경우는 oversupply만 억제 대상에서 제외
+                        continue
+                    assigned = sum(X(n, d, s)
+                                   for n in range(N)
+                                   if join[n] <= d <= leave[n] and (n, d) not in fixed)
+                    sh = m.NewIntVar(0, N, f'short_{d}_{code}')
+                    ov = m.NewIntVar(0, N, f'over_{d}_{code}')
+                    m.Add(assigned + sh - ov == need)
+                    short_terms.append(sh)
+                    over_terms.append(ov)
+
+            # 2) 안전/법규 위반(정량 슬랙) 구성
+            safety = {
+                'trans_nd': [],   # N→D 위반 (Bool)
+                'trans_ed': [],   # E→D 위반 (Bool)
+                'cwork_missing': [],   # 연속근무 창에서 필요한 OFF 부족량(Int)
+                'cnight_excess': [],   # 연속 N 초과(Int)
+                'mnight_excess': [],   # 월간 N 초과(Int)
+                'night_only_de': [],   # 야간전담의 D/E 배정 위반(Bool/Int)
+                'week_off_missing': [],# 주별 2OFF 부족(Int)
+                'rec_3n2o': [],       # N3→2O 회복 부족(Int)
+                'rec_2n2o': [],       # N2→2O 회복 부족(Int)
+                'pattern_nod': [],    # N-O-D 패턴(Int)
+                'pattern_noe': [],    # N-O-E 패턴(Int)
+                'min_off_missing': [] # 월 최소 OFF 부족(Int)
+            }
+
+            # 전이 위반: 정확한 reification (iff)
+            for n in range(N):
+                T0, T1 = join[n], leave[n]
+                for d in range(T0 + 1, T1 + 1):
+                    xn = X(n, d - 1, night_idx)
+                    xd = X(n, d, day_idx)
+                    b_nd = m.NewBoolVar(f'viol_nd_{n}_{d}')
+                    # (N∧D) → b_nd, b_nd → N, b_nd → D
+                    m.AddBoolOr([b_nd, xn.Not(), xd.Not()])
+                    m.AddImplication(b_nd, xn)
+                    m.AddImplication(b_nd, xd)
+                    safety['trans_nd'].append(b_nd)
+                    if cfg.banned_day_after_eve:
+                        xe = X(n, d - 1, eve_idx)
+                        b_ed = m.NewBoolVar(f'viol_ed_{n}_{d}')
+                        m.AddBoolOr([b_ed, xe.Not(), xd.Not()])
+                        m.AddImplication(b_ed, xe)
+                        m.AddImplication(b_ed, xd)
+                        safety['trans_ed'].append(b_ed)
+
+            # 연속 근무 K+1 창에서 최소 1 OFF 필요 → 부족량 정량화
+            K = cfg.max_consecutive_work_days
+            for n in range(N):
+                T0, T1 = join[n], leave[n]
+                for d0 in range(T0, max(T0, T1 - K + 1)):
+                    pass
+                for d0 in range(T0, T1 - K + 1):
+                    sum_off = sum(X(n, d0 + t, off_idx) for t in range(K + 1))
+                    miss = m.NewIntVar(0, K + 1, f'cwork_miss_{n}_{d0}')
+                    m.Add(miss >= 1 - sum_off)
+                    safety['cwork_missing'].append(miss)
+
+            # 연속 Night 상한 L → 초과량 정량화
+            L = cfg.max_consecutive_nights
+            for n in range(N):
+                T0, T1 = join[n], leave[n]
+                for d0 in range(T0, T1 - L + 1):
+                    sum_n = sum(X(n, d0 + t, night_idx) for t in range(L + 1))
+                    exc = m.NewIntVar(0, L + 1, f'cnight_exc_{n}_{d0}')
+                    m.Add(exc >= sum_n - L)
+                    safety['cnight_excess'].append(exc)
+
+            # 월 Night 상한 초과량
+            for n in range(N):
+                T0, T1 = join[n], leave[n]
+                sum_m = sum(X(n, d, night_idx) for d in range(T0, T1 + 1))
+                exc = m.NewIntVar(0, D, f'mnight_exc_{n}')
+                m.Add(exc >= sum_m - cfg.max_night_shifts_per_month)
+                safety['mnight_excess'].append(exc)
+
+            # 야간전담의 D/E 금지 위반(OR: D or E)
+            for n, nu in enumerate(roster_system.nurses):
+                if not nu.is_night_nurse:
+                    continue
+                T0, T1 = join[n], leave[n]
+                for d in range(T0, T1 + 1):
+                    v = m.NewIntVar(0, 1, f'nonly_de_{n}_{d}')
+                    m.Add(v >= X(n, d, day_idx))
+                    m.Add(v >= X(n, d, eve_idx))
+                    m.Add(v <= X(n, d, day_idx) + X(n, d, eve_idx))
+                    safety['night_only_de'].append(v)
+
+            # 주별 2OFF 부족량
+            if cfg.enforce_two_offs_per_week:
+                weeks = D // 7
+                for n in range(N):
+                    for w in range(weeks):
+                        d0, d1 = w * 7, min(w * 7 + 7, D)
+                        offs = sum(X(n, d, off_idx) for d in range(d0, d1)
+                                   if join[n] <= d <= leave[n])
+                        miss = m.NewIntVar(0, 2, f'week_miss_{n}_{w}')
+                        m.Add(miss >= 2 - offs)
+                        safety['week_off_missing'].append(miss)
+
+            # 회복 규칙: N3→2O, N2→2O 부족량
+            if cfg.two_offs_after_three_nig:
+                for n in range(N):
+                    T0, T1 = join[n], leave[n]
+                    for d in range(T0 + 2, T1 - 1):
+                        sum_n = sum(X(n, d - t, night_idx) for t in (0, 1, 2))
+                        need = X(n, d + 1, off_idx) + X(n, d + 2, off_idx)
+                        miss = m.NewIntVar(0, 2, f'rec3n2o_{n}_{d}')
+                        m.Add(miss >= sum_n - 2 - need)
+                        safety['rec_3n2o'].append(miss)
+            if cfg.two_offs_after_two_nig:
+                for n in range(N):
+                    T0, T1 = join[n], leave[n]
+                    for d in range(T0 + 1, T1 - 1):
+                        sum_n = sum(X(n, d - t, night_idx) for t in (0, 1))
+                        need = X(n, d + 1, off_idx) + X(n, d + 2, off_idx)
+                        miss = m.NewIntVar(0, 2, f'rec2n2o_{n}_{d}')
+                        m.Add(miss >= sum_n - 1 - need)
+                        safety['rec_2n2o'].append(miss)
+
+            # 금지 패턴 N-O-D/E
+            if getattr(cfg, 'nod_noe', True):
+                for n in range(N):
+                    T0, T1 = join[n], leave[n]
+                    for d in range(T0, T1 - 2):
+                        v1 = m.NewIntVar(0, 1, f'nod_{n}_{d}')
+                        m.Add(v1 >= X(n, d, night_idx) + X(n, d + 1, off_idx) + X(n, d + 2, day_idx) - 2)
+                        safety['pattern_nod'].append(v1)
+                        v2 = m.NewIntVar(0, 1, f'noe_{n}_{d}')
+                        m.Add(v2 >= X(n, d, night_idx) + X(n, d + 1, off_idx) + X(n, d + 2, eve_idx) - 2)
+                        safety['pattern_noe'].append(v2)
+
+            # 월 최소 OFF 부족량(가능일수 클램프)
+            try:
+                for n in range(N):
+                    T0, T1 = join[n], leave[n]
+                    base_min_off = int(getattr(cfg, 'global_monthly_off_days', 0) + getattr(cfg, 'standard_personal_off_days', 0))
+                    min_off_required = min(base_min_off, T1 - T0 + 1)
+                    if min_off_required > 0:
+                        offs = sum(X(n, d, off_idx) for d in range(T0, T1 + 1))
+                        miss = m.NewIntVar(0, D, f'min_off_miss_{n}')
+                        m.Add(miss >= min_off_required - offs)
+                        safety['min_off_missing'].append(miss)
+            except Exception:
+                pass
+
+            # stage별 목적/고정
+            if stage == 1:
+                # 커버리지: shortage 우선, over는 약벌
+                m.Minimize(1000 * sum(short_terms) + sum(over_terms))
+            elif stage == 2:
+                # 1단계 최솟값 고정 + over 상한 유지
+                if coverage_eq is not None:
+                    m.Add(sum(short_terms) == coverage_eq)
+                if over_le is not None:
+                    m.Add(sum(over_terms) <= over_le)
+                # 모든 안전 위반의 합 최소화(정량)
+                safety_sum = []
+                for k, arr in safety.items():
+                    safety_sum.extend(arr)
+                m.Minimize(sum(safety_sum))
+            else:
+                # 1,2단계 고정 + 2단계에서 0이었던 위반은 0으로 잠금(새 위반 금지)
+                if coverage_eq is not None:
+                    m.Add(sum(short_terms) == coverage_eq)
+                if over_le is not None:
+                    m.Add(sum(over_terms) <= over_le)
+                if stage2_zero_locks:
+                    for k, arr in stage2_zero_locks.items():
+                        for v in arr:
+                            # v는 0/1 또는 정수슬랙(>=0). 0 고정.
+                            m.Add(v == 0)
+                # 선호/공정성 최대화
+                obj = []
+                P = roster_system.preference_matrix
+                for n in range(N):
+                    for d in range(join[n], leave[n] + 1):
+                        for s in range(S):
+                            obj.append(int(P[n, d, s] * 100) * X(n, d, s))
+                # 경력자 부족 약벌
+                for d in range(D):
+                    for code in ('D', 'E', 'N'):
+                        s = roster_system.config.shift_types.index(code)
+                        exp_assigned = sum(X(n, d, s)
+                                           for n, nu in enumerate(roster_system.nurses)
+                                           if join[n] <= d <= leave[n] and nu.experience_years >= cfg.min_experience_per_shift)
+                        shortage = m.NewIntVar(0, cfg.required_experienced_nurses, f'expShort_fb_{d}_{code}')
+                        m.Add(shortage >= cfg.required_experienced_nurses - exp_assigned)
+                        obj.append(-100 * shortage)
+                m.Maximize(sum(obj))
+
+            return m, X, short_terms, over_terms, safety
+
+        # ───── 1단계: 커버리지 ─────
+        with Timer("폴백 1단계: 커버리지 부족 최소화"):
+            m1, X1, short1, over1, safety1 = build_model(stage=1)
+            s1 = cp_model.CpSolver()
+            s1.parameters.max_time_in_seconds = tl1
+            s1.parameters.num_search_workers = 8
+            s1.parameters.relative_gap_limit = 0.15
+            st = s1.Solve(m1)
+            if st not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                print(f"{self.logger_prefix} 폴백1 실패: 모델 불가능")
+                return False
+            best_short = int(s1.Value(sum(short1)))
+            best_over = int(s1.Value(sum(over1)))
+            print(f"{self.logger_prefix} 최소 커버리지 부족: {best_short}, 과잉: {best_over}")
+
+        # ───── 2단계: 안전/법규 ─────
+        with Timer("폴백 2단계: 안전/법규 위반 최소화"):
+            m2, X2, short2, over2, safety2 = build_model(stage=2, coverage_eq=best_short, over_le=best_over)
+            s2 = cp_model.CpSolver()
+            s2.parameters.max_time_in_seconds = tl2
+            s2.parameters.num_search_workers = 8
+            s2.parameters.relative_gap_limit = 0.15
+            st2 = s2.Solve(m2)
+            if st2 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                print(f"{self.logger_prefix} 폴백2 실패: 단계 불가능 → 1단계 해 사용")
+                roster_system.roster.fill(0)
+                for n in range(N):
+                    for d in range(join[n], leave[n] + 1):
+                        for s in range(S):
+                            if s1.Value(X1(n, d, s)):
+                                roster_system.roster[n, d, s] = 1
+                return best_short == 0
+            # 안전 위반 총합 및 0-위치 목록 수집
+            stage2_zero_locks = {}
+            best_safe_sum = 0
+            for k, arr in safety2.items():
+                zeros = []
+                for v in arr:
+                    val = s2.Value(v)
+                    if val == 0:
+                        zeros.append(v)
+                    if isinstance(val, bool):
+                        best_safe_sum += int(val)
+                    else:
+                        best_safe_sum += int(val)
+                stage2_zero_locks[k] = zeros
+            print(f"{self.logger_prefix} 최소 안전 위반 합: {best_safe_sum}")
+
+        # ───── 3단계: 선호/공정성 ─────
+        with Timer("폴백 3단계: 선호/공정성 최대화"):
+            m3, X3, short3, over3, safety3 = build_model(stage=3, coverage_eq=best_short, over_le=best_over, stage2_zero_locks=stage2_zero_locks)
+            # 합계 동일성(위반 재배치 억제): 각 카테고리 합은 stage2와 동일하게 유지
+            for k in safety3.keys():
+                m3.Add(sum(safety3[k]) == sum(safety2[k]))
+            # 힌트: stage2 해를 힌트로 제공
+            for n in range(N):
+                for d in range(join[n], leave[n] + 1):
+                    for s in range(S):
+                        try:
+                            m3.AddHint(X3(n, d, s), s2.Value(X2(n, d, s)))
+                        except Exception:
+                            pass
+            s3 = cp_model.CpSolver()
+            s3.parameters.max_time_in_seconds = tl3
+            s3.parameters.num_search_workers = 8
+            s3.parameters.relative_gap_limit = 0.05
+            st3 = s3.Solve(m3)
+            if st3 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                print(f"{self.logger_prefix} 폴백3 실패: 선호 단계 불가능 → 2단계 해 사용")
+                roster_system.roster.fill(0)
+                for n in range(N):
+                    for d in range(join[n], leave[n] + 1):
+                        for s in range(S):
+                            if s2.Value(X2(n, d, s)):
+                                roster_system.roster[n, d, s] = 1
+                return best_short == 0 and best_safe_sum == 0
+
+        # stage3 해 반영
+        roster_system.roster.fill(0)
+        for n in range(N):
+            for d in range(join[n], leave[n] + 1):
+                for s in range(S):
+                    if s3.Value(X3(n, d, s)):
+                        roster_system.roster[n, d, s] = 1
+
+        print(f"{self.logger_prefix} 폴백 완료: 커버리지부족={best_short}, 안전위반합={best_safe_sum}")
+        return best_short == 0 and best_safe_sum == 0
+
     def _quick_initial_solve(self, rs: RosterSystem,
                              tl:int, grouped, run_seed: int | None = None):
         from ortools.sat.python import cp_model
@@ -731,7 +1117,7 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
                 m.Add(X(n,d,day)==0); m.Add(X(n,d,eve)==0)
 
         # 연속 Night
-        for d0 in range(T0, T1-L):
+        for d0 in range(T0, T1-L+1):
             m.Add(sum(X(n,d0+t,night) for t in range(L+1)) <= L)
 
         # 월 Night 상한
@@ -774,8 +1160,7 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
                                for n,nu in enumerate(rs.nurses)
                                if join[n]<=d<=leave[n] and
                                nu.experience_years>=cfg.min_experience_per_shift)
-            shortage = m.NewIntVar(0, cfg.required_experienced_nurses,
-                                   f'expShort_{d}_{code}')
+            shortage = m.NewIntVar(0, cfg.required_experienced_nurses, f'expShort_{d}_{code}')
             m.Add(shortage >= cfg.required_experienced_nurses - exp_assigned)
             obj.append(-200*shortage)
 
