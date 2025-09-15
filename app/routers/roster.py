@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -907,3 +907,37 @@ async def update_schedule_name(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이름 업데이트 실패: {str(e)}")
+
+@router.get("/schedule/{schedule_id}/export", response_class=StreamingResponse)
+async def export_schedule_excel(
+    schedule_id: str,
+    current_user: UserSchema = Depends(get_current_user_from_cookie),
+    db: Session = Depends(get_db)
+):
+    """
+        - 근무표 엑셀 내보내기
+        - 파일명: roster_{year}_{month}_v{version}.xlsx
+    """
+    if not current_user or not current_user.is_head_nurse:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    # 스케줄 정보 확인(파일명에 사용)
+    schedule = db.query(Schedule).filter(
+        Schedule.schedule_id == schedule_id,
+        Schedule.group_id == current_user.group_id,
+        Schedule.dropped == False
+    ).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="스케줄을 찾을 수 없습니다.")
+    try:
+        from services.excel_service import export_schedule_excel_bytes
+        data = export_schedule_excel_bytes(schedule_id, current_user, db)
+        filename = f"roster_{schedule.year}_{schedule.month}_v{schedule.version}.xlsx"
+        return StreamingResponse(
+            iter([data]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"{filename}\""
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"엑셀 생성 실패: {str(e)}")

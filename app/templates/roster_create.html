@@ -1247,6 +1247,7 @@
                 </div>
                 <div class="roster-actions">
                     <button id="save-roster-btn" class="request-button" onclick="saveRoster()">해당 버전으로 발행하기</button>
+                    <button id="download-excel-btn" class="request-button" onclick="downloadRosterExcel()">엑셀로 다운로드</button>
                     <a href="/roster-view" id="view-roster-link" class="request-button disabled-link" onclick="event.preventDefault(); alert('먼저 근무표를 저장해주세요.');">근무표 보기</a>
                 </div>
             </div>
@@ -3553,6 +3554,37 @@
             });
             html += '</tbody></table>';
             container.innerHTML = html;
+        }
+
+        async function downloadRosterExcel() {
+            try {
+                const scheduleId = currentVersion || (generatedRosterData && generatedRosterData.schedule_id);
+                if (!scheduleId) {
+                    alert('다운로드할 스케줄이 없습니다. 먼저 근무표를 생성하거나 버전을 선택하세요.');
+                    return;
+                }
+                const res = await fetch(`/roster/schedule/${scheduleId}/export`);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || '엑셀 다운로드에 실패했습니다.');
+                }
+                const blob = await res.blob();
+                // 파일명 추출
+                const disp = res.headers.get('Content-Disposition') || '';
+                const match = /filename="?([^";]+)"?/i.exec(disp);
+                const filename = match ? match[1] : `roster_${currentYear}_${currentMonth + 1}.xlsx`;
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error(e);
+                alert(e.message || '엑셀 다운로드 중 오류가 발생했습니다.');
+            }
         }
     </script>
 </body>
