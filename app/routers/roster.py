@@ -78,29 +78,57 @@ async def get_config_by_version(
     try:
         if config_version == "noVersion":
             cfg = DEFAULT_CONFIG
+            # DEFAULT 설정으로 RosterConfig 레코드 생성 및 저장
+            new_config = RosterConfigModel(
+                config_version="default",
+                office_id=current_user.office_id,
+                group_id=current_user.group_id,
+                day_req=cfg.daily_shift_requirements.get('D', 3),
+                eve_req=cfg.daily_shift_requirements.get('E', 3),
+                nig_req=cfg.daily_shift_requirements.get('N', 2),
+                min_exp_per_shift=cfg.min_experience_per_shift,
+                req_exp_nurses=cfg.required_experienced_nurses,
+                two_offs_per_week=getattr(cfg, 'enforce_two_offs_per_week', False),
+                max_nig_per_month=cfg.max_night_shifts_per_month,
+                three_seq_nig=getattr(cfg, 'max_consecutive_nights', 3) >= 3,
+                two_offs_after_three_nig=getattr(cfg, 'two_offs_after_three_nig', False),
+                two_offs_after_two_nig=getattr(cfg, 'two_offs_after_two_nig', False),
+                banned_day_after_eve=getattr(cfg, 'banned_day_after_eve', True),
+                max_conseq_work=getattr(cfg, 'max_consecutive_work_days', 6),
+                off_days=cfg.calculate_total_off_days(0),
+                shift_priority=getattr(cfg, 'shift_requirement_priority', 0.8),
+                weekend_shift_ratio=getattr(cfg, 'weekend_shift_ratio', 1.0),
+                patient_amount=getattr(cfg, 'patient_amount', 0),
+                sequential_offs=getattr(cfg, 'sequential_offs', True),
+                even_nights=getattr(cfg, 'even_nights', True),
+                nod_noe=False
+            )
+            db.add(new_config)
+            db.commit()
+            db.refresh(new_config)
             return {
-                "config_id": None,
-                "config_version": "default",
-                "day_req": cfg.daily_shift_requirements.get('D', 3),
-                "eve_req": cfg.daily_shift_requirements.get('E', 3),
-                "nig_req": cfg.daily_shift_requirements.get('N', 2),
-                "min_exp_per_shift": cfg.min_experience_per_shift,
-                "req_exp_nurses": cfg.required_experienced_nurses,
-                "two_offs_per_week": getattr(cfg, 'enforce_two_offs_per_week', False),
-                "max_nig_per_month": cfg.max_night_shifts_per_month,
-                "three_seq_nig": getattr(cfg, 'max_consecutive_nights', 3) >= 3,
-                "two_offs_after_three_nig": getattr(cfg, 'two_offs_after_three_nig', False),
-                "two_offs_after_two_nig": getattr(cfg, 'two_offs_after_two_nig', False),
-                "banned_day_after_eve": getattr(cfg, 'banned_day_after_eve', True),
-                "max_conseq_work": getattr(cfg, 'max_consecutive_work_days', 6),
-                "off_days": cfg.calculate_total_off_days(0),
-                "shift_priority": getattr(cfg, 'shift_requirement_priority', 0.8),
-                "weekend_shift_ratio": getattr(cfg, 'weekend_shift_ratio', 1.0),
-                "patient_amount": getattr(cfg, 'patient_amount', 0),
-                "sequential_offs": getattr(cfg, 'sequential_offs', True),
-                "even_nights": getattr(cfg, 'even_nights', True),
-                "created_at": None,
-                "nod_noe": False
+                "config_id": new_config.config_id,
+                "config_version": new_config.config_version,
+                "day_req": new_config.day_req,
+                "eve_req": new_config.eve_req,
+                "nig_req": new_config.nig_req,
+                "min_exp_per_shift": new_config.min_exp_per_shift,
+                "req_exp_nurses": new_config.req_exp_nurses,
+                "two_offs_per_week": new_config.two_offs_per_week,
+                "max_nig_per_month": new_config.max_nig_per_month,
+                "three_seq_nig": new_config.three_seq_nig,
+                "two_offs_after_three_nig": new_config.two_offs_after_three_nig,
+                "two_offs_after_two_nig": new_config.two_offs_after_two_nig,
+                "banned_day_after_eve": new_config.banned_day_after_eve,
+                "max_conseq_work": new_config.max_conseq_work,
+                "off_days": new_config.off_days,
+                "shift_priority": new_config.shift_priority,
+                "weekend_shift_ratio": new_config.weekend_shift_ratio,
+                "patient_amount": new_config.patient_amount,
+                "sequential_offs": new_config.sequential_offs,
+                "even_nights": new_config.even_nights,
+                "created_at": new_config.created_at.isoformat() if new_config.created_at else None,
+                "nod_noe": new_config.nod_noe
             }
         else:
             config = db.query(RosterConfigModel).filter(
