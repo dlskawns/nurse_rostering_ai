@@ -565,28 +565,28 @@ def export_schedule_excel_bytes(schedule_id: str, current_user, db) -> bytes:
     shifts_db = db.query(Shift).all()
     known_shift_ids = {s.shift_id for s in shifts_db}
 
-    # config_version → ShiftManage 별칭 맵 작성
-    if schedule.config_id:
-        rc = db.query(RosterConfig).filter(RosterConfig.config_id == schedule.config_id).first()
-    else:
-        rc = db.query(RosterConfig).filter(RosterConfig.group_id == current_user.group_id).order_by(RosterConfig.created_at.desc()).first()
-    config_version = rc.config_version if rc else None
+    # # config_version → ShiftManage 별칭 맵 작성
+    # if schedule.config_id:
+    #     rc = db.query(RosterConfig).filter(RosterConfig.config_id == schedule.config_id).first()
+    # else:
+    #     rc = db.query(RosterConfig).filter(RosterConfig.group_id == current_user.group_id).order_by(RosterConfig.created_at.desc()).first()
+    # config_version = rc.config_version if rc else None
 
     alias_map: dict[str, str] = {}
-    if config_version:
-        sm_rows = db.query(ShiftManage).filter(
-            ShiftManage.office_id == current_user.office_id,
-            ShiftManage.group_id == current_user.group_id,
-            ShiftManage.config_version == config_version
-        ).all()
-        for row in sm_rows:
-            if not row.main_code:
-                continue
-            base = row.main_code.upper()
-            alias_map[base] = base
-            if row.codes:
-                for c in row.codes:
-                    alias_map[str(c).upper()] = base
+    # if config_version:
+    sm_rows = db.query(ShiftManage).filter(
+        ShiftManage.office_id == current_user.office_id,
+        ShiftManage.group_id == current_user.group_id,
+        # ShiftManage.config_version == config_version
+    ).all()
+    for row in sm_rows:
+        if not row.main_code:
+            continue
+        base = row.main_code.upper()
+        alias_map[base] = base
+        if row.codes:
+            for c in row.codes:
+                alias_map[str(c).upper()] = base
     alias_map.setdefault('OFF', 'O'); alias_map.setdefault('O', 'O')
 
     def to_base(code: str) -> str:

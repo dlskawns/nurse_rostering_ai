@@ -51,17 +51,16 @@ async def get_config_versions(
     try:
         # Get unique config versions with latest created_at for each version
         versions = db.query(
-            RosterConfigModel.config_version,
+            RosterConfigModel.config_id,
             func.max(RosterConfigModel.created_at).label('latest_created_at')
         ).filter(
             RosterConfigModel.office_id == current_user.office_id,
             RosterConfigModel.group_id == current_user.group_id,
-            RosterConfigModel.config_version.isnot(None)
-        ).group_by(RosterConfigModel.config_version).order_by(
+            RosterConfigModel.config_id.isnot(None)
+        ).group_by(RosterConfigModel.config_id).order_by(
             func.max(RosterConfigModel.created_at).desc()
         ).all()
-        
-        return [{"config_version": v.config_version} for v in versions]
+        return [{"config_id": v.config_id} for v in versions]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get config versions: {str(e)}")
 
@@ -74,13 +73,17 @@ async def get_config_by_version(
     """Get the latest config for a specific version"""
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
+    config = db.query(RosterConfigModel).filter(
+        RosterConfigModel.office_id == current_user.office_id,
+        RosterConfigModel.group_id == current_user.group_id
+    ).order_by(RosterConfigModel.created_at.desc()).first()
     
     try:
-        if config_version == "noVersion":
+        if not config:
             cfg = DEFAULT_CONFIG
             # DEFAULT 설정으로 RosterConfig 레코드 생성 및 저장
             new_config = RosterConfigModel(
-                config_version="default",
+                # config_version="default",
                 office_id=current_user.office_id,
                 group_id=current_user.group_id,
                 day_req=cfg.daily_shift_requirements.get('D', 3),
@@ -108,7 +111,7 @@ async def get_config_by_version(
             db.refresh(new_config)
             return {
                 "config_id": new_config.config_id,
-                "config_version": new_config.config_version,
+                # "config_version": new_config.config_version,
                 "day_req": new_config.day_req,
                 "eve_req": new_config.eve_req,
                 "nig_req": new_config.nig_req,
@@ -134,15 +137,15 @@ async def get_config_by_version(
             config = db.query(RosterConfigModel).filter(
                 RosterConfigModel.office_id == current_user.office_id,
                 RosterConfigModel.group_id == current_user.group_id,
-                RosterConfigModel.config_version == config_version
+                # RosterConfigModel.config_id == config_id
             ).order_by(RosterConfigModel.created_at.desc()).first()
-        
+            
             if not config:
-                raise HTTPException(status_code=404, detail="Config version not found")
+                raise HTTPException(status_code=404, detail="Config not found")
             pprint.pprint(config)
             return {
                 "config_id": config.config_id,
-                "config_version": config.config_version,
+                # "config_version": config.config_version,
                 "day_req": config.day_req,
                 "eve_req": config.eve_req,
                 "nig_req": config.nig_req,
@@ -705,7 +708,8 @@ async def validate_roster(
     roster      = roster_data.get('roster')
     schedule_id = roster_data.get('schedule_id')
     config_id = db.query(Schedule).filter(Schedule.schedule_id == schedule_id).first().config_id
-    config_version = db.query(RosterConfigModel).filter(RosterConfigModel.config_id == config_id).first().config_version
+
+    # config_version = db.query(RosterConfigModel).filter(RosterConfigModel.config_id == config_id).first().config_version
     if not all([year, month, roster]):
         raise HTTPException(
             status_code=400,
@@ -719,29 +723,28 @@ async def validate_roster(
         #  * codes 열(JSON) 에 들어있는 파생 코드를 본교대(main_code) 로 매핑
         from db.models import ShiftManage, Nurse, RosterConfig  # local import
 
-        # config_version을 가져오기 위해 config_id로 RosterConfig 조회
-        if config_id:
-            config_for_version = db.query(RosterConfig).filter(
-                RosterConfig.config_id == config_id
-            ).first()
-            config_version = config_for_version.config_version if config_for_version else None
-        else:
-            # config_id가 없는 경우 최신 config의 version 사용
-            latest_config_for_version = db.query(RosterConfig).filter(
-                RosterConfig.group_id == current_user.group_id
-            ).order_by(RosterConfig.created_at.desc()).first()
-            config_version = latest_config_for_version.config_version if latest_config_for_version else None
+        # # config_version을 가져오기 위해 config_id로 RosterConfig 조회
+        # if config_id:
+        #     config_for_version = db.query(RosterConfig).filter(
+        #         RosterConfig.config_id == config_id
+        #     ).first()
+        #     # config_version = config_for_version.config_version if config_for_version else None
+        # else:
+        #     # config_id가 없는 경우 최신 config의 version 사용
+        #     latest_config_for_version = db.query(RosterConfig).filter(
+        #         RosterConfig.group_id == current_user.group_id
+        #     ).order_by(RosterConfig.created_at.desc()).first()
+        #     config_version = latest_config_for_version.config_version if latest_config_for_version else None
         
-        if not config_version:
-            return {"violations": ["설정 버전을 찾을 수 없습니다."]}
+        # if not config_version:
+        #     return {"violations": ["설정 버전을 찾을 수 없습니다."]}
             
         # ○ 현 수간호사의 부서 기준으로 조회
         shift_rows = db.query(ShiftManage).filter(
             ShiftManage.office_id == current_user.office_id,
             ShiftManage.group_id  == current_user.group_id,
-            ShiftManage.config_version == config_version
+            # ShiftManage.config_version == config_version
         ).all()
-
         #    예) { 'D': 'D', 'D1': 'D', 'MD': 'D',  'E': 'E', … }
         alias_map: dict[str, str] = {}
         for row in shift_rows:
@@ -754,28 +757,31 @@ async def validate_roster(
                 # row.codes 가 JSON 컬럼 → 이미 list 로 deserialize 되어있음
                 for code in row.codes:
                     alias_map[code.upper()] = base
-
         # OFF(휴무) 도 항상 포함시킴
         alias_map.setdefault('OFF', 'O')
         alias_map.setdefault('O',   'O')
-
         # ──────────────────────── 2. 근무표 설정(인원/제약) 불러오기 ────────────────────────
-        if config_id:
-            # config_id가 제공된 경우 해당 config 사용
-            latest_config_db = (
-                db.query(RosterConfig)
-                  .filter(RosterConfig.config_id == config_id)
-                  .first()
-            )
-        else:
-            # config_id가 없는 경우 최신 config 사용
-            latest_config_db = (
-                db.query(RosterConfig)
-                  .filter(RosterConfig.group_id == current_user.group_id)
-                  .order_by(RosterConfig.created_at.desc())
-                  .first()
-            )
-        
+        # if config_id:
+        #     # config_id가 제공된 경우 해당 config 사용
+        #     latest_config_db = (
+        #         db.query(RosterConfig)
+        #           .filter(RosterConfig.config_id == config_id)
+        #           .first()
+        #     )
+        #  
+        # else:
+        #     # config_id가 없는 경우 최신 config 사용
+        #     latest_config_db = (
+        #         db.query(RosterConfig)
+        #           .filter(RosterConfig.group_id == current_user.group_id)
+        #           .order_by(RosterConfig.created_at.desc())
+        #           .first()
+        #     )
+        #  
+        latest_config_db = db.query(RosterConfigModel).filter(
+            RosterConfigModel.office_id == current_user.office_id,
+            RosterConfigModel.group_id == current_user.group_id,
+        ).order_by(RosterConfigModel.created_at.desc()).first()
         if not latest_config_db:
             return {"violations": ["근무표 설정을 찾을 수 없습니다."]}
 
@@ -797,17 +803,14 @@ async def validate_roster(
                 db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
             )
         ]
-
         system = RosterSystem(
             nurses        = nurses_for_engine,
             target_month  = date(year, month, 1),
             config        = roster_config_for_engine
         )
-
         # shift_types 는 ['D','E','N','O'] (엔진 기본).  
         shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
         system.roster.fill(0)                                # 3-D 배열 0으로 초기화
-
         # ──────────────────────── 4. 프론트에서 넘어온 근무표 → 엔진 포맷 변환 ────────────────────────
         for nurse_idx, nurse_data in enumerate(roster):
             if nurse_idx >= len(system.nurses):
@@ -827,12 +830,10 @@ async def validate_roster(
                 if shift_idx is not None:
                     system.roster[nurse_idx, day_idx, shift_idx] = 1
                 # else: 알 수 없는 코드 → 무시
-
         # ──────────────────────── 5. 위반사항 탐색 & 포매팅 ────────────────────────
         violation_details = system._find_violations()
         violation_messages: set[str] = set()
         detailed_violations: list[dict] = []
-
         for v in violation_details:
             if v['type'] == 'shift_requirement':
                 violation_messages.add(
@@ -882,7 +883,6 @@ async def validate_roster(
                     'nurse_name': nurse_name,
                     'day': v['day']
                 })
-
         return {
             "violations": sorted(violation_messages),
             "detailed_violations": detailed_violations

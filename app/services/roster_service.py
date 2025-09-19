@@ -23,15 +23,15 @@ def save_roster_config_service(config_data: RosterConfigCreate, user, db: Sessio
         if not nurse or not nurse.group:
             raise Exception("User group information not found")
         # config_version을 사용하여 ShiftManage 조회
-        config_version = config_data.config_version
-        if not config_version:
-            config_version = f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # config_version = config_data.config_version
+        # if not config_version:
+        #     config_version = f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
         shift_manages = db.query(ShiftManage).filter(
             ShiftManage.office_id == nurse.group.office_id,
             ShiftManage.group_id == user.group_id,
             ShiftManage.nurse_class == 'RN',
-            ShiftManage.config_version == config_version
+            # ShiftManage.config_version == config_version
         ).all()
         day_req = eve_req = nig_req = 0
         if shift_manages:
@@ -51,9 +51,9 @@ def save_roster_config_service(config_data: RosterConfigCreate, user, db: Sessio
             'nig_req': nig_req
         })
         
-        # config_version이 None이면 기본값 설정
-        if not config_dict.get('config_version'):
-            config_dict['config_version'] = f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        ## config_version이 None이면 기본값 설정
+        # if not config_dict.get('config_version'):
+        #     config_dict['config_version'] = f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         db_config = RosterConfigModel(
             **config_dict,
             office_id=user.office_id,
