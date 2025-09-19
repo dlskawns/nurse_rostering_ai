@@ -121,6 +121,8 @@ class ShiftSubgraph(TypedDict):
     shift_result: Annotated[list, operator.add]
     model: object
     mcp_tools: object
+    year: int
+    month: int
 
 class shiftResponse(TypedDict):
     shift: str 
@@ -136,7 +138,7 @@ class shiftAnalyzer(BaseModel):
     result: shiftResponse
 
 class shiftAnalyzerPrompt:
-    def __init__(self, context):
+    def __init__(self, context, year: int, month: int):
         """
         프롬프트 클래스
         """
@@ -144,6 +146,10 @@ class shiftAnalyzerPrompt:
             # GOAL:
             당신은 간호사 근무표 시스템의 "희망·비선호 스코어 추출기"입니다.  
             입력 문장(자연어) ➜ 구조화 JSON 으로 변환해 주세요.
+            다음 도구들이 제공되지만, 반드시 필요한 경우에만 사용합니다:
+            - get_weekends
+            - get_holidays
+            도구 호출이 적절치 않을 경우, 절대 호출하지 말고 직접 답변만 작성합니다.
 
             1. Request Type  (가중치 보정치)
             | Type    | 설명                              | Modifier |
@@ -177,7 +183,7 @@ class shiftAnalyzerPrompt:
             "request_type_reason": "string",
             "request_importance": 0-5,
             "request_importance_reason": "string",
-            "processor": "GPT가 해석한 간단 설명",
+            "processor": "왜 요청을 이렇게 해석했는지 설명",
             "result": {{
                 "D"  : {{ "1":2.5, "3":2.5, ... }},
                 "E"  : {{ ... }},
@@ -242,6 +248,7 @@ class shiftAnalyzerPrompt:
                 
         self.human=f"""
             # CONTEXT: 
+                {year}년 {month}월 기준 근무 희망 요청입니다.
                 {context}
             # OUTPUT:
             """
@@ -250,12 +257,19 @@ async def shift_analyzer(state):
     phase = state['phase']
     context = state['requests'][phase]
     tools = state['mcp_tools']
+    year = state['year']
+    month = state['month']
     
-    shift_analyzer_prompt = shiftAnalyzerPrompt(context)
+    shift_analyzer_prompt = shiftAnalyzerPrompt(context, year, month)
     
     # 백업 모델들 순서대로 시도
     models_to_try = [
         # 1차: Anthropic (기본)
+        # ChatAnthropic(
+        #     model="claude-sonnet-4-20250514",
+        #     anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        # ),
+
         ChatAnthropic(
             model="claude-3-7-sonnet-20250219",
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
@@ -278,7 +292,7 @@ async def shift_analyzer(state):
     for i, client in enumerate(models_to_try):
         try:
             print(f"Shift Analyzer: {i+1}차 모델 시도 중...")
-            
+            print('모델명', client)
             agent = create_react_agent(client, tools, response_format=shiftAnalyzer)
             result = await agent.ainvoke({
                 "messages": [
@@ -335,6 +349,8 @@ async def shift_analyzer(state):
     return {"shift_result": [sr.result]}
 
 from services.holiday_pack import tool_get_weekends, tool_get_holidays
+# from services.holiday_pack import get_weekends as _get_weekends, get_korean_public_holidays as _get_holidays, serialise as _serialise
+# from langchain_core.tools import Tool
 async def create_shift_analyzer(parent_state):
 
     llm = ChatGoogleGenerativeAI(
@@ -342,11 +358,30 @@ async def create_shift_analyzer(parent_state):
         temperature=0,
         google_api_key=os.getenv("GOOGLE_API_KEY"),
     )
+
+    # llm = ChatAnthropic(
+    #         model="claude-sonnet-4-20250514",
+    #         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+    #     ),
     requests = parent_state['query_shift']         # Shift List ex. ["9/9: D", "9/10: D", "9/16: OFF", "9/9, 9/10, 9/16 외에 웬만하면 E로 줘"]
     client = parent_state['model']
 
     tools = [tool_get_weekends, tool_get_holidays]
+    # # year/month 고정 바인딩 툴: LLM이 어떤 인자를 주더라도 무시하고 컨텍스트 연/월을 사용
+    # def _tool_weekends(_: str) -> list[str]:
+    #     return _serialise(_get_weekends(parent_state['year'], parent_state['month']))
+
+    # def _tool_holidays(_: str) -> list[str]:
+    #     return _serialise(_get_holidays(parent_state['year'], parent_state['month']))
+
+    # tools = [
+    #     Tool(name="get_weekends", description="컨텍스트의 연/월 기준 주말 날짜 반환. 인자는 무시됨.", func=_tool_weekends),
+    #     Tool(name="get_holidays", description="컨텍스트의 연/월 기준 한국 공휴일 반환. 인자는 무시됨.", func=_tool_holidays),
+    # ]
+    year = parent_state['year']
+    month = parent_state['month']
     n_requests = len(requests)
+    print('year', year, 'month', month)
     if n_requests == 0:
         print('shift_analyzer 답변 없음')
         return {"shift_results": []}
@@ -366,6 +401,6 @@ async def create_shift_analyzer(parent_state):
     graph.add_edge('collector', END)
     graph_app = graph.compile()
 
-    result = await graph_app.ainvoke({"requests": requests, "model": llm, "mcp_tools": tools})
+    result = await graph_app.ainvoke({"requests": requests, "model": llm, "mcp_tools": tools, "year": year, "month": month})
     print('shift_analyzer 답변: ', result)
     return {"shift_results": [result]}

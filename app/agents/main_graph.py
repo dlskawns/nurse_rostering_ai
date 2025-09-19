@@ -23,7 +23,8 @@ class ContextAnalyticsState(TypedDict):
     preference_results: Annotated[list, operator.add]
     model: object
     case: List[str] | None             # case 예시: {'date': '2025-07-01', 'shift': 'D'}
-    
+    year: int
+    month: int
     
 
 def GraphGenerate():

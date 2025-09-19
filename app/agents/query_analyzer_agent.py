@@ -113,7 +113,7 @@ def _compute_cost(prompt_tokens: int, completion_tokens: int, model_name: str) -
 
 
 class queryAnalyzerPrompt:
-    def __init__(self, context):
+    def __init__(self, context, year, month):
         """
         프롬프트 클래스
         """
@@ -131,8 +131,13 @@ class queryAnalyzerPrompt:
                 3. 날짜가 생략된 지시("그 외엔…")는 앞선 날짜를 보완하여 정보 손실 없이 재기술.  
                 예) "5/5는 N, 그 외엔 E" →  
                     `"Shift": ["5/5은 N로 줘", "5/5 제외 나머지는 E로 줘"]`
-                4. 절대 중복/혼합 금지: 한 요소에 OFF와 E 같이 넣지 마세요.
-                5. 최종 JSON 키
+                4. 반복적/패턴적 요청(예: "주말엔 쉬고 싶다", "매주 수요일은 OFF")은 
+                절대로 모든 날짜로 분할하지 말고, **하나의 규칙형 항목**으로 기록.
+                - 예) "주말엔 쉬고 싶다" → `"Shift": ["매주 주말은 O로 줘"]`
+                - 예) "수요일은 OFF" → `"Shift": ["매주 수요일은 O로 줘"]`
+                - 예) "평일엔 D, 주말엔 O" → `"Shift": ["평일은 D로 줘", "주말은 O로 줘"]`
+                5. 절대 중복/혼합 금지: 한 요소에 OFF와 E 같이 넣지 마세요.
+                6. 최종 JSON 키
                     Chat ― 근무와 무관한 잡담
                     Shift ― 날짜·교대·OFF 요청
                     Preference ― 다른 간호사 함께/회피 선호
@@ -147,7 +152,12 @@ class queryAnalyzerPrompt:
                 | Night     | "N" |
                 | Off/휴무    | "O" |
                 | 날짜 구분     | `M/D`  또는 `M월 D일` 등 모두 허용, 출력은 원문 그대로 보존 |
+                | 주기 표현   | "매주", "주말", "평일", "격주" 등은 그대로 규칙형 항목으로 남김 |
 
+            ## 3. 처리 지침
+                * "매주/주말/평일" 같은 주기성 표현은 원문 그대로 유지하며, 절대로 날짜를 추측하여 쪼개지 마세요.
+                * 해석 불가 문장·모호 표현은 Others에 넣으세요.
+            
             # CONTEXT:
                 "5/5는 쉬고 싶고, 5/19는 나이트 후 OFF, 그리고 정간호사랑은 겹치기 싫어요"
 
@@ -168,6 +178,7 @@ class queryAnalyzerPrompt:
         
         self.human=f"""
             # CONTEXT: 
+            {year}년 {month}월의 근무표를 짜기 위해서 다음과 같은 요청을 받았습니다.
             {context}
             # OUTPUT:
         """
@@ -175,7 +186,9 @@ class queryAnalyzerPrompt:
 
 async def query_analyzer(state):
     context = state['request']
-    query_analyzer_prompt = queryAnalyzerPrompt(context)
+    year = state['year']
+    month = state['month']
+    query_analyzer_prompt = queryAnalyzerPrompt(context, year, month)
     
     # 백업 모델들 순서대로 시도
     models_to_try = [
