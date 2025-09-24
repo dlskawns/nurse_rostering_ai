@@ -168,10 +168,11 @@ async def invoke_graph(request: WantedInvokeRequest):
     """
     그래프를 실행하여 로스터 관련 요청을 처리합니다.
     """
+    
     try:
         result = {}
   
-        response =  await graph_service.invoke(request.request, request.schema, request.case)
+        response =  await graph_service.invoke(request.request, request.schema, request.case, request.year, request.month)
 
         if len(response[0]) > 0:
             result['shift'] = parse_shift_results(response)

@@ -38,6 +38,7 @@ class Nurse(Base):
     sequence = Column(INTEGER, nullable=False, default=0)
     active = Column(INTEGER, default=1)
     group = relationship("Group")
+
     @property
     def office_id(self) -> str | None:
         return self.group.office_id if self.group else None
@@ -92,11 +93,11 @@ class ShiftManage(Base):
     # ── 복합 PRIMARY KEY ──────────────────────────────
     office_id  = Column(VARCHAR(50), ForeignKey("offices.office_id"), primary_key=True)
     group_id   = Column(VARCHAR(50), ForeignKey("groups.group_id"), primary_key=True)
-    nurse_class = Column(VARCHAR(10), nullable=False, primary_key=True)  # 'RN', 'AN', '보조'
+    nurse_class = Column(VARCHAR(10), nullable=False)  # 'RN', 'AN', '보조'
     shift_slot = Column(INTEGER, nullable=False, primary_key=True)  # 슬롯 번호 (1, 2, 3...)
     main_code = Column(VARCHAR(10), nullable=True)  # 메인 근무코드 (하나만)
     codes = Column(JSON, nullable=True)  # 근무코드 리스트 ['D', 'E', 'N']
-    config_version = Column(VARCHAR(20), primary_key=True)
+    # config_version = Column(VARCHAR(20), primary_key=True)
     manpower = Column(INTEGER, nullable=False, default=0)  # 인력 수
 
     office = relationship("Office")

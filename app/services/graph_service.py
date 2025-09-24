@@ -4,7 +4,7 @@ class GraphService:
     def __init__(self):
         self._graph = GraphGenerate()
 
-    async def invoke(self, request: str | list[str], schema: str, case: object | None):
+    async def invoke(self, request: str | list[str], schema: str, case: object | None, year: int, month: int):
         """
         주어진 요청과 스키마로 그래프를 실행합니다.
 
@@ -16,7 +16,7 @@ class GraphService:
             dict: 그래프 실행 결과
         """
 
-        response = await self._graph.ainvoke({"request": request, "schema": schema, "case": case})
+        response = await self._graph.ainvoke({"request": request, "schema": schema, "case": case, "year": year, "month": month})
         response = [response['shift_results'], response['preference_results']]
 
         return response

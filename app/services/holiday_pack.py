@@ -65,7 +65,10 @@ def serialise(dates: List[date]) -> list[str]:
 # -----------------------------
 @tool("get_weekends")
 def tool_get_weekends(year: int, month: int) -> list[str]:
-    """    Get the specific month and date information for user
+    """    
+    Only Use This Tool when you want to know the weekends date information
+    Do not use when you don't need to know that info
+    Get the specific month and date information for user
     This function returns the month's weekends date information
 
     Args:
@@ -80,6 +83,8 @@ def tool_get_weekends(year: int, month: int) -> list[str]:
 @tool("get_holidays")
 def tool_get_holidays(year: int, month: int) -> list[str]:
     """
+    Only Use This Tool when you want to know the public holiday date information
+    Do not use when you don't need to know that info
     Get the specific month's public holiday information for user
     This function returns the month's public holiday date information
 

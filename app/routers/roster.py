@@ -51,17 +51,16 @@ async def get_config_versions(
     try:
         # Get unique config versions with latest created_at for each version
         versions = db.query(
-            RosterConfigModel.config_version,
+            RosterConfigModel.config_id,
             func.max(RosterConfigModel.created_at).label('latest_created_at')
         ).filter(
             RosterConfigModel.office_id == current_user.office_id,
             RosterConfigModel.group_id == current_user.group_id,
-            RosterConfigModel.config_version.isnot(None)
-        ).group_by(RosterConfigModel.config_version).order_by(
+            RosterConfigModel.config_id.isnot(None)
+        ).group_by(RosterConfigModel.config_id).order_by(
             func.max(RosterConfigModel.created_at).desc()
         ).all()
-        
-        return [{"config_version": v.config_version} for v in versions]
+        return [{"config_id": v.config_id} for v in versions]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get config versions: {str(e)}")
 
@@ -74,47 +73,79 @@ async def get_config_by_version(
     """Get the latest config for a specific version"""
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
+    config = db.query(RosterConfigModel).filter(
+        RosterConfigModel.office_id == current_user.office_id,
+        RosterConfigModel.group_id == current_user.group_id
+    ).order_by(RosterConfigModel.created_at.desc()).first()
     
     try:
-        if config_version == "noVersion":
+        if not config:
             cfg = DEFAULT_CONFIG
+            # DEFAULT 설정으로 RosterConfig 레코드 생성 및 저장
+            new_config = RosterConfigModel(
+                # config_version="default",
+                office_id=current_user.office_id,
+                group_id=current_user.group_id,
+                day_req=cfg.daily_shift_requirements.get('D', 3),
+                eve_req=cfg.daily_shift_requirements.get('E', 3),
+                nig_req=cfg.daily_shift_requirements.get('N', 2),
+                min_exp_per_shift=cfg.min_experience_per_shift,
+                req_exp_nurses=cfg.required_experienced_nurses,
+                two_offs_per_week=getattr(cfg, 'enforce_two_offs_per_week', False),
+                max_nig_per_month=cfg.max_night_shifts_per_month,
+                three_seq_nig=getattr(cfg, 'max_consecutive_nights', 3) >= 3,
+                two_offs_after_three_nig=getattr(cfg, 'two_offs_after_three_nig', False),
+                two_offs_after_two_nig=getattr(cfg, 'two_offs_after_two_nig', False),
+                banned_day_after_eve=getattr(cfg, 'banned_day_after_eve', True),
+                max_conseq_work=getattr(cfg, 'max_consecutive_work_days', 6),
+                off_days=cfg.calculate_total_off_days(0),
+                shift_priority=getattr(cfg, 'shift_requirement_priority', 0.8),
+                weekend_shift_ratio=getattr(cfg, 'weekend_shift_ratio', 1.0),
+                patient_amount=getattr(cfg, 'patient_amount', 0),
+                sequential_offs=getattr(cfg, 'sequential_offs', True),
+                even_nights=getattr(cfg, 'even_nights', True),
+                nod_noe=False
+            )
+            db.add(new_config)
+            db.commit()
+            db.refresh(new_config)
             return {
-                "config_id": None,
-                "config_version": "default",
-                "day_req": cfg.daily_shift_requirements.get('D', 3),
-                "eve_req": cfg.daily_shift_requirements.get('E', 3),
-                "nig_req": cfg.daily_shift_requirements.get('N', 2),
-                "min_exp_per_shift": cfg.min_experience_per_shift,
-                "req_exp_nurses": cfg.required_experienced_nurses,
-                "two_offs_per_week": getattr(cfg, 'enforce_two_offs_per_week', False),
-                "max_nig_per_month": cfg.max_night_shifts_per_month,
-                "three_seq_nig": getattr(cfg, 'max_consecutive_nights', 3) >= 3,
-                "two_offs_after_three_nig": getattr(cfg, 'two_offs_after_three_nig', False),
-                "two_offs_after_two_nig": getattr(cfg, 'two_offs_after_two_nig', False),
-                "banned_day_after_eve": getattr(cfg, 'banned_day_after_eve', True),
-                "max_conseq_work": getattr(cfg, 'max_consecutive_work_days', 6),
-                "off_days": cfg.calculate_total_off_days(0),
-                "shift_priority": getattr(cfg, 'shift_requirement_priority', 0.8),
-                "weekend_shift_ratio": getattr(cfg, 'weekend_shift_ratio', 1.0),
-                "patient_amount": getattr(cfg, 'patient_amount', 0),
-                "sequential_offs": getattr(cfg, 'sequential_offs', True),
-                "even_nights": getattr(cfg, 'even_nights', True),
-                "created_at": None,
-                "nod_noe": False
+                "config_id": new_config.config_id,
+                # "config_version": new_config.config_version,
+                "day_req": new_config.day_req,
+                "eve_req": new_config.eve_req,
+                "nig_req": new_config.nig_req,
+                "min_exp_per_shift": new_config.min_exp_per_shift,
+                "req_exp_nurses": new_config.req_exp_nurses,
+                "two_offs_per_week": new_config.two_offs_per_week,
+                "max_nig_per_month": new_config.max_nig_per_month,
+                "three_seq_nig": new_config.three_seq_nig,
+                "two_offs_after_three_nig": new_config.two_offs_after_three_nig,
+                "two_offs_after_two_nig": new_config.two_offs_after_two_nig,
+                "banned_day_after_eve": new_config.banned_day_after_eve,
+                "max_conseq_work": new_config.max_conseq_work,
+                "off_days": new_config.off_days,
+                "shift_priority": new_config.shift_priority,
+                "weekend_shift_ratio": new_config.weekend_shift_ratio,
+                "patient_amount": new_config.patient_amount,
+                "sequential_offs": new_config.sequential_offs,
+                "even_nights": new_config.even_nights,
+                "created_at": new_config.created_at.isoformat() if new_config.created_at else None,
+                "nod_noe": new_config.nod_noe
             }
         else:
             config = db.query(RosterConfigModel).filter(
                 RosterConfigModel.office_id == current_user.office_id,
                 RosterConfigModel.group_id == current_user.group_id,
-                RosterConfigModel.config_version == config_version
+                # RosterConfigModel.config_id == config_id
             ).order_by(RosterConfigModel.created_at.desc()).first()
-        
+            
             if not config:
-                raise HTTPException(status_code=404, detail="Config version not found")
+                raise HTTPException(status_code=404, detail="Config not found")
             pprint.pprint(config)
             return {
                 "config_id": config.config_id,
-                "config_version": config.config_version,
+                # "config_version": config.config_version,
                 "day_req": config.day_req,
                 "eve_req": config.eve_req,
                 "nig_req": config.nig_req,
@@ -677,7 +708,8 @@ async def validate_roster(
     roster      = roster_data.get('roster')
     schedule_id = roster_data.get('schedule_id')
     config_id = db.query(Schedule).filter(Schedule.schedule_id == schedule_id).first().config_id
-    config_version = db.query(RosterConfigModel).filter(RosterConfigModel.config_id == config_id).first().config_version
+
+    # config_version = db.query(RosterConfigModel).filter(RosterConfigModel.config_id == config_id).first().config_version
     if not all([year, month, roster]):
         raise HTTPException(
             status_code=400,
@@ -691,29 +723,28 @@ async def validate_roster(
         #  * codes 열(JSON) 에 들어있는 파생 코드를 본교대(main_code) 로 매핑
         from db.models import ShiftManage, Nurse, RosterConfig  # local import
 
-        # config_version을 가져오기 위해 config_id로 RosterConfig 조회
-        if config_id:
-            config_for_version = db.query(RosterConfig).filter(
-                RosterConfig.config_id == config_id
-            ).first()
-            config_version = config_for_version.config_version if config_for_version else None
-        else:
-            # config_id가 없는 경우 최신 config의 version 사용
-            latest_config_for_version = db.query(RosterConfig).filter(
-                RosterConfig.group_id == current_user.group_id
-            ).order_by(RosterConfig.created_at.desc()).first()
-            config_version = latest_config_for_version.config_version if latest_config_for_version else None
+        # # config_version을 가져오기 위해 config_id로 RosterConfig 조회
+        # if config_id:
+        #     config_for_version = db.query(RosterConfig).filter(
+        #         RosterConfig.config_id == config_id
+        #     ).first()
+        #     # config_version = config_for_version.config_version if config_for_version else None
+        # else:
+        #     # config_id가 없는 경우 최신 config의 version 사용
+        #     latest_config_for_version = db.query(RosterConfig).filter(
+        #         RosterConfig.group_id == current_user.group_id
+        #     ).order_by(RosterConfig.created_at.desc()).first()
+        #     config_version = latest_config_for_version.config_version if latest_config_for_version else None
         
-        if not config_version:
-            return {"violations": ["설정 버전을 찾을 수 없습니다."]}
+        # if not config_version:
+        #     return {"violations": ["설정 버전을 찾을 수 없습니다."]}
             
         # ○ 현 수간호사의 부서 기준으로 조회
         shift_rows = db.query(ShiftManage).filter(
             ShiftManage.office_id == current_user.office_id,
             ShiftManage.group_id  == current_user.group_id,
-            ShiftManage.config_version == config_version
+            # ShiftManage.config_version == config_version
         ).all()
-
         #    예) { 'D': 'D', 'D1': 'D', 'MD': 'D',  'E': 'E', … }
         alias_map: dict[str, str] = {}
         for row in shift_rows:
@@ -726,28 +757,31 @@ async def validate_roster(
                 # row.codes 가 JSON 컬럼 → 이미 list 로 deserialize 되어있음
                 for code in row.codes:
                     alias_map[code.upper()] = base
-
         # OFF(휴무) 도 항상 포함시킴
         alias_map.setdefault('OFF', 'O')
         alias_map.setdefault('O',   'O')
-
         # ──────────────────────── 2. 근무표 설정(인원/제약) 불러오기 ────────────────────────
-        if config_id:
-            # config_id가 제공된 경우 해당 config 사용
-            latest_config_db = (
-                db.query(RosterConfig)
-                  .filter(RosterConfig.config_id == config_id)
-                  .first()
-            )
-        else:
-            # config_id가 없는 경우 최신 config 사용
-            latest_config_db = (
-                db.query(RosterConfig)
-                  .filter(RosterConfig.group_id == current_user.group_id)
-                  .order_by(RosterConfig.created_at.desc())
-                  .first()
-            )
-        
+        # if config_id:
+        #     # config_id가 제공된 경우 해당 config 사용
+        #     latest_config_db = (
+        #         db.query(RosterConfig)
+        #           .filter(RosterConfig.config_id == config_id)
+        #           .first()
+        #     )
+        #  
+        # else:
+        #     # config_id가 없는 경우 최신 config 사용
+        #     latest_config_db = (
+        #         db.query(RosterConfig)
+        #           .filter(RosterConfig.group_id == current_user.group_id)
+        #           .order_by(RosterConfig.created_at.desc())
+        #           .first()
+        #     )
+        #  
+        latest_config_db = db.query(RosterConfigModel).filter(
+            RosterConfigModel.office_id == current_user.office_id,
+            RosterConfigModel.group_id == current_user.group_id,
+        ).order_by(RosterConfigModel.created_at.desc()).first()
         if not latest_config_db:
             return {"violations": ["근무표 설정을 찾을 수 없습니다."]}
 
@@ -769,17 +803,14 @@ async def validate_roster(
                 db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
             )
         ]
-
         system = RosterSystem(
             nurses        = nurses_for_engine,
             target_month  = date(year, month, 1),
             config        = roster_config_for_engine
         )
-
         # shift_types 는 ['D','E','N','O'] (엔진 기본).  
         shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
         system.roster.fill(0)                                # 3-D 배열 0으로 초기화
-
         # ──────────────────────── 4. 프론트에서 넘어온 근무표 → 엔진 포맷 변환 ────────────────────────
         for nurse_idx, nurse_data in enumerate(roster):
             if nurse_idx >= len(system.nurses):
@@ -799,12 +830,10 @@ async def validate_roster(
                 if shift_idx is not None:
                     system.roster[nurse_idx, day_idx, shift_idx] = 1
                 # else: 알 수 없는 코드 → 무시
-
         # ──────────────────────── 5. 위반사항 탐색 & 포매팅 ────────────────────────
         violation_details = system._find_violations()
         violation_messages: set[str] = set()
         detailed_violations: list[dict] = []
-
         for v in violation_details:
             if v['type'] == 'shift_requirement':
                 violation_messages.add(
@@ -854,7 +883,6 @@ async def validate_roster(
                     'nurse_name': nurse_name,
                     'day': v['day']
                 })
-
         return {
             "violations": sorted(violation_messages),
             "detailed_violations": detailed_violations

@@ -60,6 +60,8 @@ class WantedInvokeRequest(BaseModel):
     request: str| List[str]
     schema: List[Dict[str, Any]]
     case: object | None = None
+    year: int
+    month: int
 
 class WantedInvokeResponse(BaseModel):
     response: Any
