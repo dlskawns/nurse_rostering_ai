@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 import os
 from langchain_core.messages import SystemMessage, HumanMessage
 import dotenv
+from datetime import datetime
 try:
     import tiktoken
 except Exception:
@@ -28,6 +29,7 @@ def collector(state):
     """
     information collector
     """
+    return state
 
 
 def init_data(state):
@@ -120,9 +122,10 @@ class ShiftSubgraph(TypedDict):
     # mcp_agent: object
     shift_result: Annotated[list, operator.add]
     model: object
-    mcp_tools: object
+    # mcp_tools: object
     year: int
     month: int
+    weekend_holiday: Dict[str, List[str]]
 
 class shiftResponse(TypedDict):
     shift: str 
@@ -138,79 +141,78 @@ class shiftAnalyzer(BaseModel):
     result: shiftResponse | None 
 
 class shiftAnalyzerPrompt:
-    def __init__(self, context, year: int, month: int):
+    def __init__(self, context, year: int, month: int, weekend_holiday: Dict[str, List[str]] | None = None):
         """
         프롬프트 클래스
         """
         self.system = f"""
             # GOAL:
-            당신은 간호사 근무표 시스템의 "희망·비선호 스코어 추출기"입니다.  
-            입력 문장(자연어) ➜ 구조화 JSON 으로 변환해 주세요.
-            다음 도구들이 제공되지만, 반드시 필요한 경우에만 사용합니다:
-            - get_weekends
-            - get_holidays
-            도구 호출이 적절치 않을 경우, 절대 호출하지 말고 직접 답변만 작성합니다.
+            You are the "Preference & Avoidance Score Extractor" for the nurse scheduling system.  
+            Input sentences (Korean/English/mixed natural language) ➜ must be converted into structured JSON.
 
-            1. Request Type  (가중치 보정치)
-            | Type    | 설명                              | Modifier |
-            |-|-|-:|
-            | off     | 강제 OFF (가중치 유지)            | × 2 |
-            | shift   | 특정 Shift 지정                   | × 1.9 |
-            | keep    | 주기 요청(매주 같은 요일 등)      | × 1.8 |
-            | pattern | "DD→N" " N 후 OFF" 같은 규칙      | × 1.7 |
-            | other   | 정책외 항목 (가중치 계산 안함)     | – |
+            ## 1. Request Type (Weight Modifier)
+            | Type    | Description                          | Modifier |
+            |---------|--------------------------------------|----------|
+            | off     | Forced OFF (weight preserved)        | × 2      |
+            | shift   | Specific Shift assignment            | × 1.9    |
+            | keep    | Recurring request (weekly, etc.)     | × 1.8    |
+            | pattern | Rules like "DD→N", "N followed by O" | × 1.7    |
+            | other   | Non-policy items (no weight applied) | –        |
 
-            2. Request Importance  (기본 가중치)
-            | Score | 우선순위·사유(예시)                            | 허용 Type                | 근거 요약                    |
-            |-:|-|-|-|
-            | 5 | 법·병원 필수(임신 야간금지, 단축근무 등)       | shift / keep / off       | 법규·지침 미준수 리스크      |
-            | 4 | 생명·건강 위기(가족 중증, 항암, 응급수술)      | off / shift              | 안전·장기결근 예방           |
-            | 3 | 사회·가족 의무·직무(결혼·장례·교육·멘토링)    | off / shift / pattern    | 조직도 인지 필수 일정        |
-            | 2 | 중요 개인계획(가족 행사, 장거리 통근, 학업)    | off / shift / keep / pattern | 가능 시 배려            |
-            | 1 | 선호·편의("친한 동료랑", 막연한 선호)         | keep / pattern           | 효율 < 상위 우선순위         |
-            | 0 | 정책외/미지원(휴무 초과, 병동 고정 요청 등)    | other                    | 수간호사 직접 조율(Hard 0)   |
+            ---
 
-            최종 가중치 = Importance Score × Type Modifier
+            ## 2. Request Importance (Base Weight)
+            | Score | Priority/Reason (Examples)                   | Allowed Type                  | Rationale Summary            |
+            |-------|----------------------------------------------|-------------------------------|------------------------------|
+            | 5     | Legal/Hospital mandatory (e.g., pregnancy night-ban, reduced hours) | shift / keep / off | Risk of regulation violation |
+            | 4     | Life/Health crisis (family critical illness, chemo, emergency surgery) | off / shift | Safety & absence prevention |
+            | 3     | Social/Family duties (wedding, funeral, education, mentoring) | off / shift / pattern | Must be recognized by unit   |
+            | 2     | Important personal plans (family event, long commute, study) | off / shift / keep / pattern | Should be considered if possible |
+            | 1     | Preference/Convenience ("with a close colleague", vague liking) | keep / pattern | Efficiency < higher priorities |
+            | 0     | Out of policy/unsupported (too many offs, fixed ward request) | other | Head nurse direct coordination (Hard 0) |
 
-            3. 필수 매핑 규칙
-            * 'Day shift' → "D", 'Evening' → "E", 'Night' → "N", 'Off' → "O"
-            * weight 범위 : 0 ~ 5 (소수점 허용)
-                [부정/제외(NOT) 규칙]
-                - "X 말고/빼고/제외/안 돼"는 따로 추론 하지 않을 것.
-                - "X나 Y 말고"는 X, Y 모두 추론 금지.
-                - 동일 구간에서 제외와 선호가 충돌하면 제외 우선.
+            **Final weight = Importance Score × Type Modifier**
 
+            ---
 
-            4. 출력 JSON 스키마
+            ## 3. Mandatory Mapping Rules
+            * "Day shift" → "D", "Evening" → "E", "Night" → "N", "Off" → "O"
+            * Weight range: 0 ~ 5 (decimals allowed)
+
+            [Exclusion/NOT Rules]
+            - For negative expressions such as "X 말고/빼고/제외/안 돼", do NOT infer alternatives.  
+            - "X or Y 말고" → Both X and Y are excluded.  
+            - If exclusion and preference conflict in the same scope, exclusion takes priority.
+
+            ---
+
+            ## 4. Output JSON Schema
             ```json
             {{
             "request_type": "off|shift|keep|pattern|other",
             "request_type_reason": "string",
             "request_importance": 0-5,
             "request_importance_reason": "string",
-            "processor": "왜 요청을 이렇게 해석했는지 설명",
+            "processor": "Explain why this interpretation was made",
             "result": {{
-                "D"  : {{ "1":2.5, "3":2.5, ... }},
-                "E"  : {{ ... }},
-                "N"  : {{ ... }},
+                "D": {{ "1":2.5, "3":2.5, ... }},
+                "E": {{ ... }},
+                "N": {{ ... }},
                 "O": {{ ... }}
-            }}
-            }}
+            }}}}
             ```
-            5. 처리 절차
-
-            * 발화에서 Request 유형과 중요도를 판정하고 이유를 기록.
-            * 중요도 점수 × 유형 Modifier 로 최종 weight 계산.
-            * 날짜/Shift 구체화 → result 채우기.
-            * (기간형 "5월 둘째 주" 등은 별도 날짜모듈에서 변환되었다고 가정)
-            * 해석 불가 문장·모호 표현은 request_type="other" 로.
-
+            5. Processing Steps
+            Identify request type and importance score from utterance, and record reasons.
+            Calculate final weight = Importance Score × Type Modifier.
+            Specify date/shift details → fill result.
+            (For periods like "second week of May", assume date module has pre-converted them.)
+            If interpretation is not possible or expression is ambiguous → set request_type="other".
 
 
-            ### 입력 예시
+            ### Input Example
             "5월 12일은 아들 발표회니까 꼭 쉬고 싶어요"
 
-            ### 출력 예시
+            ### Output Example
             {{
                 "processor": "5월 12일 OFF 요청 반영",
                 "request_type": "off",
@@ -261,11 +263,15 @@ class shiftAnalyzerPrompt:
                 "result":None}}
 
             """
-                
+        
+        weekends_json = json.dumps((weekend_holiday or {}).get("weekends", []), ensure_ascii=False)
+        holidays_json = json.dumps((weekend_holiday or {}).get("holidays", []), ensure_ascii=False)
         self.human=f"""
-            2025년 10월 주말 목록: ["2025-10-04", "2025-10-05", "2025-10-11", "2025-10-12", "2025-10-18", "2025-10-19", "2025-10-25", "2025-10-26"]
             # CONTEXT: 
                 {year}년 {month}월 기준 근무 희망 요청입니다.
+                주말은 {weekends_json} 입니다.
+                공휴일은 {holidays_json} 입니다.
+
                 {context}
             # OUTPUT:
             """
@@ -273,12 +279,13 @@ class shiftAnalyzerPrompt:
 async def shift_analyzer(state):
     phase = state['phase']
     context = state['requests'][phase]
-    tools = state['mcp_tools']
+    # tools = state['mcp_tools']
     year = state['year']
     month = state['month']
+    weekend_holiday = state['weekend_holiday']
     
-    shift_analyzer_prompt = shiftAnalyzerPrompt(context, year, month)
-    
+    shift_analyzer_prompt = shiftAnalyzerPrompt(context, year, month, weekend_holiday)
+    print(f'\n\n\n\n\nshift_analyzer_prompt, {shift_analyzer_prompt.human}\n\n\n\n\n')
     # 백업 모델들 순서대로 시도
     models_to_try = [
         # 1차: Anthropic (기본)
@@ -306,19 +313,25 @@ async def shift_analyzer(state):
     
     sr = None
     used_model_name = ""
-    
+    print('여기')
     for i, client in enumerate(models_to_try):
         try:
             print(f"Shift Analyzer: {i+1}차 모델 시도 중..., 모델: {client}")
-            agent = create_react_agent(client, tools, response_format=shiftAnalyzer)
-            result = await agent.ainvoke({
-                "messages": [
-                    SystemMessage(content=shift_analyzer_prompt.system), 
-                    HumanMessage(content=shift_analyzer_prompt.human)
-                ]
-            })
-            
-            sr = result["structured_response"]
+            # agent = create_react_agent(client, tools, response_format=shiftAnalyzer)
+            llm = client.with_structured_output(shiftAnalyzer)
+            response = await llm.ainvoke([
+                SystemMessage(content=shift_analyzer_prompt.system), 
+                HumanMessage(content=shift_analyzer_prompt.human)
+            ])
+
+            # result = await agent.ainvoke({
+            #     "messages": [
+            #         SystemMessage(content=shift_analyzer_prompt.system), 
+            #         HumanMessage(content=shift_analyzer_prompt.human)
+            #     ]
+            # })
+            # print('response', response)
+            sr = response
             print(f"Shift Analyzer1111: {sr}")
                 
             used_model_name = getattr(client, "model", "") or used_model_name
@@ -371,8 +384,14 @@ async def shift_analyzer(state):
         return {"shift_result": [sr.result]}
 
 from services.holiday_pack import tool_get_weekends, tool_get_holidays
+from services.holiday_pack import get_weekends as _get_weekends, get_korean_public_holidays as _get_holidays, serialise as _serialise
+from langchain_core.tools import tool
+from agents.query_analyzer_agent import query_analyzer
+
 # from services.holiday_pack import get_weekends as _get_weekends, get_korean_public_holidays as _get_holidays, serialise as _serialise
 # from langchain_core.tools import Tool
+
+
 async def create_shift_analyzer(parent_state):
 
     llm = ChatGoogleGenerativeAI(
@@ -388,22 +407,28 @@ async def create_shift_analyzer(parent_state):
     requests = parent_state['query_shift']         # Shift List ex. ["9/9: D", "9/10: D", "9/16: OFF", "9/9, 9/10, 9/16 외에 웬만하면 E로 줘"]
     client = parent_state['model']
 
-    tools = [tool_get_weekends, tool_get_holidays]
-    # # year/month 고정 바인딩 툴: LLM이 어떤 인자를 주더라도 무시하고 컨텍스트 연/월을 사용
-    # def _tool_weekends(_: str) -> list[str]:
-    #     return _serialise(_get_weekends(parent_state['year'], parent_state['month']))
-
-    # def _tool_holidays(_: str) -> list[str]:
-    #     return _serialise(_get_holidays(parent_state['year'], parent_state['month']))
-
-    # tools = [
-    #     Tool(name="get_weekends", description="컨텍스트의 연/월 기준 주말 날짜 반환. 인자는 무시됨.", func=_tool_weekends),
-    #     Tool(name="get_holidays", description="컨텍스트의 연/월 기준 한국 공휴일 반환. 인자는 무시됨.", func=_tool_holidays),
-    # ]
+    # 기본 제공 도구: 주말/공휴일 + 질의 정규화
+    # tools = [tool_get_weekends, tool_get_holidays, tool_analyze_query]
     year = parent_state['year']
     month = parent_state['month']
     n_requests = len(requests)
     print('year', year, 'month', month)
+
+    # 주말/공휴일 정보 미리 계산하여 상태에 주입
+    try:
+        weekends = tool_get_weekends(year, month)
+        holidays = tool_get_holidays(year, month)
+        # 일요일만 필터링해서 holidays에 추가
+        for d in weekends:
+            if datetime.strptime(d, "%Y-%m-%d").weekday() == 6:  # 일요일: 6
+                if d not in holidays:  # 중복 방지
+                    holidays.append(d)
+        weekend_holiday = {"weekends": weekends, "holidays": holidays}
+        print('weekends', weekends)
+        print('holidays', holidays)
+    except Exception as e:
+        print(f"주말/공휴일 계산 오류: {e}")
+        weekend_holiday = {"weekends": [], "holidays": []}
     if n_requests == 0:
         print('shift_analyzer 답변 없음')
         return {"shift_results": []}
@@ -422,7 +447,18 @@ async def create_shift_analyzer(parent_state):
         graph.add_edge('shift_analyzer'+ str(n), "collector")
     graph.add_edge('collector', END)
     graph_app = graph.compile()
-
-    result = await graph_app.ainvoke({"requests": requests, "model": llm, "mcp_tools": tools, "year": year, "month": month})
-    print('shift_analyzer 답변: ', result)
+    print('weekend_holiday', weekend_holiday)
+    try:
+        result = await graph_app.ainvoke({
+            "requests": requests,
+            "model": llm,
+            # "mcp_tools": tools,
+            "year": year,
+            "month": month,
+            "weekend_holiday": weekend_holiday,
+        })
+    except Exception as e:
+        print(f"shift_analyzer 처리오류: {e}")
+        
+    print(f'\n\n\n\n\nshift_results, {result}\n\n\n\n\n')
     return {"shift_results": [result]}
