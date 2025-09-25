@@ -153,7 +153,8 @@ class queryAnalyzerPrompt:
                 | Off/휴무    | "O" |
                 | 날짜 구분     | `M/D`  또는 `M월 D일` 등 모두 허용, 출력은 원문 그대로 보존 |
                 | 주기 표현   | "매주", "주말", "평일", "격주" 등은 그대로 규칙형 항목으로 남김 |
-
+                [제외/빼고(NOT) 규칙]
+                - "X 말고/빼고/제외/안 돼" 같은 부정 표현이 있으면, 선호/회피 점수 산정 대신 무조건 Others 카테고리로 분류해 query_others에 추가해 주세요.
             ## 3. 처리 지침
                 * "매주/주말/평일" 같은 주기성 표현은 원문 그대로 유지하며, 절대로 날짜를 추측하여 쪼개지 마세요.
                 * 해석 불가 문장·모호 표현은 Others에 넣으세요.
@@ -194,7 +195,7 @@ async def query_analyzer(state):
     models_to_try = [
         # 1차: OpenAI (기본)
         ChatOpenAI(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             openai_api_key=os.getenv("OPENAI_API_KEY"),
         ),
         # 2차: Anthropic (백업)
@@ -250,7 +251,7 @@ async def query_analyzer(state):
 
     for i, client in enumerate(models_to_try):
         try:
-            print(f"Query Analyzer: {i+1}차 모델 시도 중...")
+            print(f"Query Analyzer: {i+1}차 모델 시도 중..., 모델: {client}")
             
             llm = client.with_structured_output(queryAnalyzer)
             response = await llm.ainvoke(messages)

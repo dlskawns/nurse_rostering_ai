@@ -131,11 +131,11 @@ class shiftResponse(TypedDict):
 
 class shiftAnalyzer(BaseModel):
     processor: str
-    request_type: str 
+    request_type: str | None 
     request_type_reason: str 
-    request_importance: str 
-    request_importance_reason: str 
-    result: shiftResponse
+    request_importance: str | None 
+    request_importance_reason: str | None 
+    result: shiftResponse | None 
 
 class shiftAnalyzerPrompt:
     def __init__(self, context, year: int, month: int):
@@ -175,6 +175,11 @@ class shiftAnalyzerPrompt:
             3. 필수 매핑 규칙
             * 'Day shift' → "D", 'Evening' → "E", 'Night' → "N", 'Off' → "O"
             * weight 범위 : 0 ~ 5 (소수점 허용)
+                [부정/제외(NOT) 규칙]
+                - "X 말고/빼고/제외/안 돼"는 따로 추론 하지 않을 것.
+                - "X나 Y 말고"는 X, Y 모두 추론 금지.
+                - 동일 구간에서 제외와 선호가 충돌하면 제외 우선.
+
 
             4. 출력 JSON 스키마
             ```json
@@ -244,9 +249,21 @@ class shiftAnalyzerPrompt:
                 "request_importance_reason": "자녀 학교행사 등에 포함되어 3의 가중치를 선정",
                 "result":{{"shift": "O", "date":[12], "score":[3.0]}}}}
 
+            # CONTEXT:
+                "23일은 off뺴고 다 좋아"
+
+            # OUTPUT:
+                {{"processor": "off 제외 건이므로 추론 하지 않을 것",
+                "request_type": None,
+                "request_type_reason": "제외 건은 추론 하지 않을 것",
+                "request_importance": None,
+                "request_importance_reason": None,
+                "result":None}}
+
             """
                 
         self.human=f"""
+            2025년 10월 주말 목록: ["2025-10-04", "2025-10-05", "2025-10-11", "2025-10-12", "2025-10-18", "2025-10-19", "2025-10-25", "2025-10-26"]
             # CONTEXT: 
                 {year}년 {month}월 기준 근무 희망 요청입니다.
                 {context}
@@ -270,15 +287,16 @@ async def shift_analyzer(state):
         #     anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
         # ),
 
+        # 2차: OpenAI (백업)
+        ChatOpenAI(
+            model="gpt-4.1-mini",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+        ),
         ChatAnthropic(
             model="claude-3-7-sonnet-20250219",
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
         ),
-        # 2차: OpenAI (백업)
-        ChatOpenAI(
-            model="gpt-4o",
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-        ),
+
         # 3차: Google Gemini (최종 백업)
         ChatGoogleGenerativeAI(
             model="gemini-2.0-flash",
@@ -291,8 +309,7 @@ async def shift_analyzer(state):
     
     for i, client in enumerate(models_to_try):
         try:
-            print(f"Shift Analyzer: {i+1}차 모델 시도 중...")
-            print('모델명', client)
+            print(f"Shift Analyzer: {i+1}차 모델 시도 중..., 모델: {client}")
             agent = create_react_agent(client, tools, response_format=shiftAnalyzer)
             result = await agent.ainvoke({
                 "messages": [
@@ -302,6 +319,8 @@ async def shift_analyzer(state):
             })
             
             sr = result["structured_response"]
+            print(f"Shift Analyzer1111: {sr}")
+                
             used_model_name = getattr(client, "model", "") or used_model_name
             print(f"Shift Analyzer: {i+1}차 모델 성공!")
             break
@@ -345,8 +364,11 @@ async def shift_analyzer(state):
     completion_tokens = _count_tokens(completion_json, model_name_for_calc)
     cost_info = _compute_cost(prompt_tokens, completion_tokens, model_name_for_calc)
     print(f"토큰 사용량(Shift): {cost_info['usage']}, 비용(USD/KRW): {cost_info['cost_usd']} / {cost_info['cost_krw']}")
-    
-    return {"shift_result": [sr.result]}
+    print(f"Shift Analyzer: {sr.result}")
+    if sr.result is None:
+        return {"shift_result": []}
+    else:
+        return {"shift_result": [sr.result]}
 
 from services.holiday_pack import tool_get_weekends, tool_get_holidays
 # from services.holiday_pack import get_weekends as _get_weekends, get_korean_public_holidays as _get_holidays, serialise as _serialise
