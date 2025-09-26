@@ -2,13 +2,14 @@ from sqlalchemy import Column, VARCHAR, SMALLINT, BOOLEAN, DATETIME, func, Forei
 from sqlalchemy.dialects.mysql import TINYINT 
 from sqlalchemy.orm import relationship
 from db.client import Base
+from sqlalchemy import DATE, DECIMAL, TEXT
 
 class Group(Base):
     __tablename__ = 'groups'
     group_id = Column(VARCHAR(50), primary_key=True)
     office_id = Column(VARCHAR(50), ForeignKey('offices.office_id'))
     group_name = Column(VARCHAR(50), nullable=False)
-    office = relationship("Office", back_populates="groups")
+    office = relationship("Office", back_populates="groups") 
 class Office(Base):
     __tablename__ = 'offices'
     office_id = Column(VARCHAR(50), primary_key=True)
@@ -41,7 +42,7 @@ class Nurse(Base):
 
     @property
     def office_id(self) -> str | None:
-        return self.group.office_id if self.group else None
+        return self.group.office_id if self.group else None 
 class Schedule(Base):
     __tablename__ = "schedules"
     schedule_id = Column(CHAR(12), primary_key=True)
@@ -229,3 +230,34 @@ class RosterRequestDetails(Base):
     nurse = relationship("Nurse", foreign_keys=[nurse_id])
     # nurse_2 관계는 필요시에만 사용하도록 주석 처리
     # nurse_2 = relationship("Nurse", foreign_keys=[nurse_2_id])
+
+
+class WantedRequest(Base):
+    __tablename__ = 'wanted_requests'
+    nurse_id = Column(VARCHAR(50), primary_key=True)
+    request_id = Column(INTEGER, primary_key=True)
+    month = Column(CHAR(7), primary_key=True)  # 'YYYY-MM'
+    is_submitted = Column(TINYINT(1), nullable=False, default=0)
+    created_at = Column(DATETIME, nullable=False, default=func.now())
+    submitted_at = Column(DATETIME, nullable=True)
+
+
+class NurseShiftRequest(Base):
+    __tablename__ = 'nurse_shift_requests'
+    nurse_id = Column(VARCHAR(50), primary_key=True)
+    request_id = Column(INTEGER, primary_key=True)
+    detailed_request_id = Column(INTEGER, primary_key=True)
+    shift_date = Column(DATE, primary_key=True)
+    shift = Column(CHAR(1), nullable=False)  # 'D','E','N','O'
+    score = Column(DECIMAL(3, 1), nullable=False)
+    partial_request = Column(TEXT, nullable=True)
+
+
+class NursePairRequest(Base):
+    __tablename__ = 'nurse_pair_requests'
+    nurse_id = Column(VARCHAR(50), primary_key=True)
+    request_id = Column(INTEGER, primary_key=True)
+    detailed_request_id = Column(INTEGER, primary_key=True)
+    target_id = Column(INTEGER, primary_key=True)
+    score = Column(DECIMAL(3, 1), nullable=False)
+    partial_request = Column(TEXT, nullable=True)
