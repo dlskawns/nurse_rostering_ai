@@ -104,7 +104,7 @@ def get_issued_schedules_service(current_user, db: Session):
         Schedule.status == 'issued',
         Schedule.dropped == False
     ).distinct().order_by(Schedule.year.desc(), Schedule.month.desc()).all()
-    schedules = [{"year": r.year, "month": r.month} for r in schedules_query]
+    schedules = [{"year": r.year, "month": r.month, "schedule_id": r.schedule_id} for r in schedules_query]
     return schedules
 
 def get_schedule_status_service(year: int, month: int, current_user, db: Session):

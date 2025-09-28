@@ -104,7 +104,8 @@ async def get_config_by_version(
                 patient_amount=getattr(cfg, 'patient_amount', 0),
                 sequential_offs=getattr(cfg, 'sequential_offs', True),
                 even_nights=getattr(cfg, 'even_nights', True),
-                nod_noe=False
+                nod_noe=False,
+                preceptor_gauge=getattr(cfg, 'preceptor_gauge', 5),
             )
             db.add(new_config)
             db.commit()
@@ -131,7 +132,8 @@ async def get_config_by_version(
                 "sequential_offs": new_config.sequential_offs,
                 "even_nights": new_config.even_nights,
                 "created_at": new_config.created_at.isoformat() if new_config.created_at else None,
-                "nod_noe": new_config.nod_noe
+                "nod_noe": new_config.nod_noe,
+                "preceptor_gauge" : new_config.preceptor_gauge,
             }
         else:
             config = db.query(RosterConfigModel).filter(
@@ -139,7 +141,6 @@ async def get_config_by_version(
                 RosterConfigModel.group_id == current_user.group_id,
                 # RosterConfigModel.config_id == config_id
             ).order_by(RosterConfigModel.created_at.desc()).first()
-            
             if not config:
                 raise HTTPException(status_code=404, detail="Config not found")
             pprint.pprint(config)
@@ -165,7 +166,8 @@ async def get_config_by_version(
                 "sequential_offs": config.sequential_offs,
                 "even_nights": config.even_nights,
                 "created_at": config.created_at.isoformat() if config.created_at else None,
-                "nod_noe": config.nod_noe
+                "nod_noe": config.nod_noe,
+                "preceptor_gauge" : config.preceptor_gauge,
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
@@ -854,7 +856,7 @@ async def validate_roster(
                     'type': 'consecutive_work',
                     'nurse_idx': v['nurse_idx'],
                     'nurse_name': nurse_name,
-                    'day': v['day']
+                    'day': v['day']+1
                 })
             elif v['type'] == 'night_consecutive':
                 nurse_name = system.nurses[v['nurse_idx']].name

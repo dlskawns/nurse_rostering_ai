@@ -20,9 +20,11 @@ except Exception:
 dotenv.load_dotenv()
 
 class queryAnalyzer(BaseModel):
+    processor: str
     Chat: List[str] 
     Shift: List[str] 
     Preference: List[str]
+    Except: List[str]
     Others: List[str] 
 
 
@@ -118,51 +120,57 @@ class queryAnalyzerPrompt:
         프롬프트 클래스
         """
         self.system = f"""
-            ## GOAL:
-                당신은 "간호사 희망사항 전처리기" 입니다.  
-                한국어 자연어 입력 ➜ 카테고리별 List(JSON) 로 분해·정규화해 주세요.
+        ## GOAL:
+            You are the "Nurse Preference Preprocessor."  
+            Convert Korean natural language input ➜ into a categorized List (JSON), decomposed and normalized.
 
-            ## 1. 작업 목표
-                1. 한 문장 안에 여러 날짜·Shift·선호 가 섞여 있으면 의미 단위로 잘라 개별 항목화.
-                2. Shift / Preference 항목의 각 요소에는 단일 내용만 존재해야 함.  
-                예)  
-                - "5/5는 쉬고 싶고, 5/6은 E로 줘" →  
-                    `"Shift": ["5/5은 OFF로 줘", "5/6은 E로 줘"]`
-                3. 날짜가 생략된 지시("그 외엔…")는 앞선 날짜를 보완하여 정보 손실 없이 재기술.  
-                예) "5/5는 N, 그 외엔 E" →  
-                    `"Shift": ["5/5은 N로 줘", "5/5 제외 나머지는 E로 줘"]`
-                4. 반복적/패턴적 요청(예: "주말엔 쉬고 싶다", "매주 수요일은 OFF")은 
-                절대로 모든 날짜로 분할하지 말고, **하나의 규칙형 항목**으로 기록.
-                - 예) "주말엔 쉬고 싶다" → `"Shift": ["매주 주말은 O로 줘"]`
-                - 예) "수요일은 OFF" → `"Shift": ["매주 수요일은 O로 줘"]`
-                - 예) "평일엔 D, 주말엔 O" → `"Shift": ["평일은 D로 줘", "주말은 O로 줘"]`
-                5. 절대 중복/혼합 금지: 한 요소에 OFF와 E 같이 넣지 마세요.
-                6. 최종 JSON 키
-                    Chat ― 근무와 무관한 잡담
-                    Shift ― 날짜·교대·OFF 요청
-                    Preference ― 다른 간호사 함께/회피 선호
-                    Others ― 위 분류에 안 맞는 요청
-                    * 빈 카테고리는 [] 로 남김.
-                    * 요소 순서는 입력 흐름 유지.
-            ## 2. 필수 규칙
-                | 표현 | 변환 예시|
-                | - | - |
-                | Day shift | "D" |
-                | Evening   | "E" |
-                | Night     | "N" |
-                | Off/휴무    | "O" |
-                | 날짜 구분     | `M/D`  또는 `M월 D일` 등 모두 허용, 출력은 원문 그대로 보존 |
-                | 주기 표현   | "매주", "주말", "평일", "격주" 등은 그대로 규칙형 항목으로 남김 |
+        ## 1. Task Objectives
+            1. If multiple dates, shifts, preferences, and except are mixed in a single sentence, split them into separate items by meaning.
+            2. Each element in the Shift / Preference / Except / Others category must contain only a single piece of content.  
+            예)  
+            - "5/5는 쉬고 싶고, 5/6은 E로 줘" →  
+                `"Shift": ["5/5은 OFF로 줘", "5/6은 E로 줘"]`
+            3. If a date is omitted in an instruction ("그 외엔…"), supplement with the previous date to avoid loss of information.  
+            예) "5/5는 N, 그 외엔 E" →  
+                `"Shift": ["5/5은 N로 줘", "5/5 제외 나머지는 E로 줘"]`
+            4. Repetitive/pattern requests (e.g., "주말엔 쉬고 싶다", "매주 수요일은 OFF")  
+            must never be expanded into all dates; record as **one rule-based item**.  
+            - 예) "주말엔 쉬고 싶다" → `"Shift": ["매주 주말은 O로 줘"]`  
+            - 예) "수요일은 OFF" → `"Shift": ["매주 수요일은 O로 줘"]`  
+            - 예) "평일엔 D, 주말엔 O" → `"Shift": ["평일은 D로 줘", "주말은 O로 줘"]`
+            - 예) "10일은 D 말고" → `"Except": ["10일은 D 말고"]`
+            - 예) "수요일은 E 빼줘" → `"Except": ["수요일은 E 빼줘"]`
+            5. Absolutely no duplication/mixing: do not put OFF and E together in one element.
+            6. Final JSON Keys:
+                - Chat ― small talk unrelated to scheduling
+                - Shift ― requests for dates/shifts/OFF
+                - Preference ― coworker together/avoid preferences
+                - Except ― negative/exclusion requests (e.g., 말고, 빼고, 제외, 안 돼)
+                - Others ― requests not fitting the above
+                * Empty categories must remain [].
+                * Element order must follow the input sequence.
 
-            ## 3. 처리 지침
-                * "매주/주말/평일" 같은 주기성 표현은 원문 그대로 유지하며, 절대로 날짜를 추측하여 쪼개지 마세요.
-                * 해석 불가 문장·모호 표현은 Others에 넣으세요.
+        ## 2. Mandatory Rules
+            | Expression | Conversion Example |
+            | - | - |
+            | Day shift | "D" |
+            | Evening   | "E" |
+            | Night     | "N" |
+            | Off/휴무    | "O" |
+            | Date formats | `M/D` or `M월 D일` are all allowed, but keep the original form in output |
+            | Periodic expressions | "매주", "주말", "평일", "격주" etc. remain as rule-based items |
+
+        ## 3. Processing Guidelines
+            * Keep periodic expressions like "매주/주말/평일" exactly as in the original text, never expand into dates.
+            * Uninterpretable sentences or ambiguous expressions must be placed in Others.
+
             
             # CONTEXT:
-                "5/5는 쉬고 싶고, 5/19는 나이트 후 OFF, 그리고 정간호사랑은 겹치기 싫어요"
+                "5/5는 쉬고 싶고, 5/19는 나이트 후 OFF, 그리고 정간호사, 문지영이는 좀 꺼졌으면 좋겠어"
 
             # OUTPUT:
                 {{
+                "processor": "5/5는 쉬고싶다 했으므로 O, 5/19는 나이트, 그리고 그 후 OFF 달라고 했으니 5/20은 O로 처리, 정간호사, 문지영 관련은 preference로 처리하되, 순화적용",
                 "Chat": [],
                 "Shift": [
                     "5/5은 쉬고 싶고",
@@ -170,10 +178,25 @@ class queryAnalyzerPrompt:
                     "5/20은 O"
                 ],
                 "Preference": [
-                    "정간호사랑은 겹치기 싫어요"
+                    "정간호사랑은 겹치기 싫어요", "문지영이랑은 겹치기 싫어요"
                 ],
+                "Except": [],
                 "Others": []
                 }}
+            
+            # CONTEXT:
+                "8,9일은 데이 빼줘. 주말은 쉬고싶어"
+
+            # OUTPUT:
+                {{
+                "processor": "8, 9일은 데이 빼달라고 했으므로 제외규칙 상 Others로 처리, 주말은 쉬고싶어는 shift로 처리",
+                "Chat": [],
+                "Shift": ["주말은 쉬고싶어"],
+                "Preference": [],
+                "Except": ["8, 9일은 데이 빼줘"],
+                "Others": []
+                }}
+
         """
         
         self.human=f"""
@@ -194,7 +217,7 @@ async def query_analyzer(state):
     models_to_try = [
         # 1차: OpenAI (기본)
         ChatOpenAI(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             openai_api_key=os.getenv("OPENAI_API_KEY"),
         ),
         # 2차: Anthropic (백업)
@@ -217,6 +240,7 @@ async def query_analyzer(state):
     chat = []
     shift = []
     preference = []
+    except_ = []
     others = []
     used_model_name = ""
 
@@ -233,6 +257,7 @@ async def query_analyzer(state):
             "Chat": chat,
             "Shift": shift,
             "Preference": preference,
+            "Except": except_,
             "Others": others
         }, ensure_ascii=False)
         completion_tokens = 0 if not completion_json else 0
@@ -242,6 +267,7 @@ async def query_analyzer(state):
             "query_chat": chat,
             'query_shift': shift,
             'query_preference': preference,
+            'query_except': except_,
             'query_others': others,
             'model': models_to_try[0],
             'date': date,
@@ -250,7 +276,7 @@ async def query_analyzer(state):
 
     for i, client in enumerate(models_to_try):
         try:
-            print(f"Query Analyzer: {i+1}차 모델 시도 중...")
+            print(f"Query Analyzer: {i+1}차 모델 시도 중..., 모델: {client}")
             
             llm = client.with_structured_output(queryAnalyzer)
             response = await llm.ainvoke(messages)
@@ -260,9 +286,11 @@ async def query_analyzer(state):
             chat = response.Chat
             shift = response.Shift
             preference = response.Preference
+            except_ = response.Except
             others = response.Others
             
-            print(f"Query Analyzer: {i+1}차 모델 성공!")
+            print(f"Query Analyzer: {i+1}차 모델 성공!", response)
+            
             break
             
         except Exception as e:
@@ -296,17 +324,19 @@ async def query_analyzer(state):
         "Chat": chat,
         "Shift": shift,
         "Preference": preference,
+        "Except": except_,
         "Others": others
     }, ensure_ascii=False)
     completion_tokens = _count_tokens(completion_json, model_name_for_calc)
     cost_info = _compute_cost(prompt_tokens, completion_tokens, model_name_for_calc)
 
-    print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_others: {others}")
+    print(f"Query Analyzer 답변: query_chat: {chat}, query_shift: {shift}, query_preference: {preference}, query_except: {except_}, query_others: {others}")
     print(f"토큰 사용량: {cost_info['usage']}, 비용(USD/KRW): {cost_info['cost_usd']} / {cost_info['cost_krw']}")
     return {
         "query_chat": chat,
         'query_shift': shift,
         'query_preference': preference,
+        'query_except': except_,
         'query_others': others,
         'model': models_to_try[0]
     }

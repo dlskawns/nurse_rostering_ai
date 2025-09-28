@@ -24,6 +24,7 @@ class RemoveShiftRequest(BaseModel):
     shift_id: str
 
 class ShiftAddRequest(BaseModel):
+    default_shift: Optional[str] = None
     shift_id: str
     name: str
     color: str

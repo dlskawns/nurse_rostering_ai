@@ -34,6 +34,7 @@ def get_shifts_service(current_user, db: Session):
                 "auto_schedule": shift.auto_schedule,
                 "duration": shift.duration,
                 "sequence": shift.sequence,
+                "default_shift" : shift.default_shift,
                 # time_display는 라우터에서 포맷팅 함수로 처리할 수 있음
             }
             for shift in shifts
@@ -58,14 +59,14 @@ def get_shifts_service(current_user, db: Session):
 
         defaults = [
             # shift_id, name, color, start, end, type, allday, auto_schedule, duration, sequence
-            ("O", "Off", "#ffa0d2", None, None, "휴무", 1, 1, None, 4),
-            ("E", "Evening", "#72bfff", "14:00:00", "22:00:00", "근무", 0, 1, None, 2),
-            ("N", "Night", "#bab0f0", "22:00:00", "06:00:00", "근무", 0, 1, None, 3),
-            ("D", "Day", "#59dbd7", "18:00:00", "15:00:00", "근무", 0, 1, None, 1),
+            ("O", "Off", "#ffa0d2", None, None, "휴무", 1, 1, None, 4, "O"),
+            ("E", "Evening", "#72bfff", "14:00:00", "22:00:00", "근무", 0, 1, None, 2, "E"),
+            ("N", "Night", "#bab0f0", "22:00:00", "06:00:00", "근무", 0, 1, None, 3, "N"),
+            ("D", "Day", "#59dbd7", "06:00:00", "14:00:00", "근무", 0, 1, None, 1, "D"),
         ]
 
         created = []
-        for sid, name, color, st, et, typ, allday, auto_s, dur, seq in defaults:
+        for sid, name, color, st, et, typ, allday, auto_s, dur, seq, default_shift in defaults:
             new_shift = Shift(
                 shift_id=sid,
                 office_id=office_id,
@@ -79,6 +80,7 @@ def get_shifts_service(current_user, db: Session):
                 auto_schedule=auto_s,
                 duration=dur,
                 sequence=seq,
+                default_shift=default_shift,
             )
             db.add(new_shift)
             created.append(new_shift)
@@ -97,6 +99,7 @@ def get_shifts_service(current_user, db: Session):
                 "auto_schedule": shift.auto_schedule,
                 "duration": shift.duration,
                 "sequence": shift.sequence,
+                "default_shift": shift.default_shift,
             }
             for shift in created_sorted
         ]

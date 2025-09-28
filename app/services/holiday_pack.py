@@ -63,7 +63,7 @@ def serialise(dates: List[date]) -> list[str]:
 # -----------------------------
 # Tool-exposed wrappers (new)
 # -----------------------------
-@tool("get_weekends")
+# @tool("get_weekends")
 def tool_get_weekends(year: int, month: int) -> list[str]:
     """    
     Only Use This Tool when you want to know the weekends date information
@@ -80,7 +80,7 @@ def tool_get_weekends(year: int, month: int) -> list[str]:
     return serialise(get_weekends(year, month))
 
 
-@tool("get_holidays")
+# @tool("get_holidays")
 def tool_get_holidays(year: int, month: int) -> list[str]:
     """
     Only Use This Tool when you want to know the public holiday date information
@@ -96,3 +96,4 @@ def tool_get_holidays(year: int, month: int) -> list[str]:
         list: the public holiday dates information of the month
     """
     return serialise(get_korean_public_holidays(year, month))
+
