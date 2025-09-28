@@ -91,7 +91,7 @@ def _fetch_latest_config(db: Session, req: RosterRequest, current_user):
     #     raise Exception("설정값을 입력해주세요")
     # if not latest_config.config_version:
     #     raise Exception("설정 버전이 없습니다.")
-    # return latest_config
+    return latest_config
 
 
 def _build_shift_manage_and_requirements(db: Session, current_user, latest_config):
@@ -108,7 +108,6 @@ def _build_shift_manage_and_requirements(db: Session, current_user, latest_confi
         .all()
     )
     shift_manage_data = [s.__dict__ for s in shift_manages]
-
     daily_shift_requirements = {}
     for sm in shift_manages:
         if sm.codes:
