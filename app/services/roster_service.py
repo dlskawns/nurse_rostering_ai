@@ -99,7 +99,7 @@ def get_issued_schedules_service(current_user, db: Session):
     if not current_user:
         raise Exception("Not authenticated")
     
-    schedules_query = db.query(Schedule.year, Schedule.month).filter(
+    schedules_query = db.query(Schedule.schedule_id, Schedule.year, Schedule.month).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.status == 'issued',
         Schedule.dropped == False

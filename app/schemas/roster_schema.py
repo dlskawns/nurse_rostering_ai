@@ -23,6 +23,21 @@ class MoveNurseRequest(BaseModel):
 class RemoveShiftRequest(BaseModel):
     shift_id: str
 
+
+class ShiftUpdateRequest(BaseModel):
+    default_shift: Optional[str] = None
+    shift_id: str
+    name: str
+    color: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    type: str  # Changed from 'type' to 'shift_type' to match frontend
+    # time_type: str = "range"
+    duration: Optional[int] = None
+    allday: Optional[int] = 0
+    auto_schedule: Optional[int] = 1
+    id: int
+
 class ShiftAddRequest(BaseModel):
     default_shift: Optional[str] = None
     shift_id: str
@@ -35,6 +50,7 @@ class ShiftAddRequest(BaseModel):
     duration: Optional[int] = None
     allday: Optional[int] = 0
     auto_schedule: Optional[int] = 1
+    # id: int
 
 class RosterRequest(BaseModel):
     year: int
@@ -87,6 +103,7 @@ class RosterConfigBase(BaseModel):
     even_nights: bool
     sequential_offs: bool
     nod_noe: bool
+    preceptor_gauge: float
 
 class RosterConfigCreate(RosterConfigBase):
     config_version: Optional[str] = None

@@ -35,6 +35,7 @@ def get_shifts_service(current_user, db: Session):
                 "duration": shift.duration,
                 "sequence": shift.sequence,
                 "default_shift" : shift.default_shift,
+                "id": shift.id,
                 # time_display는 라우터에서 포맷팅 함수로 처리할 수 있음
             }
             for shift in shifts
@@ -157,14 +158,16 @@ def update_shift_service(req, current_user, db):
     """
     if not current_user or not current_user.is_head_nurse:
         raise Exception("Permission denied")
-    
+    print('req! ', req)
+
     existing_shift = db.query(Shift).filter(
-        Shift.shift_id == req.shift_id,
+        Shift.id == req.id,
         Shift.group_id == current_user.group_id
     ).first()
     
     if not existing_shift:
         raise Exception("해당 근무코드를 찾을 수 없습니다.")
+    existing_shift.shift_id = req.shift_id
     existing_shift.name = req.name
     existing_shift.color = req.color
     existing_shift.start_time = req.start_time
@@ -173,7 +176,7 @@ def update_shift_service(req, current_user, db):
     existing_shift.duration = req.duration
     existing_shift.allday = req.allday
     existing_shift.auto_schedule = req.auto_schedule
-    
+
     db.commit()
     db.refresh(existing_shift)
     return {

@@ -6,7 +6,7 @@ from db.client import get_db
 from db.models import Shift, Nurse, ScheduleEntry, ShiftManage, RosterConfig
 from schemas.auth_schema import User as UserSchema
 from routers.auth import get_current_user_from_cookie
-from schemas.roster_schema import ShiftAddRequest, RemoveShiftRequest, MoveShiftRequest, ShiftManageSaveRequest
+from schemas.roster_schema import ShiftAddRequest, RemoveShiftRequest, MoveShiftRequest, ShiftManageSaveRequest, ShiftUpdateRequest
 from services.shift_service import (
     get_shifts_service,
     add_shift_service,
@@ -55,7 +55,7 @@ async def add_shift(
 
 @router.post("/shifts/update")
 async def update_shift(
-    req: ShiftAddRequest,
+    req: ShiftUpdateRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
