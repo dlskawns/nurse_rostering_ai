@@ -13,6 +13,7 @@ from db.models import Wanted
 from schemas.auth_schema import User as UserSchema
 from db.models import Nurse, ShiftPreference
 from services.wanted_service import request_wanted_shifts_service
+from services.wanted_service import invoke_and_persist_wanted_service
 router = APIRouter(
     prefix="/wanted",
     tags=["wanted"]
@@ -164,25 +165,13 @@ async def update_wanted_deadline(
 
 
 @router.post("/invoke", response_model=WantedInvokeResponse)
-async def invoke_graph(request: WantedInvokeRequest):
+async def invoke_graph(request: WantedInvokeRequest, current_user: UserSchema = Depends(get_current_user_from_cookie), db: Session = Depends(get_db)):
     """
     그래프를 실행하여 로스터 관련 요청을 처리합니다.
     """
     
     try:
-        result = {}
-  
-        response =  await graph_service.invoke(request.request, request.schema, request.case, request.year, request.month)
-
-        if len(response[0]) > 0:
-            result['shift'] = parse_shift_results(response)
-            
-        if len(response[1]) > 0:
-            result['preference'] = parse_preferences(response, request.schema)
-
-        if result == {}:
-            result = ["근무 희망사항이 없습니다."]
-
+        result = await invoke_and_persist_wanted_service(request, current_user, db)
         return WantedInvokeResponse(response=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
