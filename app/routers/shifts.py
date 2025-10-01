@@ -3,33 +3,44 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from db.client import get_db
+from db.client2 import _get_mssql_session
 from db.models import Shift, Nurse, ScheduleEntry, ShiftManage, RosterConfig
 from schemas.auth_schema import User as UserSchema
 from routers.auth import get_current_user_from_cookie
 from schemas.roster_schema import ShiftAddRequest, RemoveShiftRequest, MoveShiftRequest, ShiftManageSaveRequest, ShiftUpdateRequest
 from services.shift_service import (
-    get_shifts_service,
+    get_shifts_service as get_shifts_service_mysql,
     add_shift_service,
     update_shift_service,
     remove_shift_service,
     move_shift_service
 )
 from typing import Optional
+import os
+from services.shift_service_mssql import get_shifts_service as get_shifts_service_mssql
 router = APIRouter(
     tags=["shifts"]
 )
 templates = Jinja2Templates(directory="app/templates")
+from dotenv import load_dotenv
+load_dotenv()
 
 # [Shifts] - 모든 시프트 정보 조회
 @router.get("/shifts")
 async def get_shifts(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)   
 ):
     try:
-        shifts = get_shifts_service(current_user, db)
+        backend = os.getenv("DB_BACKEND", "mysql").lower()
+        print('여온다')
+        if backend == "mssql":
+            shifts = get_shifts_service_mssql(current_user, db)
+        else:
+            shifts = get_shifts_service_mysql(current_user, db)
         return shifts
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=f"시프트 정보 조회 실패: {str(e)}")
 
 def _format_time_display(shift):
@@ -46,30 +57,34 @@ def _format_time_display(shift):
 async def add_shift(
     req: ShiftAddRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         result = add_shift_service(req, current_user, db)
     except Exception as e:
+        print('error', e)
         raise HTTPException(status_code=500, detail=f"근무코드 추가 실패: {str(e)}")
 
 @router.post("/shifts/update")
 async def update_shift(
     req: ShiftUpdateRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
-
+        print('req', req)
+        print('current_user', current_user)
+        print('db', db)
         result = update_shift_service(req, current_user, db)
         return result
     except Exception as e:
+        print('error', e)
         raise HTTPException(status_code=500, detail=f"근무코드 수정 실패: {str(e)}")
 @router.post("/shifts/remove")
 async def remove_shift(
     req: RemoveShiftRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return remove_shift_service(req, current_user, db)
@@ -80,7 +95,7 @@ async def remove_shift(
 async def move_shift(
     req: MoveShiftRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return move_shift_service(req, current_user, db)
