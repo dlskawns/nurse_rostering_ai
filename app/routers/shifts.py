@@ -103,15 +103,6 @@ async def get_shift_manage(
     if not nurse or not nurse.group:
         raise HTTPException(status_code=404, detail="User group information not found")
     
-    # # config_version이 없으면 최신 config의 version 사용
-    # if not config_version:
-    #     latest_config = db.query(RosterConfig).filter(
-    #         RosterConfig.group_id == current_user.group_id
-    #     ).order_by(RosterConfig.created_at.desc()).first()
-    #     config_version = latest_config.config_version if latest_config else None
-    
-    # if not config_version:
-    #     raise HTTPException(status_code=404, detail="설정 버전을 찾을 수 없습니다.")
     
     # 해당 클래스의 shift_manage 데이터 조회
     shift_manages = db.query(ShiftManage).filter(
