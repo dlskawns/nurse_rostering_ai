@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Dict
 
 from db.client import get_db
+from db.client2 import _get_mssql_session
 from routers.auth import get_current_user_from_cookie
 from schemas.auth_schema import User as UserSchema
 from schemas.daily_shift_schema import (
@@ -26,7 +27,7 @@ async def get_month(
     year: int,
     month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db),
+    db: Session = Depends(_get_mssql_session),
 ):
     """월 데이터 조회(없으면 shift_manage 기반으로 생성).
     - 쿼리: office_id, group_id, year, month
@@ -46,7 +47,7 @@ async def get_month(
 async def put_monthly(
     body: DailyShiftMonthlyUpdate,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db),
+    db: Session = Depends(_get_mssql_session),
 ):
     """월 전체 일괄 업데이트. shift_manage 템플릿과 daily_shift 월 데이터를 동기화합니다."""
     try:
@@ -72,7 +73,7 @@ async def put_monthly(
 async def put_daily(
     body: DailyShiftDailyUpdate,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db),
+    db: Session = Depends(_get_mssql_session),
 ):
     """일자별 배열 업데이트.
     - body: {D:[], E:[], N:[]}

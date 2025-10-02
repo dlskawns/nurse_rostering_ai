@@ -1,6 +1,7 @@
 from schemas.roster_schema import PreferenceData, PreferenceSubmit
 from routers.auth import get_current_user_from_cookie
 from db.client import get_db
+from db.client2 import _get_mssql_session
 from db.models import ShiftPreference, Nurse
 from schemas.auth_schema import User as UserSchema
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,11 +26,12 @@ router = APIRouter(
 async def save_preference_draft(
     pref_data: PreferenceData,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return save_preference_draft_service(pref_data, current_user, db)
     except Exception as e:
+        print('error', e)
         raise HTTPException(status_code=500, detail=f"선호도 초안 저장 실패: {str(e)}")
         
 
@@ -38,7 +40,7 @@ async def save_preference_draft(
 async def submit_preferences(
     req: PreferenceSubmit,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return submit_preferences_service(req, current_user, db)
@@ -50,7 +52,7 @@ async def submit_preferences(
 async def submit_empty_preferences(
     req: PreferenceSubmit,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return submit_empty_preferences_service(req, current_user, db)
@@ -62,7 +64,7 @@ async def submit_empty_preferences(
 async def retract_submission(
     req: PreferenceSubmit,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return retract_submission_service(req, current_user, db)
@@ -75,7 +77,7 @@ async def get_latest_preference(
     year: int, 
     month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return get_latest_preference_service(year, month, current_user, db)
@@ -88,7 +90,7 @@ async def get_all_preferences(
     year: int, 
     month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return get_all_preferences_service(year, month, current_user, db)

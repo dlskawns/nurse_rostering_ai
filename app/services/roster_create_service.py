@@ -11,6 +11,9 @@ from datetime import date
 import uuid
 from sqlalchemy import func
 from collections import defaultdict
+from db.client import get_db
+from db.client2 import _get_mssql_session
+
 
 # CP-SAT 기반 엔진들 import
 try:
@@ -110,9 +113,11 @@ def _build_shift_manage_and_requirements(db: Session, current_user, latest_confi
     shift_manage_data = [s.__dict__ for s in shift_manages]
     daily_shift_requirements = {}
     for sm in shift_manages:
-        if sm.codes:
-            for code in sm.codes:
-                daily_shift_requirements[code] = sm.manpower
+        # if sm.codes:
+        #     for code in sm.codes:
+        # daily_shift_requirements[sm.main_code.strip()] = sm.manpower
+        daily_shift_requirements[sm.main_code] = sm.manpower
+
     return shift_manage_data, daily_shift_requirements
 
 def _normalize_to_main(code: str, code2main: dict) -> str:
@@ -435,22 +440,28 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
         )
         .first()
     )
+
     if not wanted:
         raise Exception("해당 월의 wanted 작성을 먼저 요청해주세요.")
 
     schedule = request_schedule_service(req, current_user, db)
 
     nurses_in_group, preferences = _collect_nurses_and_preferences(db, req, current_user)
+
     latest_config = _fetch_latest_config(db, req, current_user)
+
     shift_manage_data, daily_shift_requirements = _build_shift_manage_and_requirements(
         db, current_user, latest_config
     )
 
     # daily_shift_requirements를 config에 주입해서 엔진 호출
     config_dict = latest_config.__dict__ if latest_config else {}
+    print('daily_shift_requirements!!', daily_shift_requirements)
     config_dict['daily_shift_requirements'] = daily_shift_requirements
+    print('latest_config', latest_config.daily_shift_requirements)
     # ── 프리셉터 게이지(0~10) → 파라미터 매핑 ──
     _apply_preceptor_gauge(config_dict, getattr(req, 'preceptor_gauge', None))
+    
     # 경계 제약 기능 기본값
     config_dict.setdefault('cross_month_hard_rules_enable', True)
     config_dict.setdefault('cross_month_lookback_days', 6)
@@ -468,9 +479,11 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
         time_limit_seconds=60,
         config_override=config_dict,
     )
-
+    
     _persist_entries(db, schedule, generated, req)
+
     roster_data = _build_roster_response(db, schedule, req, nurses_in_group)
+
     return roster_data
 
 
@@ -572,6 +585,7 @@ def request_schedule_service(req: RosterRequest, current_user, db: Session):
         # raise Exception("설정값을 입력해주세요")
     if not latest_config or latest_config == None:
         return "noConfigId"
+
     latest_version = db.query(func.max(Schedule.version)).filter(
         Schedule.group_id == current_user.group_id,
         Schedule.year == req.year,
@@ -590,8 +604,10 @@ def request_schedule_service(req: RosterRequest, current_user, db: Session):
         dropped=False,
         name=f"{req.month}월 근무표 VER{latest_version + 1}"
     )
+
     db.add(new_schedule)
     db.commit()
     db.refresh(new_schedule)
     db.commit()
+
     return new_schedule 

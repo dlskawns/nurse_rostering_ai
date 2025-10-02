@@ -18,6 +18,15 @@ from services.shift_service import (
 from typing import Optional
 import os
 from services.shift_service_mssql import get_shifts_service as get_shifts_service_mssql
+from datetime import timedelta, datetime
+
+def convert_time(value):
+    if isinstance(value, str):  # '06:00' → timedelta
+        h, m = map(int, value.split(":"))
+        return timedelta(hours=h, minutes=m)
+    return value
+
+
 router = APIRouter(
     tags=["shifts"]
 )
@@ -33,11 +42,13 @@ async def get_shifts(
 ):
     try:
         backend = os.getenv("DB_BACKEND", "mysql").lower()
-        print('여온다')
         if backend == "mssql":
             shifts = get_shifts_service_mssql(current_user, db)
         else:
             shifts = get_shifts_service_mysql(current_user, db)
+        for shift in shifts:
+            shift["start_time"] = convert_time(shift["start_time"])
+            shift["end_time"] = convert_time(shift["end_time"])
         return shifts
     except Exception as e:
         print(e)
@@ -72,9 +83,6 @@ async def update_shift(
     db: Session = Depends(_get_mssql_session)
 ):
     try:
-        print('req', req)
-        print('current_user', current_user)
-        print('db', db)
         result = update_shift_service(req, current_user, db)
         return result
     except Exception as e:
@@ -109,7 +117,7 @@ async def get_shift_manage(
     class_name: str,
     # config_version: Optional[str] = None,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -117,17 +125,7 @@ async def get_shift_manage(
     nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
     if not nurse or not nurse.group:
         raise HTTPException(status_code=404, detail="User group information not found")
-    
-    # # config_version이 없으면 최신 config의 version 사용
-    # if not config_version:
-    #     latest_config = db.query(RosterConfig).filter(
-    #         RosterConfig.group_id == current_user.group_id
-    #     ).order_by(RosterConfig.created_at.desc()).first()
-    #     config_version = latest_config.config_version if latest_config else None
-    
-    # if not config_version:
-    #     raise HTTPException(status_code=404, detail="설정 버전을 찾을 수 없습니다.")
-    
+
     # 해당 클래스의 shift_manage 데이터 조회
     shift_manages = db.query(ShiftManage).filter(
         ShiftManage.office_id == nurse.group.office_id,
@@ -165,7 +163,6 @@ async def get_shift_manage(
             ShiftManage.nurse_class == class_name,
             # ShiftManage.config_version == config_version
         ).order_by(ShiftManage.shift_slot.asc()).all()
-        print(6)
     return [
         {
             "shift_slot": sm.shift_slot,
@@ -182,7 +179,7 @@ async def save_shift_manage(
     req: ShiftManageSaveRequest,
     # config_version: Optional[str] = None,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -191,16 +188,6 @@ async def save_shift_manage(
     nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
     if not nurse or not nurse.group:
         raise HTTPException(status_code=404, detail="User group information not found")
-    
-    # config_version이 없으면 최신 config의 version 사용
-    # if not config_version:
-    #     latest_config = db.query(RosterConfig).filter(
-    #         RosterConfig.group_id == current_user.group_id
-    #     ).order_by(RosterConfig.created_at.desc()).first()
-    #     config_version = latest_config.config_version if latest_config else None
-    
-    # if not config_version:
-    #     raise HTTPException(status_code=404, detail="설정 버전을 찾을 수 없습니다.")
     
     # 기존 데이터 삭제 (특정 클래스의 모든 슬롯)
     db.query(ShiftManage).filter(

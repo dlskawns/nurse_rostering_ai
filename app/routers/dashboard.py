@@ -6,6 +6,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from db.client import get_db
+from db.client2 import _get_mssql_session
 from schemas.auth_schema import User
 from routers.auth import get_current_user_from_cookie
 from services.dashboard_service import (
@@ -23,7 +24,7 @@ async def get_dashboard_summary(
     year: Optional[int] = Query(None, description="조회할 년도"),
     month: Optional[int] = Query(None, description="조회할 월"),
     current_user: User = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """
     대시보드 요약 데이터를 조회합니다.
@@ -49,7 +50,7 @@ async def get_individual_dashboard(
     year: Optional[int] = Query(None, description="조회할 년도"),
     month: Optional[int] = Query(None, description="조회할 월"),
     current_user: User = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """
     개인별 만족도 분석 데이터를 조회합니다.
@@ -74,7 +75,7 @@ async def get_individual_dashboard(
 async def get_monthly_trend(
     months: int = Query(6, description="조회할 월 수", ge=1, le=12),
     current_user: User = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """
     월별 만족도 트렌드를 조회합니다.
@@ -98,7 +99,7 @@ async def get_monthly_trend(
 async def get_request_details_by_analytics(
     analytics_id: int,
     current_user: User = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """
     특정 분석의 상세 요청 데이터를 조회합니다.

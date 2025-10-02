@@ -45,13 +45,6 @@ def get_shifts_service(current_user, db: Session | None = None) -> List[Dict[str
             .all()
         )
         if shifts:
-            
-            print('조회')
-            for s in shifts:
-                # print(s.start_time, type(s.start_time))
-                print(_to_time_str(s.start_time), type(_to_time_str(s.start_time)))
-                # print(s.end_time, type(s.end_time))
-                print(_to_time_str(s.end_time), type(_to_time_str(s.end_time)))
             return [
                 {
                     "shift_id": s.shift_id,

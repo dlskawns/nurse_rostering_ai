@@ -73,13 +73,13 @@ class CPSATBasicEngine:
             'N': 7.0,  # Night Keep은 더 높은 가중치
             'O': 10.0
         })
-        
         return NurseRosterConfig(
-            daily_shift_requirements={
-                'D': config_data.get('day_req', 3),
-                'E': config_data.get('eve_req', 3), 
-                'N': config_data.get('nig_req', 2)
-            },
+            daily_shift_requirements = config_data['daily_shift_requirements'],
+            # daily_shift_requirements={
+            #     'D': config_data.get('day_req', 3),
+            #     'E': config_data.get('eve_req', 3), 
+            #     'N': config_data.get('nig_req', 2)
+            # },
             # 병원 내규 (Soft Constraints)
             min_experience_per_shift=min_exp_per_shift,
             required_experienced_nurses=req_exp_nurses,
@@ -228,19 +228,20 @@ class CPSATBasicEngine:
         # 1. 설정 객체 생성
         with Timer("설정 생성"):
             config = self.create_config_from_db(config_data)
-        
+
         # 2. 대상 월 설정
         target_month = date(year, month, 1)
-        
+
         # 3. 간호사 객체 생성
         with Timer("간호사 객체 생성"):
             nurses = self.create_nurses_from_db(nurses_data)
             for nurse in nurses:
                 nurse.initialize_off_days(config)
-        
+
         # 4. 근무표 시스템 생성
         with Timer("근무표 시스템 초기화"):
             roster_system = RosterSystem(nurses, target_month, config)
+
             # 고정된 셀 정보 처리
             fixed_cells = list(config_data.get('fixed_cells', []) or [])
             # ── 경계 제약(강제 OFF/금지) 병합 ──
@@ -265,12 +266,14 @@ class CPSATBasicEngine:
                             # override: 기존 고정 무시
                             fixed_cells = [c for c in fixed_cells if not (c.get('nurse_index')==n_idx and c.get('day_index')==d)]
                         fixed_cells.append({'nurse_index': n_idx, 'day_index': d, 'shift': 'O'})
+
             if fixed_cells:
                 print(f"{self.logger_prefix} 고정된 셀 {len(fixed_cells)}개 처리 중...")
                 roster_system.fixed_cells = fixed_cells
                 for fixed_cell in fixed_cells:
                     print(f"{self.logger_prefix} 고정 셀: 간호사 {fixed_cell['nurse_index']}, 날짜 {fixed_cell['day_index']+1}, 근무 {fixed_cell['shift']}")
             # forbidden: { nurse_db_id: { day_idx: [codes...] } }
+ 
             forbidden = initial_constraints.get('forbidden') or {}
             if forbidden:
                 # 내부 인덱스 매핑 구조로 저장
@@ -287,14 +290,15 @@ class CPSATBasicEngine:
                             d = d_str
                         init_forb.setdefault((n_idx, d), set()).update(codes)
                 roster_system.initial_forbidden = init_forb
-        
+
         # 5. 선호도 데이터 파싱 및 적용
         with Timer("선호도 데이터 파싱"):
             shift_preferences, off_requests, pair_preferences = self.parse_preferences_from_db(prefs_data)
-        
+
         # ────────────────────────────── 프리셉터 페어링 반영 ──────────────────────────────
         # nurses_data 내 preceptor_id 를 사용해 자동으로 함께 근무 선호를 추가한다.
         try:
+
             valid_ids = {row.get('nurse_id') for row in nurses_data}
             seen_pairs = set()  # 중복 방지 (무방향)
             added_cnt = 0
@@ -319,24 +323,27 @@ class CPSATBasicEngine:
                 })
                 seen_pairs.add(key)
                 added_cnt += 1
+
             if added_cnt:
                 print(f"[CP-SAT-Basic] 프리셉터 페어링 {added_cnt}건 추가 적용")
+
         except Exception as e:
             print(f"[CP-SAT-Basic] 프리셉터 페어링 반영 중 오류: {e}")
         # ────────────────────────────────────────────────────────────────────────
-        
+
         # 6. 휴무 요청 적용
         if off_requests:
+ 
             with Timer("휴무 요청 적용"):
                 print(f"{self.logger_prefix} 휴무 요청 적용 중...")
-                
+
                 # DB nurse_id를 키로 사용하여 매핑
                 mapped_off_requests = {}
                 for nurse_id, requests in off_requests.items():
                     # DB nurse_id를 그대로 키로 사용 (roster_system.py에서 n.db_id와 비교하므로)
                     mapped_off_requests[nurse_id] = {str(k): v for k, v in requests.items()}
                 roster_system.apply_off_requests(mapped_off_requests)
-        
+
         # 7. 선호 근무 유형 적용  
         if shift_preferences:
             with Timer("선호 근무 유형 적용"):
@@ -348,22 +355,22 @@ class CPSATBasicEngine:
                     mapped_shift_preferences[nurse_id] = prefs
                 
                 roster_system.apply_shift_preferences(mapped_shift_preferences)
-        
+
         # 8. 페어링 선호도 적용
         with Timer("페어링 선호도 적용"):
             print(f"{self.logger_prefix} 페어링 선호도 적용 중...")
             # 기본값으로 빈 페어링 선호도 설정
             roster_system.apply_pair_preferences(pair_preferences)
-        
+
         # 9. CP-SAT으로 최적화 (새로운 제약사항 포함)
         with Timer("CP-SAT으로 최적화"):
             print(f"{self.logger_prefix} CP-SAT 최적화 시작 (시간 제한: {time_limit_seconds}초)...")
             success = self._optimize_with_enhanced_constraints(roster_system, time_limit_seconds, nurses, grouped, randomize=randomize, seed=seed)
-            
+
             if not success:
                 print(f"{self.logger_prefix} 개선된 제약사항으로 실패, 기본 알고리즘으로 폴백...")
                 self._optimize_fallback_lex_hard_first(roster_system, time_limit_seconds=time_limit_seconds, grouped=grouped)
-        
+
         # 10. 결과 변환
         with Timer("결과 변환"):
             result = self._convert_result_to_db_format(roster_system, nurses)
@@ -418,11 +425,12 @@ class CPSATBasicEngine:
         if randomize:
             run_seed = seed if seed is not None else ((int(time.time()*1000) ^ random.getrandbits(31)) & 0x7fffffff)
 
+        print('여기다여기', roster_system.config.daily_shift_requirements)
         # ① 0.3× time_limit 으로 “전체 모델” 한번 돌려 feasible 확보
         base_tl = max(5, int(time_limit_seconds*0.3))
         feasible = self._quick_initial_solve(
             roster_system, base_tl, grouped, run_seed)
-
+    
         # hard 위반 수 세는 헬퍼
         HARD_TYPES = {
             'shift_requirement', 'max_consecutive_night',
@@ -435,24 +443,23 @@ class CPSATBasicEngine:
 
         best_viol = hard_violation_cnt()
         best_roster = roster_system.roster.copy()
-
         # ② RL 정책
         policy = RLNeighborhoodPolicy(len(roster_system.nurses),
                                       roster_system.num_days)
         remaining = time_limit_seconds - base_tl
         per_iter  = 8          # neighbourhood solve 8 초
         max_iter  = max(1, remaining // per_iter)
-
         if max_iter==0:
-            print("⚠️  남은 시간이 없어 LNS 패스")
+
             return best_viol==0
-
         for it in range(max_iter):
-            n_sel, d_sel = policy.select()
-            ok = _solve_neighbourhood(roster_system, n_sel, d_sel,
+            try:
+                n_sel, d_sel = policy.select()
+                ok = _solve_neighbourhood(roster_system, n_sel, d_sel,
                                       per_iter, grouped, run_seed, it = it)
+            except Exception as e:
+                print(e)
             if not ok: policy.update(False, n_sel, d_sel); continue
-
             curr_viol = hard_violation_cnt()
             improved  = curr_viol < best_viol
             if improved:
@@ -461,7 +468,6 @@ class CPSATBasicEngine:
                 roster_system.roster = best_roster.copy()
             policy.update(improved, n_sel, d_sel)
             if best_viol==0: break
-
         roster_system.roster = best_roster
         return best_viol==0
 
@@ -1027,7 +1033,6 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
     from ortools.sat.python import cp_model
     m = cp_model.CpModel()
     N,D,S = len(rs.nurses), rs.num_days, rs.config.num_shifts
-
     # join / leave index
     join, leave = [],[]
     first_day = rs.target_month
@@ -1038,6 +1043,7 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
     # 고정 셀 (수간호사 등)
     code2main = {c:r['main_code']
                  for r in (grouped or []) for c in r['codes']}
+                 
     fixed, fixed_cnt = {}, [[0]*S for _ in range(D)]
     for c in getattr(rs,'fixed_cells',[]) or []:
         n,d = c['nurse_index'], c['day_index']

@@ -9,6 +9,7 @@ from schemas.roster_schema import RosterConfigCreate, RosterConfig, PublishReque
 from routers.auth import get_current_user_from_cookie
 from schemas.auth_schema import User
 from db.client import get_db
+from db.client2 import _get_mssql_session
 from db.models import RosterConfig as RosterConfigModel
 from schemas.auth_schema import User as UserSchema
 from db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
@@ -30,7 +31,7 @@ templates = Jinja2Templates(directory="app/templates")
 async def save_roster_config(
     config_data: RosterConfigCreate,
     user: User = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db),
+    db: Session = Depends(_get_mssql_session),
 ):
     if not user or not user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -42,7 +43,7 @@ async def save_roster_config(
 @router.get("/config/versions")
 async def get_config_versions(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """Get unique config versions for the current group"""
     if not current_user or not current_user.is_head_nurse:
@@ -68,7 +69,7 @@ async def get_config_versions(
 async def get_config_by_version(
     config_version: str,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """Get the latest config for a specific version"""
     if not current_user or not current_user.is_head_nurse:
@@ -79,6 +80,7 @@ async def get_config_by_version(
     ).order_by(RosterConfigModel.created_at.desc()).first()
     
     try:
+        print('여긴 옴')
         if not config:
             cfg = DEFAULT_CONFIG
             # DEFAULT 설정으로 RosterConfig 레코드 생성 및 저장
@@ -86,9 +88,9 @@ async def get_config_by_version(
                 # config_version="default",
                 office_id=current_user.office_id,
                 group_id=current_user.group_id,
-                day_req=cfg.daily_shift_requirements.get('D', 3),
-                eve_req=cfg.daily_shift_requirements.get('E', 3),
-                nig_req=cfg.daily_shift_requirements.get('N', 2),
+                # day_req=cfg.daily_shift_requirements.get('D', 3),
+                # eve_req=cfg.daily_shift_requirements.get('E', 3),
+                # nig_req=cfg.daily_shift_requirements.get('N', 2),
                 min_exp_per_shift=cfg.min_experience_per_shift,
                 req_exp_nurses=cfg.required_experienced_nurses,
                 two_offs_per_week=getattr(cfg, 'enforce_two_offs_per_week', False),
@@ -113,9 +115,9 @@ async def get_config_by_version(
             return {
                 "config_id": new_config.config_id,
                 # "config_version": new_config.config_version,
-                "day_req": new_config.day_req,
-                "eve_req": new_config.eve_req,
-                "nig_req": new_config.nig_req,
+                # "day_req": new_config.day_req,
+                # "eve_req": new_config.eve_req,
+                # "nig_req": new_config.nig_req,
                 "min_exp_per_shift": new_config.min_exp_per_shift,
                 "req_exp_nurses": new_config.req_exp_nurses,
                 "two_offs_per_week": new_config.two_offs_per_week,
@@ -147,9 +149,9 @@ async def get_config_by_version(
             return {
                 "config_id": config.config_id,
                 # "config_version": config.config_version,
-                "day_req": config.day_req,
-                "eve_req": config.eve_req,
-                "nig_req": config.nig_req,
+                # "day_req": config.day_req,
+                # "eve_req": config.eve_req,
+                # "nig_req": config.nig_req,
                 "min_exp_per_shift": config.min_exp_per_shift,
                 "req_exp_nurses": config.req_exp_nurses,
                 "two_offs_per_week": config.two_offs_per_week,
@@ -177,7 +179,7 @@ async def get_config_by_version(
 @router.get("/latest")
 async def get_latest_schedule(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return get_latest_schedule_service(current_user, db)
@@ -189,7 +191,7 @@ async def get_latest_schedule(
 @router.get("/issued")
 async def get_issued_schedules(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return get_issued_schedules_service(current_user, db)
@@ -202,7 +204,7 @@ async def get_issued_schedules(
 async def get_schedule_status(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return get_schedule_status_service(year, month, current_user, db)
@@ -214,7 +216,7 @@ async def get_schedule_status(
 async def drop_schedule(
     schedule_id: str,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -237,7 +239,7 @@ async def drop_schedule(
 async def get_roster_by_schedule_id(
     schedule_id: str,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -261,9 +263,10 @@ async def get_roster_by_schedule_id(
     # Get shift colors
     shifts_db = db.query(Shift).all()
     shift_colors = {s.shift_id: s.color for s in shifts_db}
-    
+    shift_id = {s.shift_id: s.shift_id for s in shifts_db}
     # Get schedule entries
     entries = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == schedule_id).all()
+
     # for e in entries:
     roster_data = {
         "year": schedule.year, 
@@ -278,6 +281,7 @@ async def get_roster_by_schedule_id(
     for entry in entries:
         if entry.nurse_id not in entries_by_nurse:
             entries_by_nurse[entry.nurse_id] = {}
+        # entries_by_nurse[entry.nurse_id][entry.work_date.day] = entry.shift_id.shift()
         entries_by_nurse[entry.nurse_id][entry.work_date.day] = entry.shift_id
 
     violations = []  # 임시로 빈 리스트
@@ -301,7 +305,7 @@ async def get_roster_by_schedule_id(
 async def get_schedule_versions(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -327,7 +331,7 @@ async def get_schedule_versions(
 async def get_roster_for_month(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -394,7 +398,7 @@ async def get_roster_for_month(
 async def publish_roster(
     req: PublishRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -465,7 +469,7 @@ async def publish_roster(
 async def get_roster_for_month(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -531,7 +535,7 @@ async def get_roster_for_month(
 async def save_roster(
     roster_data: dict,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -588,7 +592,7 @@ async def save_roster(
 async def get_submission_statuses(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -620,7 +624,7 @@ async def get_submission_statuses(
 async def get_schedule_status(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -699,12 +703,12 @@ async def get_schedule_status(
 async def validate_roster(
     roster_data: dict,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     # ──────────────────────── 0. 인증/파라미터 체크 ────────────────────────
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
-
+ 
     year: int   = roster_data.get('year')
     month: int  = roster_data.get('month')
     roster      = roster_data.get('roster')
@@ -725,61 +729,35 @@ async def validate_roster(
         #  * codes 열(JSON) 에 들어있는 파생 코드를 본교대(main_code) 로 매핑
         from db.models import ShiftManage, Nurse, RosterConfig  # local import
 
-        # # config_version을 가져오기 위해 config_id로 RosterConfig 조회
-        # if config_id:
-        #     config_for_version = db.query(RosterConfig).filter(
-        #         RosterConfig.config_id == config_id
-        #     ).first()
-        #     # config_version = config_for_version.config_version if config_for_version else None
-        # else:
-        #     # config_id가 없는 경우 최신 config의 version 사용
-        #     latest_config_for_version = db.query(RosterConfig).filter(
-        #         RosterConfig.group_id == current_user.group_id
-        #     ).order_by(RosterConfig.created_at.desc()).first()
-        #     config_version = latest_config_for_version.config_version if latest_config_for_version else None
-        
-        # if not config_version:
-        #     return {"violations": ["설정 버전을 찾을 수 없습니다."]}
-            
         # ○ 현 수간호사의 부서 기준으로 조회
+  
         shift_rows = db.query(ShiftManage).filter(
             ShiftManage.office_id == current_user.office_id,
             ShiftManage.group_id  == current_user.group_id,
-            # ShiftManage.config_version == config_version
-        ).all()
+            ShiftManage.nurse_class == 'RN',
+        ).order_by(ShiftManage.shift_slot.asc()).all()
         #    예) { 'D': 'D', 'D1': 'D', 'MD': 'D',  'E': 'E', … }
+
         alias_map: dict[str, str] = {}
+        daily_shift_requirements = {}
         for row in shift_rows:
             if not row.main_code:
                 continue
             base = row.main_code.upper()          # ex) 'D'
             alias_map[base] = base
-
+            
+            # daily_shift_requirements[row.main_code.strip()] = row.manpower
+            daily_shift_requirements[row.main_code] = row.manpower
             if row.codes:
                 # row.codes 가 JSON 컬럼 → 이미 list 로 deserialize 되어있음
                 for code in row.codes:
                     alias_map[code.upper()] = base
+
         # OFF(휴무) 도 항상 포함시킴
         alias_map.setdefault('OFF', 'O')
         alias_map.setdefault('O',   'O')
         # ──────────────────────── 2. 근무표 설정(인원/제약) 불러오기 ────────────────────────
-        # if config_id:
-        #     # config_id가 제공된 경우 해당 config 사용
-        #     latest_config_db = (
-        #         db.query(RosterConfig)
-        #           .filter(RosterConfig.config_id == config_id)
-        #           .first()
-        #     )
-        #  
-        # else:
-        #     # config_id가 없는 경우 최신 config 사용
-        #     latest_config_db = (
-        #         db.query(RosterConfig)
-        #           .filter(RosterConfig.group_id == current_user.group_id)
-        #           .order_by(RosterConfig.created_at.desc())
-        #           .first()
-        #     )
-        #  
+
         latest_config_db = db.query(RosterConfigModel).filter(
             RosterConfigModel.office_id == current_user.office_id,
             RosterConfigModel.group_id == current_user.group_id,
@@ -788,16 +766,12 @@ async def validate_roster(
             return {"violations": ["근무표 설정을 찾을 수 없습니다."]}
 
         roster_config_for_engine = NurseRosterConfig(
-            daily_shift_requirements={
-                'D': latest_config_db.day_req,
-                'E': latest_config_db.eve_req,
-                'N': latest_config_db.nig_req
-            },
+            daily_shift_requirements=daily_shift_requirements,
             max_consecutive_work_days   = latest_config_db.max_conseq_work,
             max_night_shifts_per_month  = latest_config_db.max_nig_per_month,
             max_consecutive_nights      = 3 if latest_config_db.three_seq_nig else 2
         )
-
+        
         # ──────────────────────── 3. RosterSystem 초기화 ────────────────────────
         nurses_for_engine = [
             NurseEngine.from_db_model(n, i)
@@ -805,15 +779,18 @@ async def validate_roster(
                 db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
             )
         ]
+
         system = RosterSystem(
             nurses        = nurses_for_engine,
             target_month  = date(year, month, 1),
             config        = roster_config_for_engine
         )
+
         # shift_types 는 ['D','E','N','O'] (엔진 기본).  
         shift_map = {s: i for i, s in enumerate(system.config.shift_types)}
         system.roster.fill(0)                                # 3-D 배열 0으로 초기화
         # ──────────────────────── 4. 프론트에서 넘어온 근무표 → 엔진 포맷 변환 ────────────────────────
+
         for nurse_idx, nurse_data in enumerate(roster):
             if nurse_idx >= len(system.nurses):
                 continue
@@ -833,7 +810,11 @@ async def validate_roster(
                     system.roster[nurse_idx, day_idx, shift_idx] = 1
                 # else: 알 수 없는 코드 → 무시
         # ──────────────────────── 5. 위반사항 탐색 & 포매팅 ────────────────────────
+
         violation_details = system._find_violations()
+        # print('violation_details')
+        # import pprint
+        # pprint.pprint(violation_details)
         violation_messages: set[str] = set()
         detailed_violations: list[dict] = []
         for v in violation_details:
@@ -865,7 +846,7 @@ async def validate_roster(
                     'type': 'night_consecutive',
                     'nurse_idx': v['nurse_idx'],
                     'nurse_name': nurse_name,
-                    'day': v['day']
+                    'day': v['day']+1
                 })
             elif v['type'] == 'night_nd':
                 nurse_name = system.nurses[v['nurse_idx']].name
@@ -885,6 +866,10 @@ async def validate_roster(
                     'nurse_name': nurse_name,
                     'day': v['day']
                 })
+        print('violation_messages')
+        import pprint
+        pprint.pprint(sorted(violation_messages))
+        pprint.pprint(detailed_violations)
         return {
             "violations": sorted(violation_messages),
             "detailed_violations": detailed_violations
@@ -904,7 +889,7 @@ async def update_schedule_name(
     schedule_id: str,
     name_data: dict,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -942,7 +927,7 @@ async def update_schedule_name(
 async def export_schedule_excel(
     schedule_id: str,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """
         - 근무표 엑셀 내보내기

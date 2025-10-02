@@ -380,26 +380,19 @@ class CPSATBasicEngine:
     def _quick_initial_solve(self, rs: RosterSystem,
                              tl:int, grouped):
         from ortools.sat.python import cp_model
-        print(1a)
         model,X,j,l,fixed = _build_full_model(rs,grouped)
-        print(1b)
         solver=cp_model.CpSolver()
-        print(1c)
         solver.parameters.max_time_in_seconds=tl
         solver.parameters.num_search_workers=2
         solver.parameters.relative_gap_limit = 0.2
         stat=solver.Solve(model)
-        print(1d)
         if stat not in (cp_model.OPTIMAL,cp_model.FEASIBLE): return False
-        print(1e)
         rs.roster.fill(0)
-        print(1f)
         N,D,S=len(rs.nurses),rs.num_days,rs.config.num_shifts
         for n in range(N):
             for d in range(j[n],l[n]+1):
                 for s in range(S):
                     if solver.Value(X(n,d,s)): rs.roster[n,d,s]=1
-        print(1g)
         return True
 
 

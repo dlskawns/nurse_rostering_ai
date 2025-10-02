@@ -9,6 +9,7 @@ from services.graph_service import graph_service
 from pydantic import BaseModel
 from routers.auth import get_current_user_from_cookie
 from db.client import get_db
+from db.client2 import _get_mssql_session
 from db.models import Wanted
 from schemas.auth_schema import User as UserSchema
 from db.models import Nurse, ShiftPreference
@@ -24,7 +25,7 @@ templates = Jinja2Templates(directory="app/templates")
 async def request_wanted_shifts(
     payload: WantedDeadlineRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return request_wanted_shifts_service(payload, current_user, db)
@@ -36,7 +37,7 @@ async def request_wanted_shifts(
 async def get_wanted_status(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -62,7 +63,7 @@ async def get_wanted_status(
 async def get_submission_statuses(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -94,7 +95,7 @@ async def get_submission_statuses(
 @router.get("/all")
 async def get_all_wanted(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -116,7 +117,7 @@ async def get_all_wanted(
 async def close_wanted_request(
     year: int, month: int,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -140,7 +141,7 @@ async def close_wanted_request(
 async def update_wanted_deadline(
     req: WantedDeadlineRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     if not current_user or not current_user.is_head_nurse:
         raise HTTPException(status_code=403, detail="Permission denied")

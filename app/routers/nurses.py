@@ -8,6 +8,7 @@ import tempfile
 import os
 
 from db.client import get_db
+from db.client2 import _get_mssql_session
 from db.models import Nurse as NurseModel
 from schemas.roster_schema import NurseProfile, MoveNurseRequest
 from routers.auth import get_current_user_from_cookie
@@ -38,7 +39,7 @@ router = APIRouter(
 @router.get("", response_model=List[NurseProfile])
 async def get_nurses_in_group(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return get_nurses_in_group_service(current_user, db)
@@ -48,7 +49,7 @@ async def get_nurses_in_group(
 @router.get("/personnel-basic-info")
 async def get_personnel_basic_info(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return get_personnel_basic_info_service(current_user, db)
@@ -61,7 +62,7 @@ async def get_personnel_basic_info(
 async def save_nurse_sequence(
     req: NurseSequenceUpdate,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """
     단일 간호사 이동/상태변경 (드래그앤드롭 중간 저장 용도)
@@ -75,7 +76,7 @@ async def save_nurse_sequence(
 async def reorder_nurses(
     payload: ReorderPayload,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """
     드래그앤드롭 종료 시점에 한 번 호출하여 서버 기준으로 순서를 확정.
@@ -91,7 +92,7 @@ async def reorder_nurses(
 async def bulk_update_nurses(
     nurses_data: List[NurseProfile],
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return bulk_update_nurses_service(nurses_data, current_user, db)
@@ -120,7 +121,7 @@ async def download_template(
 async def upload_excel(
     file: UploadFile = File(...),
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """엑셀 파일 업로드 및 검증"""
     try:
@@ -155,7 +156,7 @@ async def upload_excel(
 async def validate_excel_data_endpoint(
     request: ExcelValidationRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """업로드된 데이터 유효성 검증"""
     try:
@@ -171,7 +172,7 @@ async def validate_excel_data_endpoint(
 async def confirm_upload(
     request: ExcelConfirmRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     """검증된 데이터 최종 저장"""
     try:

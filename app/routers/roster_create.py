@@ -8,6 +8,7 @@ from schemas.auth_schema import User as UserSchema
 from schemas.roster_schema import RosterRequest
 from pydantic import BaseModel
 from db.client import get_db
+from db.client2 import _get_mssql_session
 from db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
 from routers.utils import get_days_in_month
 from routers.auth import get_current_user_from_cookie
@@ -55,7 +56,7 @@ class HoldGenerateRequest(BaseModel):
 async def generate_roster_endpoint(
     req: RosterRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return generate_roster_service(req, current_user, db)
@@ -68,7 +69,7 @@ async def generate_roster_endpoint(
 async def request_schedule(
     req: RosterRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         return request_schedule_service(req, current_user, db)
@@ -81,7 +82,7 @@ async def request_schedule(
 async def hold_generate_roster_endpoint(
     req: HoldGenerateRequest,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_mssql_session)
 ):
     try:
         # 고정된 셀 정보를 포함하여 근무표 생성 서비스 호출
