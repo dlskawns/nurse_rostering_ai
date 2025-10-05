@@ -55,6 +55,7 @@ def _next_request_id(db: Session, nurse_id: str, month_str: str) -> int:
         db.query(WantedRequest.request_id)
         .filter(WantedRequest.nurse_id == nurse_id, WantedRequest.month == month_str)
         .order_by(WantedRequest.request_id.desc())
+        .with_for_update()
         .first()
     )
     return (row[0] + 1) if row else 1

@@ -155,46 +155,90 @@ class CPSATBasicEngine:
             nurses.append(Nurse(**nurse_dict))
         
         return nurses
-    
-    def parse_preferences_from_db(self, prefs_data: List[dict]) -> Tuple[Dict, Dict, Dict]:
-        """
-        DB에서 가져온 선호도 데이터를 main_v3.py 형식으로 변환
-        
-        Returns:
-            Tuple[shift_preferences, off_requests, pair_preferences]
-        """
-        shift_preferences = {}
-        off_requests = {}
-        pair_preferences = {"work_together": [], "work_apart": []}
-        
-        for pref in prefs_data:
-            nurse_id = pref['nurse_id']
-            data = pref.get('data', {})
-            if not data:
-                continue
-        
-            # 근무 유형 선호도 파싱
-            if 'shift' in data:
-                shift_prefs = {}
-                for shift_type, dates in data['shift'].items():
-                    if shift_type.upper() in ['D', 'E', 'N']:
-                        shift_prefs[shift_type.upper()] = dates
-                if shift_prefs:
-                    shift_preferences[nurse_id] = shift_prefs
-
-            # 휴무 요청 파싱
-            if 'O' in data['shift']:
-                off_requests[nurse_id] = data['shift']['O']
+    def parse_preferences_from_db(self, prefs_data: List[dict]) -> Tuple[Dict, Dict, Dict]: 
+        """ 
+        DB에서 가져온 선호도 데이터를 main_v3.py 형식으로 변환 
+        Returns: 
+            Tuple[shift_preferences, off_requests, pair_preferences] 
+        """ 
+        shift_preferences = {} 
+        off_requests = {} 
+        pair_preferences = {"work_together": [], "work_apart": []} 
+        for pref in prefs_data: 
+            nurse_id = pref['nurse_id'] 
+            data = pref.get('data', {}) 
+            if not data: 
+                continue 
             
-            # preference 파싱
-            if 'preference' in data and data['preference']:
-                print(data['preference'])
-                for d in data['preference']:
-                    if d['weight'] <0:
-                        pair_preferences["work_apart"].append({"nurse_1":nurse_id, "nurse_2": d['id'], "weight": d['weight']})
-                    elif d['weight'] >0:
-                        pair_preferences["work_together"].append({"nurse_1":nurse_id, "nurse_2":d['id'], "weight": d['weight']})
+            # 근무 유형 선호도 파싱
+            if 'shift' in data: 
+                shift_prefs = {} 
+                for shift_type, dates in data['shift'].items(): 
+                    if shift_type.upper() in ['D', 'E', 'N']: 
+                        shift_prefs[shift_type.upper()] = dates 
+                if shift_prefs: 
+                    shift_preferences[nurse_id] = shift_prefs 
+            # 휴무 요청 파싱 
+            if 'O' in data['shift']: 
+                off_requests[nurse_id] = data['shift']['O'] 
+            # preference 파싱 
+            if 'preference' in data and data['preference']: 
+                print(data['preference']) 
+                for d in data['preference']: 
+                    if d['weight'] <0: 
+                        pair_preferences["work_apart"].append({"nurse_1":nurse_id, "nurse_2": d['id'], "weight": d['weight']}) 
+                    elif d['weight'] >0: 
+                        pair_preferences["work_together"].append({"nurse_1":nurse_id, "nurse_2":d['id'], "weight": d['weight']}) 
         return shift_preferences, off_requests, pair_preferences
+
+    # def parse_preferences_from_db(self, prefs_data: List[dict]) -> Tuple[Dict, Dict, Dict]:
+    #     """
+    #     DB에서 가져온 선호도 데이터를 main_v3.py 형식으로 변환
+        
+    #     Returns:
+    #         Tuple[shift_preferences, off_requests, pair_preferences]
+    #     """
+    #         # 결과 초기화
+    #     shift_preferences = defaultdict(lambda: defaultdict(list))
+    #     off_requests = defaultdict(list)
+    #     pair_preferences = {"work_together": [], "work_apart": []}
+
+    #     # 1️⃣ 근무 선호도 (ShiftRequest)
+    #     shift_rows = db.query(NurseShiftRequest).all()
+    #     for row in shift_rows:
+    #         nurse_id = row.nurse_id
+    #         shift_type = row.shift.upper()
+    #         day = int(str(row.shift_date).split('-')[-1])  # 날짜만 추출 (예: 2025-11-05 → 5)
+    #         score = getattr(row, "score", None)
+
+    #         # OFF는 별도로 저장
+    #         if shift_type == "O":
+    #             off_requests[nurse_id].append(day)
+    #         elif shift_type in ["D", "E", "N"]:
+    #             shift_preferences[nurse_id][shift_type].append(day)
+    #         else:
+    #             # 예외적인 shift_type 존재 시 무시하거나 로그
+    #             continue
+
+    #     # 2️⃣ 근무자 선호도 (PairRequest)
+    #     pair_rows = db.query(NursePairRequest).all()
+    #     for row in pair_rows:
+    #         nurse_1 = row.nurse_id
+    #         nurse_2 = row.target_nurse_id
+    #         weight = getattr(row, "weight", 0)
+
+    #         pref_dict = {"nurse_1": nurse_1, "nurse_2": nurse_2, "weight": weight}
+    #         if weight > 0:
+    #             pair_preferences["work_together"].append(pref_dict)
+    #         elif weight < 0:
+    #             pair_preferences["work_apart"].append(pref_dict)
+    #         # weight == 0은 무시
+
+    #     # dict로 변환 (defaultdict → dict)
+    #     shift_preferences = {nid: dict(shifts) for nid, shifts in shift_preferences.items()}
+    #     off_requests = dict(off_requests)
+
+    #     return shift_preferences, off_requests, pair_preferences
     
     def generate_roster(
         self, 

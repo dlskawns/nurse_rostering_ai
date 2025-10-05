@@ -4,7 +4,7 @@
 - 모든 함수는 한글 docstring, 한글 print/logging, PEP8 스타일 적용
 """
 from sqlalchemy.orm import Session
-from db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage, Schedule
+from db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage, Schedule, NurseShiftRequest, NursePairRequest, WantedRequest
 from schemas.roster_schema import RosterRequest
 from routers.utils import get_days_in_month, Timer
 from datetime import date
@@ -32,46 +32,139 @@ except ImportError as e:
 
 # ───────────────────────────── 공통 헬퍼 ─────────────────────────────
 
-def _collect_nurses_and_preferences(db: Session, req: RosterRequest, current_user):
-    """그룹 내 간호사 목록과 선호도(제출본 우선)를 수집한다."""
+def _collect_nurses_and_preferences(db: Session, req, current_user):
+    """그룹 내 간호사 목록과 선호도(제출본 우선)를 수집한다. (WantedRequest 기반)"""
+    # 1️⃣ 그룹 내 간호사 목록
     nurses_in_group = (
         db.query(Nurse)
         .filter(Nurse.group_id == current_user.group_id)
         .order_by(Nurse.experience.desc(), Nurse.nurse_id.asc())
         .all()
     )
-    nurse_ids = [n.nurse_id for n in nurses_in_group]
 
+    nurse_ids = [n.nurse_id for n in nurses_in_group]
+    month_str = f"{req.year}-{req.month:02d}"
     preferences = []
+
+    # 2️⃣ 각 간호사별 submitted → draft 순으로 선호도 가져오기
     for nurse_id in nurse_ids:
-        submitted_pref = (
-            db.query(ShiftPreference)
+        submitted_wr = (
+            db.query(WantedRequest)
             .filter(
-                ShiftPreference.nurse_id == nurse_id,
-                ShiftPreference.year == req.year,
-                ShiftPreference.month == req.month,
-                ShiftPreference.is_submitted == True,
+                WantedRequest.nurse_id == nurse_id,
+                WantedRequest.month == month_str,
+                WantedRequest.is_submitted == True
             )
-            .order_by(ShiftPreference.submitted_at.desc())
+            .order_by(WantedRequest.submitted_at.desc())
             .first()
         )
-        if submitted_pref:
-            preferences.append(submitted_pref)
-        else:
-            draft_pref = (
-                db.query(ShiftPreference)
-                .filter(
-                    ShiftPreference.nurse_id == nurse_id,
-                    ShiftPreference.year == req.year,
-                    ShiftPreference.month == req.month,
-                    ShiftPreference.is_submitted == False,
-                )
-                .order_by(ShiftPreference.created_at.desc())
-                .first()
+
+        target_wr = submitted_wr or (
+            db.query(WantedRequest)
+            .filter(
+                WantedRequest.nurse_id == nurse_id,
+                WantedRequest.month == month_str,
             )
-            if draft_pref:
-                preferences.append(draft_pref)
+            .order_by(WantedRequest.created_at.asc())
+            .first()
+        )
+
+        if not target_wr:
+            continue  # 기록이 없는 간호사는 건너뜀
+
+        # 3️⃣ shift 데이터 수집
+        shift_rows = (
+            db.query(NurseShiftRequest)
+            .filter(
+                NurseShiftRequest.nurse_id == nurse_id,
+                NurseShiftRequest.request_id == target_wr.request_id,
+                # cast(NurseShiftRequest.shift_date, String).like(f"{month_str}-%"),
+            )
+            .all()
+        )
+
+        shift_data = {"D": {}, "E": {}, "N": {}, "O": {}}
+        for s in shift_rows:
+            shift_type = s.shift.upper()
+            day = str(int(str(s.shift_date).split("-")[-1]))
+            if shift_type in shift_data:
+                shift_data[shift_type][day] = int(s.score) if s.score is not None else 0
+
+        # 4️⃣ pair 데이터 수집
+        pair_rows = (
+            db.query(NursePairRequest)
+            .filter(
+                NursePairRequest.nurse_id == nurse_id,
+                NursePairRequest.request_id == target_wr.request_id,
+            )
+            .all()
+        )
+
+        pair_data = [{"id": p.target_id, "weight": p.score} for p in pair_rows]
+
+        # 5️⃣ data JSON 구성
+        data_json = {
+            "request": target_wr.request,
+            "shift": {k: v for k, v in shift_data.items() if v},
+            "preference": pair_data,
+        }
+
+        # 6️⃣ 기존 ShiftPreference 포맷으로 append
+        preferences.append({
+            "nurse_id": nurse_id,
+            "year": req.year,
+            "month": req.month,
+            "is_submitted": bool(target_wr.is_submitted),
+            "created_at": target_wr.created_at,
+            "submitted_at": target_wr.submitted_at,
+            "data": data_json,
+        })
+
+    # 7️⃣ 기존 함수와 동일하게 반환
+    print("preferences", nurses_in_group, preferences)
     return nurses_in_group, preferences
+
+
+# def _collect_nurses_and_preferences(db: Session, req: RosterRequest, current_user):
+#     """그룹 내 간호사 목록과 선호도(제출본 우선)를 수집한다."""
+#     nurses_in_group = (
+#         db.query(Nurse)
+#         .filter(Nurse.group_id == current_user.group_id)
+#         .order_by(Nurse.experience.desc(), Nurse.nurse_id.asc())
+#         .all()
+#     )
+#     nurse_ids = [n.nurse_id for n in nurses_in_group]
+
+#     preferences = []
+#     for nurse_id in nurse_ids:
+#         submitted_pref = (
+#             db.query(ShiftPreference)
+#             .filter(
+#                 ShiftPreference.nurse_id == nurse_id,
+#                 ShiftPreference.year == req.year,
+#                 ShiftPreference.month == req.month,
+#                 ShiftPreference.is_submitted == True,
+#             )
+#             .order_by(ShiftPreference.submitted_at.desc())
+#             .first()
+#         )
+#         if submitted_pref:
+#             preferences.append(submitted_pref)
+#         else:
+#             draft_pref = (
+#                 db.query(ShiftPreference)
+#                 .filter(
+#                     ShiftPreference.nurse_id == nurse_id,
+#                     ShiftPreference.year == req.year,
+#                     ShiftPreference.month == req.month,
+#                     ShiftPreference.is_submitted == False,
+#                 )
+#                 .order_by(ShiftPreference.created_at.desc())
+#                 .first()
+#             )
+#             if draft_pref:
+#                 preferences.append(draft_pref)
+#     return nurses_in_group, preferences
 
 
 def _fetch_latest_config(db: Session, req: RosterRequest, current_user):
@@ -87,10 +180,6 @@ def _fetch_latest_config(db: Session, req: RosterRequest, current_user):
             .order_by(RosterConfig.created_at.desc())
             .first()
         )
-    # if not latest_config:
-    #     raise Exception("설정값을 입력해주세요")
-    # if not latest_config.config_version:
-    #     raise Exception("설정 버전이 없습니다.")
     return latest_config
 
 
@@ -288,16 +377,20 @@ def build_cross_month_constraints(db: Session, req: RosterRequest, current_user,
 
 def _run_cp_sat_basic(db: Session, current_user, nurses_in_group, preferences, latest_config, req, shift_manage_data, fixed_cells=None, time_limit_seconds=60, config_override: dict | None = None):
     """cp_sat_basic 엔진 호출을 표준화한다."""
-    nurses_dict = [n.__dict__ for n in nurses_in_group]
-    prefs_dict = [p.__dict__ for p in preferences]
+    try:
+        nurses_dict = [n.__dict__ for n in nurses_in_group]
+        # prefs_dict = [p.__dict__ for p in preferences]
+        prefs_dict = preferences
 
-    # 호출자가 구성한 config_dict(게이지 반영 등)이 있으면 이를 사용
-    config_dict = (config_override.copy() if config_override is not None else (latest_config.__dict__.copy() if latest_config else {}))
-    # ShiftManage 요구인원은 호출부에서 주입한다
-    # fixed_cells 는 옵션
-    if fixed_cells:
-        config_dict['fixed_cells'] = fixed_cells
+        # 호출자가 구성한 config_dict(게이지 반영 등)이 있으면 이를 사용
+        config_dict = (config_override.copy() if config_override is not None else (latest_config.__dict__.copy() if latest_config else {}))
+        # ShiftManage 요구인원은 호출부에서 주입한다
 
+        # fixed_cells 는 옵션
+        if fixed_cells:
+            config_dict['fixed_cells'] = fixed_cells
+    except Exception as e:
+        print(f"error: {e}")
     # cross-month 경계 제약 생성 및 주입
     try:
         initial_constraints = build_cross_month_constraints(
@@ -306,18 +399,19 @@ def _run_cp_sat_basic(db: Session, current_user, nurses_in_group, preferences, l
         config_dict['initial_constraints'] = initial_constraints
     except Exception as e:
         print(f"이전 월 경계 제약 생성 실패: {e}")
-
-    print("cp_sat_basic 엔진 호출 준비 완료")
-    cp_sat_result = generate_roster_cp_sat(
-        nurses_dict,
-        prefs_dict,
-        config_dict,
-        req.year,
-        req.month,
-        shift_manage_data,
-        time_limit_seconds=time_limit_seconds,
-    )
-
+    try:
+        print("cp_sat_basic 엔진 호출 준비 완료")
+        cp_sat_result = generate_roster_cp_sat(
+            nurses_dict,
+            prefs_dict,
+            config_dict,
+            req.year,
+            req.month,
+            shift_manage_data,
+            time_limit_seconds=time_limit_seconds,
+        )
+    except Exception as e:
+        print(f"error: {e}")
     if isinstance(cp_sat_result, dict) and "roster" in cp_sat_result:
         return (
             cp_sat_result["roster"],
@@ -391,7 +485,7 @@ def _apply_preceptor_gauge(config_dict: dict, gauge: int | None) -> None:
         config_dict: 엔진에 전달할 설정 딕셔너리 (in-place 수정)
         gauge: 프론트에서 전달한 게이지 값(0~10). None이면 미적용
     """
-    gauge = 10
+
     if gauge is None:
         return
     print(f"프리셉터 게이지: {gauge}")
@@ -439,7 +533,6 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
         raise Exception("해당 월의 wanted 작성을 먼저 요청해주세요.")
 
     schedule = request_schedule_service(req, current_user, db)
-
     nurses_in_group, preferences = _collect_nurses_and_preferences(db, req, current_user)
     latest_config = _fetch_latest_config(db, req, current_user)
     shift_manage_data, daily_shift_requirements = _build_shift_manage_and_requirements(
@@ -450,7 +543,8 @@ def generate_roster_service(req: RosterRequest, current_user, db: Session):
     config_dict = latest_config.__dict__ if latest_config else {}
     config_dict['daily_shift_requirements'] = daily_shift_requirements
     # ── 프리셉터 게이지(0~10) → 파라미터 매핑 ──
-    _apply_preceptor_gauge(config_dict, getattr(req, 'preceptor_gauge', None))
+    
+    _apply_preceptor_gauge(config_dict, config_dict['preceptor_gauge'])
     # 경계 제약 기능 기본값
     config_dict.setdefault('cross_month_hard_rules_enable', True)
     config_dict.setdefault('cross_month_lookback_days', 6)
@@ -509,7 +603,7 @@ def generate_roster_service_with_fixed_cells(req, current_user, db: Session):
     config_dict = latest_config.__dict__ if latest_config else {}
     config_dict['daily_shift_requirements'] = daily_shift_requirements
     # ── 프리셉터 게이지(0~10) → 파라미터 매핑 (고정 생성에도 동일 적용) ──
-    _apply_preceptor_gauge(config_dict, getattr(req, 'preceptor_gauge', None))
+    _apply_preceptor_gauge(config_dict, config_dict['preceptor_gauge'])
     # 경계 제약 기능 기본값 및 충돌 정책(hold는 기본 차단)
     config_dict.setdefault('cross_month_hard_rules_enable', True)
     config_dict.setdefault('cross_month_lookback_days', 6)

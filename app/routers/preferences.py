@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 from services.preferences_service import (
-    save_preference_draft_service,
+    # save_preference_draft_service,
     submit_preferences_service,
     submit_empty_preferences_service,
     retract_submission_service,
@@ -27,11 +27,11 @@ async def save_preference_draft(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
     db: Session = Depends(get_db)
 ):
-    try:
-        return save_preference_draft_service(pref_data, current_user, db)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"선호도 초안 저장 실패: {str(e)}")
-        
+    # try:
+    #     return save_preference_draft_service(pref_data, current_user, db)
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=f"선호도 초안 저장 실패: {str(e)}")
+    return
 
 # [Preferences] - 선호도 최종 제출
 @router.post("/submit")
@@ -80,6 +80,7 @@ async def get_latest_preference(
     try:
         return get_latest_preference_service(year, month, current_user, db)
     except Exception as e:
+        print('error', e)
         raise HTTPException(status_code=500, detail=f"최신 선호도 조회 실패: {str(e)}")
 
 # [Preferences] - 모든 간호사의 희망사항 현황 조회

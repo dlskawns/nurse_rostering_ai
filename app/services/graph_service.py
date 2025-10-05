@@ -16,12 +16,10 @@ class GraphService:
             dict: 그래프 실행 결과
         """
 
-        response = await self._graph.ainvoke({"request": request, "schema": schema, "case": case, "year": year, "month": month})
+        response = await self._graph.ainvoke({"request": request, "schema": schema, "case": case, "year": year, "month": month})        
         response = [response['shift_results'], response['preference_results']]
-        print(f'\n\n\n\n\n최종response')
         import pprint
         pprint.pprint(response)
-        print(f'\n\n\n\n\n')
         return response
 
 graph_service = GraphService() 
