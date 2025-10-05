@@ -60,7 +60,7 @@ def _next_request_id(db: Session, nurse_id: str, month_str: str) -> int:
     return (row[0] + 1) if row else 1
 
 
-def _persist_wanted_request(db: Session, nurse_id: str, month_str: str) -> int:
+def _persist_wanted_request(db: Session, nurse_id: str, month_str: str, request: str) -> int:
     """wanted_requests 레코드를 저장하고 request_id 를 반환합니다.
 
     인자:
@@ -72,25 +72,22 @@ def _persist_wanted_request(db: Session, nurse_id: str, month_str: str) -> int:
         새로 생성된 request_id
     """
     request_id = _next_request_id(db, nurse_id, month_str)
-    print(1)
     wr = WantedRequest(
         nurse_id=nurse_id,
         request_id=request_id,
+        request=request,
         month=month_str,
         is_submitted=0,
         created_at=datetime.now(),
         submitted_at=None,
     )
-    print(2)
     db.add(wr)
-    print(3)
     try:
         db.commit()
     except Exception as e:
         print(e)
         # db.rollback()
         # raise e
-    print(4)
     print(f"wanted_requests 저장 완료: nurse_id={nurse_id}, month={month_str}, request_id={request_id}")
     return request_id
 
@@ -130,7 +127,7 @@ def _persist_shift_results(
     year: int,
     month: int,
     shift_map: Dict[str, Dict[int, float]],
-    partial_request: str,
+    # partial_request: str,
 ) -> None:
     """shift 결과를 nurse_shift_requests 테이블에 저장합니다.
 
@@ -145,8 +142,12 @@ def _persist_shift_results(
     # detailed_request_id 는 (nurse_id, request_id) 내에서 1부터 증가
     detailed_id = _next_detailed_request_id(db, nurse_id, request_id, table="shift")
     rows = 0
+    # print('detailed_id', detailed_id)
+    print(f'\n\n\n\n\nshift_map, {shift_map}\n\n\n\n\n')
     for shift_code, by_day in (shift_map or {}).items():
-        for day, score in (by_day or {}).items():
+        for day, info in (by_day or {}).items():
+            score = info.get("score")
+            partial_request = info.get("request")
             row = NurseShiftRequest(
                 nurse_id=nurse_id,
                 request_id=request_id,
@@ -158,6 +159,7 @@ def _persist_shift_results(
             )
             db.merge(row)
             rows += 1
+            detailed_id += 1
     db.commit()
     print(f"nurse_shift_requests 저장 완료: detailed_request_id={detailed_id}, rows={rows}")
 
@@ -167,7 +169,7 @@ def _persist_pair_results(
     nurse_id: str,
     request_id: int,
     pairs: List[Dict[str, float]],
-    partial_request: str,
+    # partial_request: str,
 ) -> None:
     """pair 결과를 nurse_pair_requests 테이블에 저장합니다.
 
@@ -182,9 +184,11 @@ def _persist_pair_results(
     rows = 0
     for item in pairs or []:
         try:
-            target_id = int(item.get("id")) if item.get("id") is not None else None
+            target_id = item.get("id") if item.get("id") is not None else None
             weight = float(item.get("weight")) if item.get("weight") is not None else None
-        except (TypeError, ValueError):
+            request = item.get("request")
+        except Exception as e:
+            print('error', e)
             continue
         if target_id is None or weight is None:
             continue
@@ -194,7 +198,7 @@ def _persist_pair_results(
             detailed_request_id=detailed_id,
             target_id=target_id,
             score=weight,
-            partial_request=partial_request,
+            partial_request=request,
         )
         db.merge(row)
         rows += 1
@@ -202,39 +206,67 @@ def _persist_pair_results(
     print(f"nurse_pair_requests 저장 완료: detailed_request_id={detailed_id}, rows={rows}")
 
 
-def _parse_shift_results(response: List[List[Dict[str, Any]]]) -> Dict[str, Dict[int, float]]:
-    """그래프 결과에서 shift_result를 모아 {'D': {7: 1.0}, ...} 형태로 변환합니다.
+from typing import Any, Dict, List
 
-    인자:
-        response: 그래프 전체 응답 [shift_results, preference_results]
-
-    반환:
-        shift 맵 사전
+def _parse_shift_results(
+    response: List[List[Dict[str, Any]]]
+) -> Dict[str, Dict[int, Dict[str, Any]]]:
     """
-    parsed: Dict[str, Dict[int, float]] = {}
+    그래프 결과에서 shift_result를 모아
+    {'E': {4: {'score': 1.9, 'request': '4일은 E로 주세요'}}, ...}
+    형태로 변환합니다.
+    """
+    parsed: Dict[str, Dict[int, Dict[str, Any]]] = {}
+
+    if not isinstance(response, list):
+        return parsed
+
     for sub in response:
         if not isinstance(sub, list):
             continue
+
         for entry in sub:
-            shift_results = entry.get("shift_result", [])
+            shift_results = entry.get("shift_result")
             if not isinstance(shift_results, list):
                 continue
+
             for sr in shift_results:
-                if {"shift", "date", "score"} <= sr.keys():
-                    record = sr
-                elif "result" in sr and isinstance(sr["result"], dict):
-                    record = sr["result"]
-                else:
+                # nested 구조 평탄화
+                record = (
+                    sr["result"]
+                    if isinstance(sr, dict) and "result" in sr and isinstance(sr["result"], dict)
+                    else sr
+                )
+
+                if not isinstance(record, dict) or "shift" not in record:
                     continue
+
                 shift = record.get("shift")
-                dates = record.get("date", [])
-                scores = record.get("score", [])
-                if not shift or not isinstance(dates, list) or not isinstance(scores, list):
+                dates = record.get("date") or []
+                scores = record.get("score") or []
+                requests = record.get("request") or []
+
+                if not isinstance(dates, list) or not isinstance(scores, list):
                     continue
-                bucket = parsed.setdefault(shift, {})
-                for d, s in zip(dates, scores):
-                    bucket[int(d)] = float(s)
+                if not isinstance(requests, list):
+                    # 단일 문자열로 들어오면 리스트로 감싸기
+                    requests = [requests]
+
+                n = min(len(dates), len(scores), len(requests) if requests else len(dates))
+
+                bucket = parsed.setdefault(str(shift), {})
+                for i in range(n):
+                    try:
+                        d = int(dates[i])
+                        s = float(scores[i])
+                        req = requests[i] if i < len(requests) else None
+                    except (TypeError, ValueError):
+                        continue
+
+                    bucket[d] = {"score": s, "request": req}
+
     return parsed
+
 
 
 def _parse_preferences(response: List[List[Dict[str, Any]]], schema: List[Dict[str, Any]] | None = None) -> List[Dict[str, float]]:
@@ -263,6 +295,7 @@ def _parse_preferences(response: List[List[Dict[str, Any]]], schema: List[Dict[s
             for pr in pref_list:
                 _id = pr.get("id")
                 weight = pr.get("weight")
+                request = pr.get("request")
                 if _id is None or weight is None:
                     continue
                 _id_str = str(_id)
@@ -270,7 +303,7 @@ def _parse_preferences(response: List[List[Dict[str, Any]]], schema: List[Dict[s
                     print(f"Parse Preferences: 무효한 간호사 ID '{_id_str}' 필터링됨")
                     continue
                 try:
-                    parsed.append({"id": _id_str, "weight": float(weight)})
+                    parsed.append({"id": _id_str, "weight": float(weight), "request": request})
                 except (ValueError, TypeError):
                     continue
     return parsed
@@ -299,11 +332,12 @@ async def invoke_and_persist_wanted_service(
     response = await graph_service.invoke(req.request, req.schema, req.case, req.year, req.month)
     nurse_id = current_user.nurse_id
     month_str = _yyyymm(req.year, req.month)
-    request_id = _persist_wanted_request(db, nurse_id, month_str)
+    request_id = _persist_wanted_request(db, nurse_id, month_str, req.request)
 
     shift_parsed = _parse_shift_results(response)
+    print(f'\n\n\n\n\nshift_parsed, {shift_parsed}\n\n\n\n\n')
     if shift_parsed:
-        partial_text = req.request if isinstance(req.request, str) else str(req.request)
+        # partial_text = req.request if isinstance(req.request, str) else str(req.request)
         _persist_shift_results(
             db=db,
             nurse_id=nurse_id,
@@ -311,18 +345,18 @@ async def invoke_and_persist_wanted_service(
             year=req.year,
             month=req.month,
             shift_map=shift_parsed,
-            partial_request=partial_text,
+            # partial_request=partial_text,
         )
 
     pref_parsed = _parse_preferences(response, req.schema)
     if pref_parsed:
-        partial_text = req.request if isinstance(req.request, str) else str(req.request)
+        # partial_text = req.request if isinstance(req.request, str) else str(req.request)
         _persist_pair_results(
             db=db,
             nurse_id=nurse_id,
             request_id=request_id,
             pairs=pref_parsed,
-            partial_request=partial_text,
+            # partial_request=partial_text,
         )
 
     result: Dict[str, Any] = {}

@@ -296,7 +296,7 @@ async def shift_analyzer(state):
 
         # 2차: OpenAI (백업)
         ChatOpenAI(
-            model="gpt-4.1-mini",
+            model="gpt-4.1-mini-2025-04-14",
             openai_api_key=os.getenv("OPENAI_API_KEY"),
         ),
         ChatAnthropic(
@@ -313,7 +313,6 @@ async def shift_analyzer(state):
     
     sr = None
     used_model_name = ""
-    print('여기')
     for i, client in enumerate(models_to_try):
         try:
             print(f"Shift Analyzer: {i+1}차 모델 시도 중..., 모델: {client}")
@@ -377,7 +376,9 @@ async def shift_analyzer(state):
     completion_tokens = _count_tokens(completion_json, model_name_for_calc)
     cost_info = _compute_cost(prompt_tokens, completion_tokens, model_name_for_calc)
     print(f"토큰 사용량(Shift): {cost_info['usage']}, 비용(USD/KRW): {cost_info['cost_usd']} / {cost_info['cost_krw']}")
-    print(f"Shift Analyzer: {sr.result}")
+    # print(f"Shift Analyzer: {sr.result}")
+    sr.result['request'] = [context] * len(sr.result['date'])
+    # print(f'\n\n\n\n\nshift_result, {sr.result}\n\n\n\n\n')
     if sr.result is None:
         return {"shift_result": []}
     else:
@@ -412,7 +413,6 @@ async def create_shift_analyzer(parent_state):
     year = parent_state['year']
     month = parent_state['month']
     n_requests = len(requests)
-    print('year', year, 'month', month)
 
     # 주말/공휴일 정보 미리 계산하여 상태에 주입
     try:
@@ -424,8 +424,6 @@ async def create_shift_analyzer(parent_state):
                 if d not in holidays:  # 중복 방지
                     holidays.append(d)
         weekend_holiday = {"weekends": weekends, "holidays": holidays}
-        print('weekends', weekends)
-        print('holidays', holidays)
     except Exception as e:
         print(f"주말/공휴일 계산 오류: {e}")
         weekend_holiday = {"weekends": [], "holidays": []}

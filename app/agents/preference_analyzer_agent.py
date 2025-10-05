@@ -122,6 +122,7 @@ class preferenceAnalyzer(BaseModel):
     id : str
     weight : float
     reason : str
+    request : str
 
 class preferenceAnalyzerPrompt:
     def __init__(self, schem, query):
@@ -185,7 +186,8 @@ class preferenceAnalyzerPrompt:
                         "processor": "'박수정 쌤'은 정보상 nurse_id가 'mlnwjk2'이고, 강한 기피를 표현하니 가중치는 -2로 줘야할 것 같아.",
                         "id": "mlnwjk2",
                         "weight": -2.0,
-                        "reason": "강한 기피 표현"
+                        "reason": "강한 기피 표현",
+                        "request": "저 박수정 쌤이랑은 제발 안 겹치게 해주세요…😭"
                         }}
                     ```
                 5. 출력 형식
@@ -213,7 +215,7 @@ async def preference_analyzer(state):
     models_to_try = [
         # 1차: OpenAI (기본)
         ChatOpenAI(
-            model="gpt-4.1-mini",
+            model="gpt-4.1-mini-2025-04-14",
             openai_api_key=os.getenv("OPENAI_API_KEY"),
         ),
         # 2차: Anthropic (백업)
@@ -237,7 +239,8 @@ async def preference_analyzer(state):
         "processor": "기본값 설정",
         "id": "",
         "weight": 0.0,
-        "reason": "처리 실패"
+        "reason": "처리 실패",
+        "request": query
     }
     used_model_name = ""
     
@@ -257,7 +260,8 @@ async def preference_analyzer(state):
                 "processor": response.processor,
                 "id": response.id,
                 "weight": response.weight,
-                "reason": response.reason
+                "reason": response.reason,
+                "request": query
             }
             
             # ID 검증: schema에 존재하는 간호사인지 확인
@@ -277,7 +281,8 @@ async def preference_analyzer(state):
                     "processor": f"언급된 간호사를 찾을 수 없어 무시됨: {response.processor}",
                     "id": "",
                     "weight": 0.0,
-                    "reason": "해당하는 간호사가 스키마에 존재하지 않음"
+                    "reason": "해당하는 간호사가 스키마에 존재하지 않음",
+                    "request": query
                 }
             
             print(f"Preference Analyzer: {i+1}차 모델 성공!")

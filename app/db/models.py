@@ -239,6 +239,7 @@ class WantedRequest(Base):
     nurse_id = Column(VARCHAR(50), primary_key=True)
     request_id = Column(INTEGER, primary_key=True)
     month = Column(CHAR(7), primary_key=True)  # 'YYYY-MM'
+    request = Column(TEXT, nullable=True)
     is_submitted = Column(TINYINT(1), nullable=False, default=0)
     created_at = Column(DATETIME, nullable=False, default=func.now())
     submitted_at = Column(DATETIME, nullable=True)
@@ -260,6 +261,6 @@ class NursePairRequest(Base):
     nurse_id = Column(VARCHAR(50), primary_key=True)
     request_id = Column(INTEGER, primary_key=True)
     detailed_request_id = Column(INTEGER, primary_key=True)
-    target_id = Column(INTEGER, primary_key=True)
+    target_id = Column(VARCHAR(50), primary_key=True)
     score = Column(DECIMAL(3, 1), nullable=False)
     partial_request = Column(TEXT, nullable=True)
