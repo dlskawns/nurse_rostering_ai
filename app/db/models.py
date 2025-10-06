@@ -85,8 +85,8 @@ class Shift(Base):
     # time_type = Column(VARCHAR(10), nullable=False, default='range')  # 'range', 'allday', 'hours'
     duration = Column(INTEGER, nullable=True)  # for time_type='hours'
     sequence = Column(INTEGER, nullable=False, default=0)  # 순서 관리용
-    default_shift = Column(VARCHAR(10), nullable=True)  # 기본 근무코드
     id = Column(INTEGER, primary_key=True, nullable=False, autoincrement=True)
+    default_shift = Column(VARCHAR(10), nullable=True)  # 기본 근무코드
 
     office = relationship("Office")
     group = relationship("Group")
@@ -264,3 +264,19 @@ class NursePairRequest(Base):
     target_id = Column(VARCHAR(50), primary_key=True)
     score = Column(DECIMAL(3, 1), nullable=False)
     partial_request = Column(TEXT, nullable=True)
+class DailyShift(Base):
+    __tablename__ = 'daily_shift'
+
+    office_id = Column(VARCHAR(50), ForeignKey('offices.office_id'), primary_key=True)
+    group_id = Column(VARCHAR(50), ForeignKey('groups.group_id'), primary_key=True)
+    year = Column(SMALLINT, primary_key=True)
+    month = Column(TINYINT, primary_key=True)
+    day = Column(TINYINT, primary_key=True)
+    d_count = Column(SMALLINT, nullable=False, default=0)
+    e_count = Column(SMALLINT, nullable=False, default=0)
+    n_count = Column(SMALLINT, nullable=False, default=0)
+    created_at = Column(DATETIME, default=func.now())
+    updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
+
+    office = relationship("Office")
+    group = relationship("Group")
