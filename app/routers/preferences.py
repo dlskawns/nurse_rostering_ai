@@ -1,6 +1,7 @@
 from schemas.roster_schema import PreferenceData, PreferenceSubmit
 from routers.auth import get_current_user_from_cookie
 from db.client import get_db
+# from db.client2 import _get_mssql_session
 from db.models import ShiftPreference, Nurse
 from schemas.auth_schema import User as UserSchema
 from fastapi import APIRouter, Depends, HTTPException

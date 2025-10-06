@@ -3,33 +3,55 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from db.client import get_db
+# from db.client2 import _get_mssql_session
 from db.models import Shift, Nurse, ScheduleEntry, ShiftManage, RosterConfig
 from schemas.auth_schema import User as UserSchema
 from routers.auth import get_current_user_from_cookie
 from schemas.roster_schema import ShiftAddRequest, RemoveShiftRequest, MoveShiftRequest, ShiftManageSaveRequest, ShiftUpdateRequest
 from services.shift_service import (
-    get_shifts_service,
+    get_shifts_service as get_shifts_service_mysql,
     add_shift_service,
     update_shift_service,
     remove_shift_service,
     move_shift_service
 )
 from typing import Optional
+import os
+from services.shift_service_mssql import get_shifts_service as get_shifts_service_mssql
+from datetime import timedelta, datetime
+
+def convert_time(value):
+    if isinstance(value, str):  # '06:00' → timedelta
+        h, m = map(int, value.split(":"))
+        return timedelta(hours=h, minutes=m)
+    return value
+
+
 router = APIRouter(
     tags=["shifts"]
 )
 templates = Jinja2Templates(directory="app/templates")
+from dotenv import load_dotenv
+load_dotenv()
 
 # [Shifts] - 모든 시프트 정보 조회
 @router.get("/shifts")
 async def get_shifts(
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db)   
 ):
     try:
-        shifts = get_shifts_service(current_user, db)
+        backend = os.getenv("DB_BACKEND", "mysql").lower()
+        if backend == "mssql":
+            shifts = get_shifts_service_mssql(current_user, db)
+        else:
+            shifts = get_shifts_service_mysql(current_user, db)
+        for shift in shifts:
+            shift["start_time"] = convert_time(shift["start_time"])
+            shift["end_time"] = convert_time(shift["end_time"])
         return shifts
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=f"시프트 정보 조회 실패: {str(e)}")
 
 def _format_time_display(shift):
@@ -51,6 +73,7 @@ async def add_shift(
     try:
         result = add_shift_service(req, current_user, db)
     except Exception as e:
+        print('error', e)
         raise HTTPException(status_code=500, detail=f"근무코드 추가 실패: {str(e)}")
 
 @router.post("/shifts/update")
@@ -60,10 +83,10 @@ async def update_shift(
     db: Session = Depends(get_db)
 ):
     try:
-
         result = update_shift_service(req, current_user, db)
         return result
     except Exception as e:
+        print('error', e)
         raise HTTPException(status_code=500, detail=f"근무코드 수정 실패: {str(e)}")
 @router.post("/shifts/remove")
 async def remove_shift(
@@ -141,7 +164,6 @@ async def get_shift_manage(
             ShiftManage.nurse_class == class_name,
             # ShiftManage.config_version == config_version
         ).order_by(ShiftManage.shift_slot.asc()).all()
-        print(6)
     return [
         {
             "shift_slot": sm.shift_slot,
@@ -167,16 +189,6 @@ async def save_shift_manage(
     nurse = db.query(Nurse).filter(Nurse.nurse_id == current_user.nurse_id).first()
     if not nurse or not nurse.group:
         raise HTTPException(status_code=404, detail="User group information not found")
-    
-    # config_version이 없으면 최신 config의 version 사용
-    # if not config_version:
-    #     latest_config = db.query(RosterConfig).filter(
-    #         RosterConfig.group_id == current_user.group_id
-    #     ).order_by(RosterConfig.created_at.desc()).first()
-    #     config_version = latest_config.config_version if latest_config else None
-    
-    # if not config_version:
-    #     raise HTTPException(status_code=404, detail="설정 버전을 찾을 수 없습니다.")
     
     # 기존 데이터 삭제 (특정 클래스의 모든 슬롯)
     db.query(ShiftManage).filter(

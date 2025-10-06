@@ -8,6 +8,7 @@ from schemas.auth_schema import User as UserSchema
 from schemas.roster_schema import RosterRequest
 from pydantic import BaseModel
 from db.client import get_db
+# from db.client2 import _get_mssql_session
 from db.models import Nurse, ShiftPreference, RosterConfig, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
 from routers.utils import get_days_in_month
 from routers.auth import get_current_user_from_cookie

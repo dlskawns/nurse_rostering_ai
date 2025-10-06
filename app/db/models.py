@@ -85,8 +85,8 @@ class Shift(Base):
     # time_type = Column(VARCHAR(10), nullable=False, default='range')  # 'range', 'allday', 'hours'
     duration = Column(INTEGER, nullable=True)  # for time_type='hours'
     sequence = Column(INTEGER, nullable=False, default=0)  # 순서 관리용
-    id = Column(INTEGER, primary_key=True, nullable=False, autoincrement=True)
     default_shift = Column(VARCHAR(10), nullable=True)  # 기본 근무코드
+    id = Column(INTEGER, primary_key=True, nullable=False, autoincrement=True)
 
     office = relationship("Office")
     group = relationship("Group")
