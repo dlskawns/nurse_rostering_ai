@@ -246,32 +246,36 @@ async def query_analyzer(state):
 
     # case 기반 수동 경로 (모델 미사용)
     if state['case'] != None:
-        print(state['case'], state['request'])
+        print('case', state['case'], '\n\n\nrequest', state['request'])
         for content, rq in zip(state['case'], state['request']):
-            date = content['date']
-            shift_type = content['shift']
-            shift.append(f"{date}에 {shift_type}을 원하고, 그 이유는 다음과 같습니다: {rq}")
+            if content['reason'] != '기존 데이터에서 로드됨':
+                date = content['date']
+                shift_type = content['shift']
+                # shift.append(f"{date}에 {shift_type}을 원하고, 그 이유는 다음과 같습니다: {rq}")
+                json_data.append({'date': date, 'shift': shift_type, 'request': '단순 희망', 'score': 1.0})
         # 토큰/비용(모델 미사용 → 0)
-        prompt_tokens = 0
-        completion_json = json.dumps({
-            "Chat": chat,
-            "Shift": shift,
-            "Preference": preference,
-            "Except": except_,
-            "Others": others
-        }, ensure_ascii=False)
-        completion_tokens = 0 if not completion_json else 0
-        cost_info = _compute_cost(prompt_tokens, completion_tokens, used_model_name)
-        print(f"토큰 사용량(수동): {cost_info['usage']}, 비용(원): {cost_info['cost_krw']['total']}")
-        return {
-            "query_chat": chat,
-            'query_shift': shift,
-            'query_preference': preference,
-            'query_except': except_,
-            'query_others': others,
-            'model': models_to_try[0],
-            'date': date,
-            'shift': shift
+        # prompt_tokens = 0
+        # completion_json = json.dumps({
+        #     "Chat": chat,
+        #     "Shift": shift,
+        #     "Preference": preference,
+        #     "Except": except_,
+        #     "Others": others
+        # }, ensure_ascii=False)
+        # completion_tokens = 0 if not completion_json else 0
+        # cost_info = _compute_cost(prompt_tokens, completion_tokens, used_model_name)
+        # print(f"토큰 사용량(수동): {cost_info['usage']}, 비용(원): {cost_info['cost_krw']['total']}")
+        
+        return{"case_results": json_data}
+        # return {
+        #     "query_chat": chat,
+        #     'query_shift': shift,
+        #     'query_preference': preference,
+        #     'query_except': except_,
+        #     'query_others': others,
+        #     'model': models_to_try[0],
+            # 'date': date,
+            # 'shift': shift
         }
 
     for i, client in enumerate(models_to_try):
@@ -281,7 +285,7 @@ async def query_analyzer(state):
             llm = client.with_structured_output(queryAnalyzer)
             response = await llm.ainvoke(messages)
             used_model_name = getattr(client, "model", "") or used_model_name
-            
+            print("\n\n\nresponse", response, "\n\n\n")
             # 성공 시 데이터 추출
             chat = response.Chat
             shift = response.Shift

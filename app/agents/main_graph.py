@@ -23,6 +23,7 @@ class ContextAnalyticsState(TypedDict):
     preference_results: Annotated[list, operator.add]
     model: object
     case: List[str] | None             # case 예시: {'date': '2025-07-01', 'shift': 'D'}
+    case_results: List[Dict[str, Any]] | None
     year: int
     month: int
     
@@ -37,6 +38,7 @@ def GraphGenerate():
     graph.set_entry_point('query_analyzer')
     graph.add_edge('query_analyzer', 'create_shift_analyzer')
     graph.add_edge('query_analyzer', 'create_preference_analyzer')
+    
 
     graph.add_edge('create_shift_analyzer', "collector")
     graph.add_edge('create_preference_analyzer', 'collector')
