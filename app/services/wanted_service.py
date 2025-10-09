@@ -61,22 +61,35 @@ def _next_request_id(db: Session, nurse_id: str, month_str: str) -> int:
     return (row[0] + 1) if row else 1
 
 
-def _persist_wanted_request(db: Session, nurse_id: str, month_str: str, request: str) -> int:
+def _persist_wanted_request(db: Session, nurse_id: str, month_str: str, request: str | List[str]) -> int:
     """wanted_requests 레코드를 저장하고 request_id 를 반환합니다.
 
     인자:
         db: DB 세션
         nurse_id: 간호사 ID
         month_str: 'YYYY-MM'
+        request: 요청 텍스트 (문자열 또는 리스트)
 
     반환:
         새로 생성된 request_id
+    
+    Notes:
+        request가 리스트인 경우 '\n'로 join하여 문자열로 변환
     """
     request_id = _next_request_id(db, nurse_id, month_str)
+    
+    # request가 리스트면 문자열로 변환
+    if isinstance(request, list):
+        # '기존 데이터에서 로드됨' 제외하고 join
+        filtered_requests = [r for r in request if r != '기존 데이터에서 로드됨']
+        request_text = '\n'.join(filtered_requests) if filtered_requests else '기존 데이터 업데이트'
+    else:
+        request_text = request
+    print(f'request_text, {request_text}')
     wr = WantedRequest(
         nurse_id=nurse_id,
         request_id=request_id,
-        request=request,
+        request=request_text,
         month=month_str,
         is_submitted=0,
         created_at=datetime.now(),
@@ -86,9 +99,9 @@ def _persist_wanted_request(db: Session, nurse_id: str, month_str: str, request:
     try:
         db.commit()
     except Exception as e:
-        print(e)
-        # db.rollback()
-        # raise e
+        print(f"wanted_requests 저장 오류: {e}")
+        db.rollback()
+        raise e
     print(f"wanted_requests 저장 완료: nurse_id={nurse_id}, month={month_str}, request_id={request_id}")
     return request_id
 
@@ -128,7 +141,6 @@ def _persist_shift_results(
     year: int,
     month: int,
     shift_map: Dict[str, Dict[int, float]],
-    # partial_request: str,
 ) -> None:
     """shift 결과를 nurse_shift_requests 테이블에 저장합니다.
 
@@ -137,40 +149,45 @@ def _persist_shift_results(
         nurse_id: 간호사 ID
         request_id: 상위 wanted_requests.request_id
         year, month: 날짜 조합용
-        shift_map: {'D': {12: 2.5}, 'O': {20: 3.0}, ...}
-        partial_request: 원 입력(부분) 텍스트(가급적). 정보 부족 시 전체 요청 사용
+        shift_map: {'D': {12: {'score': 2.5, 'request': '...'}}, ...}
+    
+    Notes:
+        detailed_request_id는 기존 데이터 다음 순번부터 시작
     """
-    # detailed_request_id 는 (nurse_id, request_id) 내에서 1부터 증가
+    # detailed_request_id 는 (nurse_id, request_id) 내에서 기존 데이터 다음부터 증가
     detailed_id = _next_detailed_request_id(db, nurse_id, request_id, table="shift")
     rows = 0
-    # print('detailed_id', detailed_id)
-    print(f'\n\n\n\n\nshift_map, {shift_map}\n\n\n\n\n')
-    for shift_code, by_day in (shift_map or {}).items():
-        for day, info in (by_day or {}).items():
-            score = info.get("score")
-            partial_request = info.get("request")
-            row = NurseShiftRequest(
-                nurse_id=nurse_id,
-                request_id=request_id,
-                detailed_request_id=detailed_id,
-                shift_date=_ymd(year, month, int(day)),
-                shift=shift_code,
-                score=float(score),
-                partial_request=partial_request,
-            )
-            db.merge(row)
-            rows += 1
-            detailed_id += 1
-    db.commit()
-    print(f"nurse_shift_requests 저장 완료: detailed_request_id={detailed_id}, rows={rows}")
-
+    print(f'shift_map (저장 시작, detailed_id={detailed_id}): {shift_map}')
+    try:
+        for shift_code, by_day in (shift_map or {}).items():
+            for day, info in (by_day or {}).items():
+                score = info.get("score")
+                partial_request = info.get("request")
+                row = NurseShiftRequest(
+                    nurse_id=nurse_id,
+                    request_id=request_id,
+                    detailed_request_id=detailed_id,
+                    shift_date=_ymd(year, month, int(day)),
+                    shift=shift_code,
+                    score=float(score),
+                    partial_request=partial_request,
+                )
+                db.merge(row)
+                rows += 1
+                detailed_id += 1
+        
+        db.commit()
+        print(f"nurse_shift_requests 저장 완료: 시작 detailed_request_id={detailed_id - rows}, 종료={detailed_id - 1}, 저장 rows={rows}")
+    except Exception as e:
+        print(f"nurse_shift_requests 저장 오류: {e}")
+        db.rollback()
+        raise e
 
 def _persist_pair_results(
     db: Session,
     nurse_id: str,
     request_id: int,
     pairs: List[Dict[str, float]],
-    # partial_request: str,
 ) -> None:
     """pair 결과를 nurse_pair_requests 테이블에 저장합니다.
 
@@ -178,8 +195,10 @@ def _persist_pair_results(
         db: DB 세션
         nurse_id: 간호사 ID
         request_id: 상위 wanted_requests.request_id
-        pairs: [{"id": "12", "weight": -1.5}, ...]
-        partial_request: 원 입력(부분) 텍스트
+        pairs: [{"id": "12", "weight": -1.5, "request": "..."}, ...]
+    
+    Notes:
+        detailed_request_id는 기존 데이터 다음 순번부터 시작
     """
     detailed_id = _next_detailed_request_id(db, nurse_id, request_id, table="pair")
     rows = 0
@@ -189,7 +208,7 @@ def _persist_pair_results(
             weight = float(item.get("weight")) if item.get("weight") is not None else None
             request = item.get("request")
         except Exception as e:
-            print('error', e)
+            print(f'pair 데이터 파싱 오류: {e}')
             continue
         if target_id is None or weight is None:
             continue
@@ -203,11 +222,11 @@ def _persist_pair_results(
         )
         db.merge(row)
         rows += 1
+        detailed_id += 1
+    
     db.commit()
-    print(f"nurse_pair_requests 저장 완료: detailed_request_id={detailed_id}, rows={rows}")
+    print(f"nurse_pair_requests 저장 완료: 시작 detailed_request_id={detailed_id - rows}, 종료={detailed_id - 1}, 저장 rows={rows}")
 
-
-from typing import Any, Dict, List
 
 def _parse_shift_results(
     response: List[List[Dict[str, Any]]]
@@ -310,6 +329,90 @@ def _parse_preferences(response: List[List[Dict[str, Any]]], schema: List[Dict[s
     return parsed
 
 
+def _copy_existing_requests_to_new(
+    db: Session,
+    nurse_id: str,
+    old_request_id: int,
+    new_request_id: int,
+    year: int,
+    month: int,
+) -> Tuple[int, int]:
+    """기존 request_id의 데이터를 새 request_id로 복사합니다.
+
+    인자:
+        db: DB 세션
+        nurse_id: 간호사 ID
+        old_request_id: 기존 request_id
+        new_request_id: 새 request_id
+        year: 연도
+        month: 월
+
+    반환:
+        (복사된 shift 수, 복사된 pair 수) 튜플
+    """
+    # 1. 기존 shift 데이터 복사
+    old_shift_rows = (
+        db.query(NurseShiftRequest)
+        .filter(
+            NurseShiftRequest.nurse_id == nurse_id,
+            NurseShiftRequest.request_id == old_request_id,
+        )
+        .all()
+    )
+    
+    shift_count = 0
+    detailed_id = 1
+    for old_row in old_shift_rows:
+        new_row = NurseShiftRequest(
+            nurse_id=nurse_id,
+            request_id=new_request_id,
+            detailed_request_id=detailed_id,
+            shift_date=old_row.shift_date,
+            shift=old_row.shift,
+            score=old_row.score,
+            # partial_request=old_row.partial_request or '기존 데이터에서 로드됨',
+            partial_request=old_row.partial_request,
+        )
+        print(f'new_row',new_row.__dict__)
+        db.merge(new_row)
+        shift_count += 1
+        detailed_id += 1
+    
+    if shift_count > 0:
+        db.commit()
+        print(f"기존 shift 데이터 복사 완료: {shift_count}건")
+    
+    # 2. 기존 pair 데이터 복사
+    old_pair_rows = (
+        db.query(NursePairRequest)
+        .filter(
+            NursePairRequest.nurse_id == nurse_id,
+            NursePairRequest.request_id == old_request_id,
+        )
+        .all()
+    )
+    print(f'old_pair_rows',old_pair_rows)
+    pair_count = 0
+    detailed_id = 1
+    for old_row in old_pair_rows:
+        new_row = NursePairRequest(
+            nurse_id=nurse_id,
+            request_id=new_request_id,
+            detailed_request_id=detailed_id,
+            target_id=old_row.target_id,
+            score=old_row.score,
+            partial_request=old_row.partial_request or '기존 데이터에서 로드됨',
+        )
+        db.merge(new_row)
+        pair_count += 1
+        detailed_id += 1
+    print(f'pair_count',pair_count)
+    if pair_count > 0:
+        db.commit()
+        print(f"기존 pair 데이터 복사 완료: {pair_count}건")
+    return shift_count, pair_count
+
+
 async def invoke_and_persist_wanted_service(
     req: WantedInvokeRequest,
     current_user: UserSchema,
@@ -328,38 +431,132 @@ async def invoke_and_persist_wanted_service(
     예시:
         입력: request="5/5 OFF, 5/6 E", year=2025, month=9
         처리: wanted_requests 1건 + nurse_shift_requests N건 + nurse_pair_requests M건 저장
+        
+    Notes:
+        - case가 있으면: 기존 데이터 복사 + case_results 추가
+        - case가 없으면: LLM 결과만 저장 (원래 동작)
     """
     print("그래프 실행 및 DB 저장을 시작합니다.")
-    response = await graph_service.invoke(req.request, req.schema, req.case, req.year, req.month)
+    
     nurse_id = current_user.nurse_id
     month_str = _yyyymm(req.year, req.month)
-    request_id = _persist_wanted_request(db, nurse_id, month_str, req.request)
+    
+    # ======================================================================
+    # case 여부 확인
+    # ======================================================================
+    has_case = req.case is not None and len(req.case) > 0
+    print(f'has_case, {has_case}')
+    # ======================================================================
+    # 1. 그래프 실행
+    # ======================================================================
+    response = await graph_service.invoke(req.request, req.schema, req.case, req.year, req.month)
+    
+    # ======================================================================
+    # 2. 새 wanted_request 생성
+    # ======================================================================
+    # new_request_id = _persist_wanted_request(db, nurse_id, month_str, req.request)
+    # print(f'new_request_id, {new_request_id}')
+    
+    # ======================================================================
+    # 3. case가 있는 경우: 기존 데이터 복사 + 새 데이터 추가
+    # ======================================================================
+    if has_case:
+        print("case 감지 - 기존 데이터 복사 모드")
+        
+        # 3-1. 기존 request 찾기
+        old_wr = (
+            db.query(WantedRequest)
+            .filter(
+                WantedRequest.nurse_id == nurse_id,
+                WantedRequest.month == month_str,
+            )
+            .order_by(WantedRequest.request_id.desc())
+            .first()
+        )
+    # ======================================================================
+    # 2. 새 wanted_request 생성
+    # ======================================================================
 
+        new_request_id = _persist_wanted_request(db, nurse_id, month_str, old_wr.request)
+        print(f'new_request_id, {new_request_id}')
+        # 3-2. 기존 데이터가 있으면 복사
+        # if old_wr and old_wr.request_id != new_request_id:
+        if old_wr:
+            print(f"기존 데이터 발견: request_id={old_wr.request_id}, 복사 시작")
+            try:
+                _copy_existing_requests_to_new(
+                    db=db,
+                    nurse_id=nurse_id,
+                    old_request_id=old_wr.request_id,
+                    new_request_id=new_request_id,
+                    year=req.year,
+                    month=req.month,
+                )
+            except Exception as e:
+                print(f"기존 데이터 복사 오류: {e}")
+                raise e
+        else:
+            print("복사할 기존 데이터 없음")
+        
+        # 3-3. case_results 추가 (뒷 순번으로)
+        try:
+            print(f'response',response)
+            shift_parsed = _parse_shift_results(response)
+            print(f'shift_parsed (case_results), {shift_parsed}')
+        except Exception as e:
+            print(f"shift_parsed 파싱 오류: {e}")
+            raise e
+        
+        if shift_parsed:
+            _persist_shift_results(
+                db=db,
+                nurse_id=nurse_id,
+                request_id=new_request_id,
+                year=req.year,
+                month=req.month,
+                shift_map=shift_parsed,
+            )
+    
+    # ======================================================================
+    # 4. case가 없는 경우: 원래대로 LLM 결과만 저장
+    # ======================================================================
+    else:
+    # ======================================================================
+    # 2. 새 wanted_request 생성
+    # ======================================================================
+        new_request_id = _persist_wanted_request(db, nurse_id, month_str, req.request)
+        print(f'new_request_id, {new_request_id}')
+
+        print("일반 LLM 모드 - 새 데이터만 저장")
+        print(f'response',response)
+        shift_parsed = _parse_shift_results(response)
+        print(f'shift_parsed (LLM 결과), {shift_parsed}')
+        
+        if shift_parsed:
+            _persist_shift_results(
+                db=db,
+                nurse_id=nurse_id,
+                request_id=new_request_id,
+                year=req.year,
+                month=req.month,
+                shift_map=shift_parsed,
+            )
+
+        pref_parsed = _parse_preferences(response, req.schema)
+        if pref_parsed:
+            _persist_pair_results(
+                db=db,
+                nurse_id=nurse_id,
+                request_id=new_request_id,
+                pairs=pref_parsed,
+            )
+
+    # ======================================================================
+    # 5. 결과 반환
+    # ======================================================================
     shift_parsed = _parse_shift_results(response)
-    print(f'\n\n\n\n\nshift_parsed, {shift_parsed}\n\n\n\n\n')
-    if shift_parsed:
-        # partial_text = req.request if isinstance(req.request, str) else str(req.request)
-        _persist_shift_results(
-            db=db,
-            nurse_id=nurse_id,
-            request_id=request_id,
-            year=req.year,
-            month=req.month,
-            shift_map=shift_parsed,
-            # partial_request=partial_text,
-        )
-
     pref_parsed = _parse_preferences(response, req.schema)
-    if pref_parsed:
-        # partial_text = req.request if isinstance(req.request, str) else str(req.request)
-        _persist_pair_results(
-            db=db,
-            nurse_id=nurse_id,
-            request_id=request_id,
-            pairs=pref_parsed,
-            # partial_request=partial_text,
-        )
-
+    
     result: Dict[str, Any] = {}
     if shift_parsed:
         result["shift"] = shift_parsed

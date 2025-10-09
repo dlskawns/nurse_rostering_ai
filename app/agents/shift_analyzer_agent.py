@@ -394,7 +394,59 @@ from agents.query_analyzer_agent import query_analyzer
 
 
 async def create_shift_analyzer(parent_state):
+    """
+    Shift 분석기 생성 및 실행
+    
+    Args:
+        parent_state: 부모 그래프의 상태
+        
+    Returns:
+        Dict: shift_results를 포함한 결과
+        
+    Notes:
+        - case_results가 있으면 LLM 호출 없이 바로 반환
+        - query_shift가 없으면 빈 결과 반환
+    """
+    # ======================================================================
+    # case_results가 있으면 LLM 호출 없이 바로 반환
+    # ======================================================================
+    case_results = parent_state.get('case_results')
+    if case_results is not None:
+        print(f"Shift Analyzer: case_results 감지 - LLM 호출 생략, 데이터 직접 반환")
+        print(f"case_results: {case_results}")
+        
+        # case_results를 shift_results 형태로 변환
+        # case_results 형태: [{'date': 11, 'shift': 'D', 'score': 1.0, 'request': '단순 희망'}]
+        # shift_results 형태: [[{'shift_result': [{'shift': 'D', 'date': [11], 'score': [1.0], 'request': ['단순 희망']}]}]]
+        
+        from collections import defaultdict
+        shift_groups = defaultdict(lambda: {'date': [], 'score': [], 'request': []})
+        
+        for item in case_results:
+            shift_type = item.get('shift')
+            date_val = item.get('date')
+            score_val = item.get('score', 1.0)
+            request_val = item.get('request', '단순 희망')
+            
+            shift_groups[shift_type]['date'].append(date_val)
+            shift_groups[shift_type]['score'].append(score_val)
+            shift_groups[shift_type]['request'].append(request_val)
+        
+        shift_result_list = [
+            {
+                'shift': shift_type,
+                'date': data['date'],
+                'score': data['score'],
+                'request': data['request']
+            }
+            for shift_type, data in shift_groups.items()
+        ]
+        
+        return {"shift_results": [{'shift_result': shift_result_list}]}
 
+    # ======================================================================
+    # 일반 경로: LLM을 사용한 shift 분석
+    # ======================================================================
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=0,

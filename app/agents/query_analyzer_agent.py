@@ -244,38 +244,42 @@ async def query_analyzer(state):
     others = []
     used_model_name = ""
 
+    # ======================================================================
     # case 기반 수동 경로 (모델 미사용)
+    # 기존 DB에서 로드된 case가 있는 경우, case_results 설정
+    # ======================================================================
     if state['case'] != None:
         print('case', state['case'], '\n\n\nrequest', state['request'])
-        for content, rq in zip(state['case'], state['request']):
-            if content['reason'] != '기존 데이터에서 로드됨':
-                date = content['date']
-                shift_type = content['shift']
-                # shift.append(f"{date}에 {shift_type}을 원하고, 그 이유는 다음과 같습니다: {rq}")
-                json_data.append({'date': date, 'shift': shift_type, 'request': '단순 희망', 'score': 1.0})
-        # 토큰/비용(모델 미사용 → 0)
-        # prompt_tokens = 0
-        # completion_json = json.dumps({
-        #     "Chat": chat,
-        #     "Shift": shift,
-        #     "Preference": preference,
-        #     "Except": except_,
-        #     "Others": others
-        # }, ensure_ascii=False)
-        # completion_tokens = 0 if not completion_json else 0
-        # cost_info = _compute_cost(prompt_tokens, completion_tokens, used_model_name)
-        # print(f"토큰 사용량(수동): {cost_info['usage']}, 비용(원): {cost_info['cost_krw']['total']}")
         
-        return{"case_results": json_data}
-        # return {
-        #     "query_chat": chat,
-        #     'query_shift': shift,
-        #     'query_preference': preference,
-        #     'query_except': except_,
-        #     'query_others': others,
-        #     'model': models_to_try[0],
-            # 'date': date,
-            # 'shift': shift
+        case_results = []
+        for content in state['case']:
+            # '기존 데이터에서 로드됨' 케이스는 제외 (기존 데이터 복사는 wanted_service에서 처리)
+            if content['reason'] != '기존 데이터에서 로드됨':
+                date_str = content['date']
+                shift_type = content['shift']
+                
+                # date를 일(day)로 변환 (예: "2025-05-05" -> 5)
+                if isinstance(date_str, str) and '-' in date_str:
+                    day = int(date_str.split('-')[2])
+                else:
+                    day = int(date_str)
+                
+                case_results.append({
+                    'date': day,
+                    'shift': shift_type,
+                    'score': 1.0,
+                    'request': '단순 희망'
+                })
+        
+        print(f"Query Analyzer (case 처리): case_results={case_results}")
+        
+        # case_results를 state에 설정
+        return {
+            "case_results": case_results,
+            "query_chat": [],
+            'query_shift': [],
+            'query_preference': [],
+            'model': models_to_try[0]
         }
 
     for i, client in enumerate(models_to_try):
