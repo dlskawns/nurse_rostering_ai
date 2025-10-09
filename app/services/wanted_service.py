@@ -336,6 +336,7 @@ def _copy_existing_requests_to_new(
     new_request_id: int,
     year: int,
     month: int,
+    case_filter: set = None,
 ) -> Tuple[int, int]:
     """기존 request_id의 데이터를 새 request_id로 복사합니다.
 
@@ -346,9 +347,13 @@ def _copy_existing_requests_to_new(
         new_request_id: 새 request_id
         year: 연도
         month: 월
+        case_filter: 복사할 (day, shift) 튜플 set (None이면 전체 복사)
 
     반환:
         (복사된 shift 수, 복사된 pair 수) 튜플
+        
+    Notes:
+        case_filter가 있으면 해당 (day, shift)만 복사 (캘린더에서 지운 항목 제외)
     """
     # 1. 기존 shift 데이터 복사
     old_shift_rows = (
@@ -363,6 +368,14 @@ def _copy_existing_requests_to_new(
     shift_count = 0
     detailed_id = 1
     for old_row in old_shift_rows:
+        # case_filter가 있으면 필터링
+        if case_filter is not None:
+            day = int(str(old_row.shift_date).split('-')[2])
+            shift = old_row.shift
+            if (day, shift) not in case_filter:
+                print(f"필터링됨: {day}일 {shift} (case에 없음)")
+                continue
+        
         new_row = NurseShiftRequest(
             nurse_id=nurse_id,
             request_id=new_request_id,
@@ -370,10 +383,9 @@ def _copy_existing_requests_to_new(
             shift_date=old_row.shift_date,
             shift=old_row.shift,
             score=old_row.score,
-            # partial_request=old_row.partial_request or '기존 데이터에서 로드됨',
             partial_request=old_row.partial_request,
         )
-        print(f'new_row',new_row.__dict__)
+        print(f'new_row', new_row.__dict__)
         db.merge(new_row)
         shift_count += 1
         detailed_id += 1
@@ -463,7 +475,23 @@ async def invoke_and_persist_wanted_service(
     if has_case:
         print("case 감지 - 기존 데이터 복사 모드")
         
-        # 3-1. 기존 request 찾기
+        # 3-1. case에서 유지할 날짜/shift 파악 (캘린더에서 지운 항목 제외)
+        case_filter = set()
+        for item in req.case:
+            date_str = item.get('date', '')
+            shift_type = item.get('shift', '')
+            
+            # date를 day로 변환
+            if isinstance(date_str, str) and '-' in date_str:
+                day = int(date_str.split('-')[2])
+            else:
+                day = int(date_str)
+            
+            case_filter.add((day, shift_type))
+        
+        print(f"case_filter (유지할 항목): {case_filter}")
+        
+        # 3-2. 기존 request 찾기
         old_wr = (
             db.query(WantedRequest)
             .filter(
@@ -473,14 +501,14 @@ async def invoke_and_persist_wanted_service(
             .order_by(WantedRequest.request_id.desc())
             .first()
         )
+    
     # ======================================================================
     # 2. 새 wanted_request 생성
     # ======================================================================
-
-        new_request_id = _persist_wanted_request(db, nurse_id, month_str, old_wr.request)
+        new_request_id = _persist_wanted_request(db, nurse_id, month_str, old_wr.request if old_wr else '캘린더 선택')
         print(f'new_request_id, {new_request_id}')
-        # 3-2. 기존 데이터가 있으면 복사
-        # if old_wr and old_wr.request_id != new_request_id:
+        
+        # 3-3. 기존 데이터가 있으면 필터링해서 복사
         if old_wr:
             print(f"기존 데이터 발견: request_id={old_wr.request_id}, 복사 시작")
             try:
@@ -491,6 +519,7 @@ async def invoke_and_persist_wanted_service(
                     new_request_id=new_request_id,
                     year=req.year,
                     month=req.month,
+                    case_filter=case_filter,  # 필터 전달
                 )
             except Exception as e:
                 print(f"기존 데이터 복사 오류: {e}")
