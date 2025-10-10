@@ -617,6 +617,7 @@ class CPSATBasicEngine:
             safety = {
                 'trans_nd': [],   # N→D 위반 (Bool)
                 'trans_ed': [],   # E→D 위반 (Bool)
+                'trans_ne': [],   # N→E 위반 (Bool)
                 'cwork_missing': [],   # 연속근무 창에서 필요한 OFF 부족량(Int)
                 'cnight_excess': [],   # 연속 N 초과(Int)
                 'mnight_excess': [],   # 월간 N 초과(Int)
@@ -648,6 +649,14 @@ class CPSATBasicEngine:
                         m.AddImplication(b_ed, xe)
                         m.AddImplication(b_ed, xd)
                         safety['trans_ed'].append(b_ed)
+                        
+                        # N→E 금지 추가
+                        xe2 = X(n, d, eve_idx)
+                        b_ne = m.NewBoolVar(f'viol_ne_{n}_{d}')
+                        m.AddBoolOr([b_ne, xn.Not(), xe2.Not()])
+                        m.AddImplication(b_ne, xn)
+                        m.AddImplication(b_ne, xe2)
+                        safety['trans_ne'].append(b_ne)
 
             # 연속 근무 K+1 창에서 최소 1 OFF 필요 → 부족량 정량화
             K = cfg.max_consecutive_work_days
@@ -1133,11 +1142,12 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
         for d0 in range(T0, T1-K+1):
             m.Add(sum(X(n,d0+t,off) for t in range(K+1)) >= 1)
 
-        # E→D, N→D
+        # E→D, N→D, N→E
         for d in range(T0+1, T1+1):
-            m.Add(X(n,d,day)+X(n,d-1,night)<=1)
+            m.Add(X(n,d,day)+X(n,d-1,night)<=1)  # N→D 금지
             if cfg.banned_day_after_eve:
-                m.Add(X(n,d,day)+X(n,d-1,eve )<=1)
+                m.Add(X(n,d,day)+X(n,d-1,eve)<=1)   # E→D 금지
+                m.Add(X(n,d,eve)+X(n,d-1,night)<=1) # N→E 금지
 
         # Night-전담
         if nu.is_night_nurse == 3:
