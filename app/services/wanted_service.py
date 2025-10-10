@@ -297,9 +297,10 @@ def _parse_preferences(response: List[List[Dict[str, Any]]], schema: List[Dict[s
         schema: 유효한 간호사 ID 필터링용 스키마
 
     반환:
-        선호 리스트
+        선호 리스트 (중복 제거됨)
     """
     parsed: List[Dict[str, float]] = []
+    seen = set()  # (id, weight, request) 튜플로 중복 체크
     valid_nurse_ids = set()
     if schema:
         for nurse in schema:
@@ -323,7 +324,14 @@ def _parse_preferences(response: List[List[Dict[str, Any]]], schema: List[Dict[s
                     print(f"Parse Preferences: 무효한 간호사 ID '{_id_str}' 필터링됨")
                     continue
                 try:
-                    parsed.append({"id": _id_str, "weight": float(weight), "request": request})
+                    weight_float = float(weight)
+                    # 중복 체크: (target_id, score, request) 조합
+                    key = (_id_str, weight_float, request)
+                    if key in seen:
+                        print(f"Parse Preferences: 중복 제거 - target_id={_id_str}, weight={weight_float}")
+                        continue
+                    seen.add(key)
+                    parsed.append({"id": _id_str, "weight": weight_float, "request": request})
                 except (ValueError, TypeError):
                     continue
     return parsed
@@ -571,15 +579,18 @@ async def invoke_and_persist_wanted_service(
                 shift_map=shift_parsed,
             )
 
-        pref_parsed = _parse_preferences(response, req.schema)
-        if pref_parsed:
-            _persist_pair_results(
-                db=db,
-                nurse_id=nurse_id,
-                request_id=new_request_id,
-                pairs=pref_parsed,
-            )
-
+        try:
+            pref_parsed = _parse_preferences(response, req.schema)
+            if pref_parsed:
+                _persist_pair_results(
+                    db=db,
+                    nurse_id=nurse_id,
+                    request_id=new_request_id,
+                    pairs=pref_parsed,
+                )
+        except Exception as e:
+            print(f"pref_parsed 파싱 오류: {e}")
+            raise e
     # ======================================================================
     # 5. 결과 반환
     # ======================================================================
