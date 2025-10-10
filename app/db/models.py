@@ -28,7 +28,7 @@ class Nurse(Base):
     role = Column(VARCHAR(20))
     level_ = Column(VARCHAR(20))
     is_head_nurse = Column(BOOLEAN, default=False)
-    is_night_nurse = Column(BOOLEAN, default=False)
+    is_night_nurse = Column(SMALLINT, default=0)
     personal_off_adjustment = Column(TINYINT, default=0)
     preceptor_id = Column(VARCHAR(50), ForeignKey("nurses.nurse_id"))
     joining_date = Column(DATETIME, nullable=True)

@@ -127,7 +127,7 @@ class NurseProfile(BaseModel):
     role: Optional[str] = None
     level_: Optional[str] = None
     is_head_nurse: bool = Field(default=False)
-    is_night_nurse: bool = Field(default=False)
+    is_night_nurse: int = Field(default=0)
     personal_off_adjustment: int = Field(default=0)
     preceptor_id: Optional[str] = None
     joining_date: Optional[datetime] = None

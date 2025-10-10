@@ -19,7 +19,7 @@ class Nurse:
     name: str
     experience_years: float
     db_id: str # 데이터베이스의 원래 ID
-    is_night_nurse: bool = False
+    is_night_nurse: int = 0
     is_head_nurse: bool = False
     remaining_off_days: int = 0
     personal_off_adjustment: int = 0  # 이전 달에서 이월된 조정치(음수 또는 양수 가능)
@@ -86,7 +86,7 @@ class Nurse:
         preferences[off_idx] *= config.off_shift_ratio
         
         # 간호사 유형에 따른 기본 선호도
-        if self.is_night_nurse:
+        if self.is_night_nurse == 3:
             preferences[night_idx] *= config.night_nurse_weight
             preferences[evening_idx] *= config.night_nurse_weight * 0.2
             preferences[d_idx] *= 0.2  # 주간 근무 비선호

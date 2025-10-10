@@ -138,7 +138,7 @@ class preferenceAnalyzerPrompt:
             - nurses : 객체 배열  
             ```json
             {{ "id": int, "name": str, "exp": float,
-                "is_head": bool, "is_night_nurse": bool }}
+                "is_head": bool, "is_night_nurse": int }}
             ```
             * utterances : 문자열 배열
                 (간호사들의 "같이 하고 싶어/싫어, 겹치지 말아줘" 등 자유 서술)
@@ -171,9 +171,9 @@ class preferenceAnalyzerPrompt:
                     ```json
                         {{
                         "nurses":[
-                        {{"nurse_id":"slfnam1","name":"김가희","exp":6,"is_head":false,"is_night_nurse":false}},
-                        {{"nurse_id":"mlnwjk2","name":"박수정","exp":3,"is_head":false,"is_night_nurse":true}},
-                        {{"nurse_id":"ooonsjk3","name":"이해린","exp":10,"is_head":true,"is_night_nurse":false}}
+                        {{"nurse_id":"slfnam1","name":"김가희","exp":6,"is_head":false,"is_night_nurse":0}},
+                        {{"nurse_id":"mlnwjk2","name":"박수정","exp":3,"is_head":false,"is_night_nurse":1}},
+                        {{"nurse_id":"ooonsjk3","name":"이해린","exp":10,"is_head":true,"is_night_nurse":0}}
                         ],
                         "utterances":[
                         "저 박수정 쌤이랑은 제발 안 겹치게 해주세요…😭"

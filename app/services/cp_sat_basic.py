@@ -136,7 +136,7 @@ class CPSATBasicEngine:
                 'name': nurse_data['name'],
                 'experience_years': nurse_data.get('experience', 0),
                 'is_head_nurse': nurse_data.get('is_head_nurse', False),
-                'is_night_nurse': nurse_data.get('is_night_nurse', False),
+                'is_night_nurse': nurse_data.get('is_night_nurse', 0),
                 'personal_off_adjustment': nurse_data.get('personal_off_adjustment', 0),
                 'remaining_off_days': 0,  # 초기화, 나중에 계산됨
                 'joining_date': nurse_data.get('joining_date', None),
@@ -681,7 +681,7 @@ class CPSATBasicEngine:
 
             # 야간전담의 D/E 금지 위반(OR: D or E)
             for n, nu in enumerate(roster_system.nurses):
-                if not nu.is_night_nurse:
+                if nu.is_night_nurse != 0:
                     continue
                 T0, T1 = join[n], leave[n]
                 for d in range(T0, T1 + 1):
@@ -1140,7 +1140,7 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
                 m.Add(X(n,d,day)+X(n,d-1,eve )<=1)
 
         # Night-전담
-        if nu.is_night_nurse:
+        if nu.is_night_nurse == 3:
             for d in range(T0,T1+1):
                 m.Add(X(n,d,day)==0); m.Add(X(n,d,eve)==0)
 
@@ -1205,7 +1205,7 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
 
     # (4-3) 야간 균등 (편차에 선형 패널티)
     if cfg.even_nights:
-        normals=[i for i,nu in enumerate(rs.nurses) if not nu.is_night_nurse]
+        normals=[i for i,nu in enumerate(rs.nurses) if nu.is_night_nurse != 3]
         if normals:
             total_req=sum(cfg.daily_shift_requirements['N'] for _ in range(D))
             target=total_req//len(normals)

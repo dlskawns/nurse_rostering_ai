@@ -8,6 +8,7 @@ from db.models import Nurse as NurseModel
 from schemas.roster_schema import NurseProfile
 from schemas.auth_schema import User as UserSchema
 from typing import List, Optional
+from pprint import pprint
 
 def get_personnel_basic_info_service(current_user, db: Session):
     """
@@ -162,7 +163,8 @@ def bulk_update_nurses_service(nurses_data, current_user, db: Session):
         raise Exception("Permission denied")
     if not any(n.is_head_nurse for n in nurses_data):
         raise Exception("At least one head nurse must be assigned.")
-    
+    print(f"[DEBUG] nurses_data:")
+    pprint(nurses_data)
     db_nurses_dict = {n.nurse_id: n for n in db.query(NurseModel).filter(NurseModel.group_id == current_user.group_id).all()}
     
     for nurse_data in nurses_data:
