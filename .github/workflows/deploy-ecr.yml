@@ -175,6 +175,7 @@ jobs:
             DB_NAME=${{ secrets.DEV_DB_NAME }}
             DB_USER=${{ secrets.DEV_DB_USER }}
             DB_PASSWORD=${{ secrets.DEV_DB_PASSWORD }}
+            SQS_QUEUE_URL=https://sqs.ap-northeast-2.amazonaws.com/702166530338/roster-dev-standard
             EOF
             echo "Wrote /home/ubuntu/app/.env"
 
