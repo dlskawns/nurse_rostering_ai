@@ -73,7 +73,7 @@ class CPSATBasicEngine:
             'N': 7.0,  # Night Keep은 더 높은 가중치
             'O': 10.0
         })
-        return NurseRosterConfig(
+        cfg = NurseRosterConfig(
             daily_shift_requirements = config_data['daily_shift_requirements'],
             # daily_shift_requirements={
             #     'D': config_data.get('day_req', 3),
@@ -108,6 +108,14 @@ class CPSATBasicEngine:
             preceptor_min_pair_weight=config_data.get('preceptor_min_pair_weight', 5.0),
             preceptor_focus_shifts=config_data.get('preceptor_focus_shifts', None)
         )
+        # 일자별 요구치가 있으면 구성에 부가 속성으로 저장
+        try:
+            ds_by_day = config_data.get('daily_shift_requirements_by_day')
+            if isinstance(ds_by_day, list) and len(ds_by_day) > 0:
+                setattr(cfg, 'daily_shift_requirements_by_day', ds_by_day)
+        except Exception:
+            pass
+        return cfg
     
     def create_shift_manage_from_db(self, shift_manage_data: List[dict]):
         shift_manage = []
@@ -595,18 +603,26 @@ class CPSATBasicEngine:
                         continue
                     m.AddExactlyOne(X(n, d, s) for s in range(S))
 
-            # 1) 커버리지 등식: assigned + short - over == need
+            # 1) 커버리지 등식: assigned + short - over == need (날짜별 요구치 적용)
             short_terms, over_terms = [], []
             for d in range(D):
-                for code, req in roster_system.config.daily_shift_requirements.items():
+                if hasattr(cfg, 'daily_shift_requirements_by_day') and isinstance(cfg.daily_shift_requirements_by_day, list) and d < len(cfg.daily_shift_requirements_by_day):
+                    need_map = cfg.daily_shift_requirements_by_day[d]
+                else:
+                    need_map = cfg.daily_shift_requirements
+                for code, req in need_map.items():
+                    if code not in roster_system.config.shift_types:
+                        continue
                     s = roster_system.config.shift_types.index(code)
-                    need = req - fixed_cnt[d][s]
+                    need = int(req) - fixed_cnt[d][s]
                     if need <= 0:
                         # 고정으로 이미 충분한 경우는 oversupply만 억제 대상에서 제외
                         continue
-                    assigned = sum(X(n, d, s)
-                                   for n in range(N)
-                                   if join[n] <= d <= leave[n] and (n, d) not in fixed)
+                    assigned = sum(
+                        X(n, d, s)
+                        for n in range(N)
+                        if join[n] <= d <= leave[n] and (n, d) not in fixed
+                    )
                     sh = m.NewIntVar(0, N, f'short_{d}_{code}')
                     ov = m.NewIntVar(0, N, f'over_{d}_{code}')
                     m.Add(assigned + sh - ov == need)
@@ -1116,16 +1132,30 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
             if (n,d) in fixed: continue
             m.AddExactlyOne(X(n,d,s) for s in range(S))
 
-    # ───────────── 2-C. Shift requirements ───
+    # ───────────── 2-C. Shift requirements (per-day, slack 허용) ───
+    coverage_shortage_vars = []
+    cfg = rs.config
     for d in range(D):
-        for code,req in rs.config.daily_shift_requirements.items():
+        # 일자별 요구치 우선 사용
+        if hasattr(cfg, 'daily_shift_requirements_by_day') and isinstance(cfg.daily_shift_requirements_by_day, list) and d < len(cfg.daily_shift_requirements_by_day):
+            need_map = cfg.daily_shift_requirements_by_day[d]
+        else:
+            need_map = cfg.daily_shift_requirements
+        for code, req in need_map.items():
+            if code not in rs.config.shift_types:
+                continue
             s = rs.config.shift_types.index(code)
-            need = req - fixed_cnt[d][s]
-            if need<=0: continue
-            m.Add(sum(X(n,d,s)
-                      for n in range(N)
-                      if join[n]<=d<=leave[n] and (n,d) not in fixed)
-                  >= need)
+            need = int(req) - fixed_cnt[d][s]
+            if need <= 0:
+                continue
+            assigned = sum(
+                X(n, d, s)
+                for n in range(N)
+                if join[n] <= d <= leave[n] and (n, d) not in fixed
+            )
+            sh = m.NewIntVar(0, N, f'short_{d}_{code}')
+            m.Add(sh >= need - assigned)
+            coverage_shortage_vars.append((sh, code))
 
     # shorthand indices
     idx = {c:rs.config.shift_types.index(c) for c in ('D','E','N','O')}
@@ -1250,6 +1280,18 @@ def _build_full_model(rs: RosterSystem, grouped, include_pair_objective: bool = 
     # (4-6) 프리셉터 보너스 항 모듈화
     if include_pair_objective:
         obj.extend(_add_preceptor_objective_terms(m, rs, X, join, leave))
+
+    # (4-7) 커버리지 부족 패널티(메인 경로 slack 허용) – 날짜별 요구치 기반
+    try:
+        pr = float(getattr(cfg, 'shift_requirement_priority', 0.8))
+        base = int(1000 * max(0.05, min(1.0, pr)))
+        for sh, code in coverage_shortage_vars:
+            w = base
+            if code == 'N':
+                w = int(base * 1.2)
+            obj.append(-w * sh)
+    except Exception:
+        pass
 
     m.Maximize(sum(obj))
     return m,X,join,leave,fixed
