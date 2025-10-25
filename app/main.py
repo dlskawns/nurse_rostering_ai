@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 import sys, os
 from fastapi.middleware.cors import CORSMiddleware
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from routers import roster, auth, nurses, dates, wanted, preferences, roster_create, shifts, health, dashboard, legacy
+from routers import roster, auth, nurses, dates, wanted, preferences, roster_create, shifts, health, dashboard, legacy, teams
 from routers import daily_shift as daily_shift_router
 
 app = FastAPI()
@@ -38,6 +38,7 @@ app.include_router(health.router)
 app.include_router(dashboard.router)
 app.include_router(legacy.router)
 app.include_router(daily_shift_router.router)
+app.include_router(teams.router)
 
 
 

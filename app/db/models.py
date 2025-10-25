@@ -1,4 +1,4 @@
-from sqlalchemy import Column, VARCHAR, SMALLINT, BOOLEAN, DATETIME, func, ForeignKey, JSON, CHAR, INTEGER, FLOAT, Index
+from sqlalchemy import Column, VARCHAR, SMALLINT, BOOLEAN, DATETIME, func, ForeignKey, JSON, CHAR, INTEGER, FLOAT, Index, ForeignKeyConstraint, UniqueConstraint
 from sqlalchemy.dialects.mysql import TINYINT 
 from sqlalchemy.orm import relationship
 from db.client import Base
@@ -17,6 +17,23 @@ class Office(Base):
     address = Column(VARCHAR(255))
     contact_number = Column(VARCHAR(30))
     groups = relationship("Group", back_populates="office") 
+
+class Team(Base):
+    __tablename__ = 'teams'
+    office_id = Column(VARCHAR(50), ForeignKey('offices.office_id'), primary_key=True)
+    group_id = Column(VARCHAR(50), ForeignKey('groups.group_id'), primary_key=True)
+    team_id = Column(INTEGER, primary_key=True)  # 그룹 내 로컬 식별자
+    team_name = Column(VARCHAR(100), nullable=False)
+    active = Column(TINYINT, nullable=False, default=1)
+    created_at = Column(DATETIME, default=func.now())
+    updated_at = Column(DATETIME, default=func.now(), onupdate=func.now())
+
+    office = relationship("Office")
+    group = relationship("Group")
+    __table_args__ = (
+        Index('ux_teams_group_name', 'group_id', 'team_name', unique=True),
+        UniqueConstraint('group_id', 'team_id', name='ux_teams_group_teamid'),
+    )
 class Nurse(Base):
     __tablename__ = "nurses"
 
@@ -38,7 +55,13 @@ class Nurse(Base):
     # 화면 표시 및 알고리즘 입력 순서 제어용
     sequence = Column(INTEGER, nullable=False, default=0)
     active = Column(INTEGER, default=1)
+    team_id = Column(INTEGER, nullable=True)
     group = relationship("Group")
+    __table_args__ = (
+        ForeignKeyConstraint(['group_id', 'team_id'], ['teams.group_id', 'teams.team_id'], name='fk_nurses_team_group', ondelete='SET NULL', onupdate='CASCADE'),
+    )
+    # teams와의 조인 키를 명시 (group_id, team_id)
+    team = relationship("Team", primaryjoin="and_(Nurse.group_id==Team.group_id, Nurse.team_id==Team.team_id)")
 
     @property
     def office_id(self) -> str | None:
