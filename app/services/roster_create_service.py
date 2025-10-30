@@ -225,7 +225,7 @@ def _build_shift_manage_and_requirements(db: Session, current_user, latest_confi
     # day→counts 맵 구성 후 리스트로 변환(0-index)
     by_day = {r.day: {'D': int(r.d_count or 0), 'E': int(r.e_count or 0), 'N': int(r.n_count or 0)} for r in rows}
     daily_shift_requirements_by_day = [by_day.get(d, {'D': daily_shift_requirements.get('D', 0), 'E': daily_shift_requirements.get('E', 0), 'N': daily_shift_requirements.get('N', 0)}) for d in range(1, days_in_month + 1)]
-    print(11)
+
     return shift_manage_data, daily_shift_requirements, daily_shift_requirements_by_day
 
 def _normalize_to_main(code: str, code2main: dict) -> str:

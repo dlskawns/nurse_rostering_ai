@@ -12,7 +12,7 @@ from db.client import get_db
 # from db.client2 import _get_mssql_session
 from db.models import RosterConfig as RosterConfigModel
 from schemas.auth_schema import User as UserSchema
-from db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage
+from db.models import Schedule, ShiftPreference, Nurse, ScheduleEntry, Shift, Group, RosterConfig, Wanted, IssuedRoster, ShiftManage, DailyShift
 from sqlalchemy import func, and_
 from routers.utils import get_days_in_month
 from db.nurse_config import Nurse as NurseEngine
@@ -701,7 +701,7 @@ async def get_schedule_status(
 async def validate_roster(
     roster_data: dict,
     current_user: UserSchema = Depends(get_current_user_from_cookie),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # ──────────────────────── 0. 인증/파라미터 체크 ────────────────────────
     if not current_user or not current_user.is_head_nurse:
@@ -763,6 +763,27 @@ async def validate_roster(
             max_night_shifts_per_month  = latest_config_db.max_nig_per_month,
             max_consecutive_nights      = 3 if latest_config_db.three_seq_nig else 2
         )
+
+        days_in_month = get_days_in_month(year, month)
+        try:
+            rows = (
+                db.query(DailyShift)
+                .filter(
+                    DailyShift.office_id == current_user.office_id,
+                    DailyShift.group_id == current_user.group_id,
+                    DailyShift.year == year,
+                    DailyShift.month == month,
+                )
+                .order_by(DailyShift.day.asc())
+                .all()
+            )
+        except Exception as e:
+            print(f"error: {e}")
+        # day→counts 맵 구성 후 리스트로 변환(0-index)
+        by_day = {r.day: {'D': int(r.d_count or 0), 'E': int(r.e_count or 0), 'N': int(r.n_count or 0)} for r in rows}
+        daily_shift_requirements_by_day = [by_day.get(d, {'D': daily_shift_requirements.get('D', 0), 'E': daily_shift_requirements.get('E', 0), 'N': daily_shift_requirements.get('N', 0)}) for d in range(1, days_in_month + 1)]
+
+
         # ──────────────────────── 3. RosterSystem 초기화 ────────────────────────
         nurses_for_engine = [
             NurseEngine.from_db_model(n, i)
@@ -770,6 +791,12 @@ async def validate_roster(
                 db.query(Nurse).filter(Nurse.group_id == current_user.group_id).all()
             )
         ]
+        # 일자별 요구 인원은 config 객체에 속성으로 주입하여 사용
+        try:
+            setattr(roster_config_for_engine, 'daily_shift_requirements_by_day', daily_shift_requirements_by_day)
+        except Exception as e:
+            print(f"error: {e}")
+            pass
         system = RosterSystem(
             nurses        = nurses_for_engine,
             target_month  = date(year, month, 1),
@@ -806,6 +833,7 @@ async def validate_roster(
         detailed_violations: list[dict] = []
         for v in violation_details:
             if v['type'] == 'shift_requirement':
+                # print( f"{v['day'] + 1}일: {v['shift']} 근무 인원 미달 ")
                 violation_messages.add(
                     f"{v['day'] + 1}일: {v['shift']} 근무 인원 미달 "
                     f"(필요: {v['required']}, 배정: {v['actual']})"

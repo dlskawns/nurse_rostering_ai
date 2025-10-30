@@ -34,7 +34,6 @@ class RosterSystem:
         
         self.nurses = nurses
         self.config = config
-        
         # target_month 설정 (하위 호환성을 위해)
         if target_month is not None:
             self.target_month = target_month
@@ -298,14 +297,29 @@ class RosterSystem:
         violations = []
 
         # (1) 일별 ‑ 병동 요구·경력 체크 (변경 없음) ...
-
+        try:
+            print('고고', self.config.daily_shift_requirements_by_day)
+        except Exception as e:
+            print('e', e)
         # (2) 간호사별 제약
         for n_idx, nurse in enumerate(self.nurses):
             for day in range(self.num_days):
                 # ── 2‑A. 야간 제약 3종 🔄
 
-                # Check shift requirements
-                for shift, required in self.config.daily_shift_requirements.items():
+                # Check shift requirements (일자별 요구치 우선 적용)
+                if (hasattr(self.config, 'daily_shift_requirements_by_day') and
+                    isinstance(self.config.daily_shift_requirements_by_day, list) and
+                    day < len(self.config.daily_shift_requirements_by_day)):
+                    need_map = self.config.daily_shift_requirements_by_day[day]
+                    # print('need_map1', need_map)
+                else:
+                    need_map = self.config.daily_shift_requirements
+                    # print('need_map2', need_map)
+
+                for shift, required in need_map.items():
+                    if shift not in self.config.shift_types:
+                        # print('컨티뉴')
+                        continue
                     shift_idx = self.config.shift_types.index(shift)
                     actual = np.sum(self.roster[:, day, shift_idx])
                     if actual < required:  # 필요 인원보다 적을 때만 위반으로 처리
